@@ -19,6 +19,14 @@ from plotly.subplots import make_subplots
 
 from motor import konfig, data as datamod, indikatorer, minervini, screener, univers, vcp
 
+# TradingViews lightweight-charts (testfane). Pakket i try/except så appen aldri
+# krasjer om komponenten ikke er installert i miljøet (f.eks. rett etter utrulling).
+try:
+    from streamlit_lightweight_charts import renderLightweightCharts
+    HAR_LWC = True
+except Exception:
+    HAR_LWC = False
+
 st.set_page_config(page_title="Minervini-screener · Oslo Børs", layout="wide")
 
 
@@ -270,6 +278,93 @@ def vis_vcp_boks(res: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Chart 2.0 (test) – TradingViews lightweight-charts
+# ---------------------------------------------------------------------------
+def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504) -> list | None:
+    """Bygger data-spesifikasjonen for lightweight-charts (candles + MA + volum +
+    pivot/stop + 7/7-markører). Returnerer lista renderLightweightCharts venter,
+    eller None hvis noe mangler. Pakket i try/except så testfanen aldri krasjer.
+    """
+    try:
+        full = indikatorer.legg_til_indikatorer(serie)
+        if full.empty:
+            return None
+        d = full.iloc[-min(dager, len(full)):].copy()
+        t = list(d.index.strftime("%Y-%m-%d"))
+        t_sett = set(t)
+
+        def linje(kol, farge, bredde):
+            data = [{"time": ti, "value": round(float(v), 4)}
+                    for ti, v in zip(t, d[kol]) if pd.notna(v)]
+            return {"type": "Line", "data": data,
+                    "options": {"color": farge, "lineWidth": bredde,
+                                "priceLineVisible": False, "lastValueVisible": False}}
+
+        candles = [{"time": ti, "open": float(o), "high": float(h),
+                    "low": float(lo), "close": float(c)}
+                   for ti, o, h, lo, c in zip(t, d["Open"], d["High"], d["Low"], d["Close"])]
+
+        opp = (d["Close"] >= d["Open"]).to_numpy()
+        volum = [{"time": ti, "value": float(v),
+                  "color": "rgba(38,166,154,0.5)" if up else "rgba(239,83,80,0.5)"}
+                 for ti, v, up in zip(t, d["Volume"], opp)]
+
+        # 7/7-markører: grønn pil opp der aksjen ble 7/7 (siste ~10 for å unngå rot).
+        markorer = []
+        for start, _slutt in (res or {}).get("perioder", [])[-10:]:
+            if start in t_sett:
+                markorer.append({"time": start, "position": "belowBar",
+                                 "color": "#2e7d32", "shape": "arrowUp", "text": "7/7"})
+        markorer.sort(key=lambda m: m["time"])
+
+        hoved = {"type": "Candlestick", "data": candles,
+                 "options": {"upColor": "#26a69a", "downColor": "#ef5350",
+                             "borderVisible": False, "wickUpColor": "#26a69a",
+                             "wickDownColor": "#ef5350"}}
+        if markorer:
+            hoved["markers"] = markorer
+
+        serier = [
+            hoved,
+            linje("SMA50", "#2196f3", 2),
+            linje("SMA150", "#ff9800", 1),
+            linje("SMA200", "#9c27b0", 1),
+            {"type": "Histogram", "data": volum,
+             "options": {"priceFormat": {"type": "volume"}, "priceScaleId": ""},
+             "priceScale": {"scaleMargins": {"top": 0.78, "bottom": 0}}},
+        ]
+
+        # Pivot (gull) og stop (rød) som flate linjer over hele vinduet.
+        if res and res.get("pivot"):
+            serier.append({"type": "Line",
+                           "data": [{"time": ti, "value": res["pivot"]} for ti in t],
+                           "options": {"color": "#f6c343", "lineWidth": 2,
+                                       "lineStyle": 0, "priceLineVisible": False,
+                                       "lastValueVisible": True, "title": "Pivot"}})
+        if res and res.get("stop"):
+            serier.append({"type": "Line",
+                           "data": [{"time": ti, "value": res["stop"]} for ti in t],
+                           "options": {"color": "#ef5350", "lineWidth": 1,
+                                       "lineStyle": 2, "priceLineVisible": False,
+                                       "lastValueVisible": True, "title": "Stop"}})
+
+        chart_options = {
+            "height": 620,
+            "layout": {"background": {"type": "solid", "color": "white"},
+                       "textColor": "#333333"},
+            "grid": {"vertLines": {"color": "rgba(197,203,206,0.35)"},
+                     "horzLines": {"color": "rgba(197,203,206,0.35)"}},
+            "rightPriceScale": {"scaleMargins": {"top": 0.06, "bottom": 0.26},
+                                "borderVisible": False},
+            "timeScale": {"borderVisible": False, "rightOffset": 4},
+            "crosshair": {"mode": 0},
+        }
+        return [{"chart": chart_options, "series": serier}]
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Hovedtabell
 # ---------------------------------------------------------------------------
 def _til_pivot_tekst(avstand_pivot) -> str:
@@ -447,7 +542,7 @@ if resultat.empty:
     st.info("Screeningen ga ingen treff ennå. Har roboten fått hentet nok historikk?")
     st.stop()
 
-fane1, fane2, fane3 = st.tabs(["📋 Hovedliste", "📊 Chart", "🔎 Søk"])
+fane1, fane2, fane3, fane4 = st.tabs(["📋 Hovedliste", "📊 Chart", "🔎 Søk", "🧪 Chart 2.0 (test)"])
 
 # --- Fane 1: Hovedliste ---
 with fane1:
@@ -534,3 +629,31 @@ with fane3:
                                           dager=PERIODER_VALG[periode3], vis_7av7=vis_7av7_3),
                                 width="stretch", config=CHART_CONFIG)
                 vis_vcp_boks(res)
+
+# --- Fane 4: Chart 2.0 (test) ---
+with fane4:
+    st.markdown(
+        "🧪 **Testversjon** av chartet med TradingViews motor (*lightweight-charts*). "
+        "Prøv gjerne: **dra sidelengs**, **rull musehjulet** for å zoome, og – det du ønsket – "
+        "**dra loddrett på prisaksen** (tallene til høyre) for å strekke/skalere høyden. "
+        "Y-aksen følger automatisk når du panorerer. Si ifra om dette føles bedre enn dagens chart."
+    )
+    if not HAR_LWC:
+        st.warning("Chart-komponenten er ikke lastet i dette miljøet ennå (kommer ved neste utrulling).")
+    else:
+        valg4 = st.selectbox("Velg aksje", resultat["ticker"].tolist(), key="valg_lwc")
+        periode4 = st.radio("Periode", list(PERIODER_VALG.keys()), index=3, horizontal=True,
+                            key="periode_lwc")
+        serie4 = datamod.serie_for(last_priser(versjon), valg4)
+        res4 = screener.analyser_ticker(serie4, valg4, konfig.PRESETS[preset_navn])
+        if res4 is None:
+            st.info("For lite historikk til å tegne chart for denne aksjen.")
+        else:
+            spec = lag_chart_lwc(serie4, res4, PERIODER_VALG[periode4])
+            if spec is None:
+                st.info("Klarte ikke bygge chartet for denne aksjen.")
+            else:
+                renderLightweightCharts(spec, key=f"lwc_{valg4}_{periode4}")
+                st.caption("🟡 Gull = pivot (kjøpsnivå) · 🔴 stiplet rød = stop · grønn pil = ble 7/7. "
+                           "Blå = MA50, oransje = MA150, lilla = MA200.")
+                vis_vcp_boks(res4)
