@@ -159,6 +159,27 @@ def lag_chart(serie: pd.DataFrame, res: dict | None, vis_perioder: bool,
                 hovertemplate="Hist. brudd %{x|%d.%m.%Y}<br>pivot %{y}<extra></extra>",
             ), row=1, col=1)
 
+        # Stiplet zigzag som binder sammen alle pivotene (historiske + gjeldende),
+        # så du ser hvordan pivot/motstanden flytter seg over tid.
+        zigzag = [(pd.to_datetime(b["dato"]), float(b["pivot"])) for b in hist]
+        if res and res.get("pivot"):
+            p_dato = pd.to_datetime(res["bruddato"]) if res.get("bruddato") else full.index[-1]
+            zigzag.append((p_dato, float(res["pivot"])))
+        zigzag = sorted(zigzag, key=lambda t: t[0])
+        # Fjern punkter som ligger rett oppå hverandre (samme dato + pivot)
+        renset_zz = []
+        for punkt in zigzag:
+            if not renset_zz or punkt != renset_zz[-1]:
+                renset_zz.append(punkt)
+        if len(renset_zz) >= 2:
+            fig.add_trace(go.Scatter(
+                x=[p[0] for p in renset_zz], y=[p[1] for p in renset_zz],
+                mode="lines+markers", name="Pivot-zigzag",
+                line=dict(color="rgba(80,80,90,0.9)", width=1.3, dash="dash"),
+                marker=dict(size=5, color="rgba(80,80,90,0.9)"),
+                hovertemplate="Pivot %{y}<br>%{x|%d.%m.%Y}<extra></extra>",
+            ), row=1, col=1)
+
     if res:
         # Gjeldende pivotlinje (gull)
         if res.get("pivot"):
