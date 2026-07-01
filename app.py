@@ -403,7 +403,7 @@ with fane1:
         f"**{len(filt)} aksjer** i lista. Kolonnen **Kriterie 1-7** viser hvor mange av de "
         f"sju kriteriene som er oppfylt. Ferske brudd (🟢) vises alltid – også under {min_krit}/7."
     )
-    st.dataframe(formater_tabell(filt), use_container_width=True, hide_index=True, height=560)
+    st.dataframe(formater_tabell(filt), width="stretch", hide_index=True, height=560)
     st.caption("Sortert etter nyeste 7/7-dato øverst. Tips: klikk på en kolonne-overskrift for å sortere selv.")
 
 # --- Fane 2: Chart ---
@@ -419,7 +419,7 @@ with fane2:
         st.info("For lite historikk til å tegne chart for denne aksjen.")
     else:
         st.plotly_chart(lag_chart(serie, res, vis_perioder, PERIODER_VALG[periode], vis_7av7),
-                        use_container_width=True, config=CHART_CONFIG)
+                        width="stretch", config=CHART_CONFIG)
         st.caption("💡 Dra sidelengs for å se eldre kurs, rull med musehjulet for å zoome, "
                    "dobbeltklikk for å nullstille. Bruk periode-knappene for perfekt skalering. "
                    "Gule trekanter = historiske volumbrudd gjennom motstand.")
@@ -450,5 +450,5 @@ with fane3:
                                          value=False, key="vis7_sok")
                 st.plotly_chart(lag_chart(serie, res, vis_perioder=True,
                                           dager=PERIODER_VALG[periode3], vis_7av7=vis_7av7_3),
-                                use_container_width=True, config=CHART_CONFIG)
+                                width="stretch", config=CHART_CONFIG)
                 vis_vcp_boks(res)
