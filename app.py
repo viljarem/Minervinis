@@ -331,6 +331,7 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                     if pos + 1 < len(t):
                         markorer.append({"time": t[pos + 1], "position": "aboveBar",
                                          "color": "#c62828", "shape": "arrowDown", "text": "×"})
+        hist_segmenter = []   # (start, brudd, niva) for korte historiske pivotstreker
         if vis_hist:
             try:
                 finn_hist = getattr(vcp, "historiske_brudd", None)
@@ -339,6 +340,11 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                     if dato in t_sett:
                         markorer.append({"time": dato, "position": "belowBar",
                                          "color": "#f6c343", "shape": "circle", "text": "brudd"})
+                        start = pd.Timestamp(b["base_start"]).strftime("%Y-%m-%d")
+                        if start not in t_sett:
+                            start = t[0]          # klipp basen til venstre kant av vinduet
+                        if start < dato:          # trenger to ulike datoer for en strek
+                            hist_segmenter.append((start, dato, float(b["pivot"])))
             except Exception:
                 pass
         if res and res.get("bruddato"):
@@ -386,6 +392,18 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                                "options": {"color": "#e0b000", "lineWidth": 2, "lineStyle": 2,
                                            "priceLineVisible": False, "lastValueVisible": False,
                                            "pointMarkersVisible": True}})
+
+        # Historiske pivotlinjer: kort gull strek langs motstanden fram til hvert
+        # brudd. UBIASED / point-in-time – motstanden er høyeste High i de
+        # FORUTGÅENDE dagene (shift 1), så streken er nøyaktig det du kunne sett
+        # i sanntid, uten å kikke framover.
+        for start, slutt, niva in hist_segmenter:
+            serier.append({"type": "Line",
+                           "data": [{"time": start, "value": niva},
+                                    {"time": slutt, "value": niva}],
+                           "options": {"color": "rgba(246,195,67,0.85)", "lineWidth": 1,
+                                       "lineStyle": 0, "priceLineVisible": False,
+                                       "lastValueVisible": False}})
 
         # Volum + 50-dagers snittvolum (delt overlay-skala i bunnen)
         serier.append({"type": "Histogram", "data": volum,
@@ -726,5 +744,6 @@ with fane4:
                 renderLightweightCharts(spec, key=noekkel)
                 st.caption("🟡 Gull = pivot (kjøpsnivå) · 🔴 stiplet rød = stop · 🟢 pil opp = ble 7/7 · "
                            "🔴 pil ned = mistet 7/7. Blå = MA50, oransje = MA150, lilla = MA200, "
-                           "blå strek i volum = 50-dagers snittvolum.")
+                           "blå strek i volum = 50-dagers snittvolum. Korte gule streker = "
+                           "historiske brudd (ubiased – motstanden slik den var *før* bruddet).")
                 vis_vcp_boks(res4)
