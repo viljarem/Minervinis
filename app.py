@@ -307,12 +307,12 @@ if not _status["tom"]:
     if _status["alder_dager"] <= 4:
         st.success(
             f"✅ **Data oppdatert** – siste handelsdag **{_status['siste_dato']:%d.%m.%Y}**. "
-            f"Roboten henter automatisk hver hverdag."
+            f"Roboten henter automatisk hver hverdag kl. 19 (norsk tid)."
         )
     else:
         st.warning(
             f"⚠️ Nyeste data er fra **{_status['siste_dato']:%d.%m.%Y}** "
-            f"({_status['alder_dager']} dager siden). Roboten kjører hver hverdag ca. kl. 18–19."
+            f"({_status['alder_dager']} dager siden). Roboten kjører hver hverdag kl. 19 (norsk tid)."
         )
     _k1, _k2, _k3 = st.columns(3)
     _k1.metric("📅 Siste handelsdag", f"{_status['siste_dato']:%d.%m.%Y}")
@@ -325,6 +325,46 @@ if not _status["tom"]:
             f"({_dekning:.0%}). Nye tickere får full historikk automatisk ved neste robotkjøring."
         )
     st.divider()
+
+# --- "Slik funker det" – kort forklaring, foldet sammen som standard ---
+with st.expander("ℹ️ Slik funker screeneren (klikk for å lese)"):
+    st.markdown(
+        """
+**Hva gjør denne siden?**  
+Den leter automatisk gjennom hele Oslo Børs etter aksjer som er i en sterk
+opptrend og er i ferd med å ta **utbrudd** – altså bryte opp gjennom en motstand
+på høyt volum. Metoden bygger på **Mark Minervinis** «trend template».
+
+**De 7 kriteriene (kolonnen «Kriterie 1-7»)**  
+Aksjen får ett poeng for hvert punkt. 7 av 7 = perfekt opptrend:
+1. Kursen er **over** både MA150 og MA200 (glidende snitt for 150 og 200 dager).
+2. MA150 ligger **over** MA200.
+3. MA200 **peker oppover**.
+4. MA50 ligger over MA150, og MA150 over MA200.
+5. Kursen er **over** MA50.
+6. Kursen er minst **30 %** over 52-ukers **bunn**.
+7. Kursen er innen **25 %** av 52-ukers **topp**.
+
+I tillegg krever oppsettet en god **RS-rating** (relativ styrke mot markedet).
+
+**Fargene (status)**  
+- 🟢 **Ferskt brudd** – aksjen brøt nettopp opp gjennom pivot på høyt volum. Mest interessant.
+- 🟡 **Nær brudd** – ligger og presser rett under pivot. Følg med.
+- 🔵 **I base** – bygger en sammentrekning (VCP), men er ikke klar ennå.
+- ⚪ **Ingen pivot** – ingen tydelig utbruddskant akkurat nå.
+
+**Pivot og stop**  
+**Pivot** er kanten aksjen må bryte for å gi kjøpssignal. **Stop** er et forslag til
+hvor du kutter tapet hvis bruddet feiler. Begge tegnes inn på chartet.
+
+**De tre fanene**  
+- 📋 **Hovedliste** – alle treff, sortert med nyeste 7/7 øverst.
+- 📊 **Chart** – tegn en aksje med MA-linjer, pivot, stop, volum og historikk.
+- 🔎 **Søk** – slå opp hvilken som helst ticker (også utenfor Oslo Børs, live fra Yahoo).
+
+*Dette er et analyseverktøy, ikke en kjøpsanbefaling. Ta alltid egne vurderinger.*
+        """
+    )
 
 # --- Sidefelt: filtre ---
 with st.sidebar:
