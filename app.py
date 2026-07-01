@@ -317,9 +317,13 @@ with fane1:
     if krev_uke:
         filt = filt[filt["mtf_status"] == "bullish"]
 
+    # Standardsortering: nyeste 7/7-dato øverst (aksjer uten dato havner nederst)
+    filt["_sortdato"] = pd.to_datetime(filt["dato_7av7"], errors="coerce")
+    filt = filt.sort_values("_sortdato", ascending=False, na_position="last").drop(columns="_sortdato")
+
     st.markdown(f"**{len(filt)} aksjer** oppfyller filtrene. Kolonnene 1–7 = de sju kriteriene.")
     st.dataframe(formater_tabell(filt), use_container_width=True, hide_index=True, height=560)
-    st.caption("Tips: klikk på en kolonne-overskrift for å sortere.")
+    st.caption("Sortert etter nyeste 7/7-dato øverst. Tips: klikk på en kolonne-overskrift for å sortere selv.")
 
 # --- Fane 2: Chart ---
 with fane2:
