@@ -123,6 +123,12 @@ def lag_chart(serie: pd.DataFrame, res: dict | None, vis_perioder: bool,
                          marker_color=vol_farger, marker_line_width=0,
                          showlegend=False), row=2, col=1)
 
+    # 50-dagers snittvolum – viser når volumet er over/under det normale
+    vol_snitt = d["Volume"].rolling(50, min_periods=10).mean()
+    fig.add_trace(go.Scatter(x=d.index, y=vol_snitt, name="Volum SMA50",
+                             line=dict(color="#3949ab", width=1.4),
+                             hoverinfo="skip"), row=2, col=1)
+
     if vis_perioder:
         # Historiske 7/7-perioder (lys grønn skygge)
         if res:
