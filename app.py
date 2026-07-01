@@ -242,23 +242,18 @@ def vis_vcp_boks(res: dict) -> None:
 # ---------------------------------------------------------------------------
 # Hovedtabell
 # ---------------------------------------------------------------------------
-KRIT = [("k1", "1"), ("k2", "2"), ("k3", "3"), ("k4", "4"), ("k5", "5"), ("k6", "6"), ("k7", "7")]
-
-
 def formater_tabell(df: pd.DataFrame) -> pd.DataFrame:
     vis = pd.DataFrame()
     vis["Ticker"] = df["ticker"]
     vis["Pris"] = df["pris"]
     vis["RS"] = df["rs"]
-    vis["Score"] = df["score"].astype(str) + "/7"
+    vis["Kriterie 1-7"] = df["score"].astype(str) + "/7"
     vis["Dato 7/7"] = df["dato_7av7"].fillna("—")
     vis["Setup"] = df["status"] + " " + df["statustekst"]
     vis["Uke"] = df["mtf_emoji"] if "mtf_emoji" in df else "⚠️"
     vis["Utv. siden 7/7"] = df["utvikling_siden"].map(lambda x: "—" if pd.isna(x) else f"{x:+.1f} %")
     vis["Pivot"] = df["pivot"]
     vis["Kvalitet"] = df["kvalitet"]
-    for kol, navn in KRIT:
-        vis[navn] = df[kol].map(lambda b: "✅" if b else "❌")
     return vis
 
 
@@ -321,7 +316,9 @@ fane1, fane2, fane3 = st.tabs(["📋 Hovedliste", "📊 Chart", "🔎 Søk"])
 
 # --- Fane 1: Hovedliste ---
 with fane1:
-    filt = resultat[resultat["score"] >= min_krit].copy()
+    # Ferske brudd (🟢) vises ALLTID – selv om de har færre enn valgt antall kriterier,
+    # så du aldri går glipp av et akkurat utløst kjøpssignal.
+    filt = resultat[(resultat["score"] >= min_krit) | (resultat["status"] == "🟢")].copy()
     filt = filt[filt["rs"].fillna(0) >= min_rs]
     if kun_ferske:
         filt = filt[filt["status"] == "🟢"]
@@ -332,7 +329,10 @@ with fane1:
     filt["_sortdato"] = pd.to_datetime(filt["dato_7av7"], errors="coerce")
     filt = filt.sort_values("_sortdato", ascending=False, na_position="last").drop(columns="_sortdato")
 
-    st.markdown(f"**{len(filt)} aksjer** oppfyller filtrene. Kolonnene 1–7 = de sju kriteriene.")
+    st.markdown(
+        f"**{len(filt)} aksjer** i lista. Kolonnen **Kriterie 1-7** viser hvor mange av de "
+        f"sju kriteriene som er oppfylt. Ferske brudd (🟢) vises alltid – også under {min_krit}/7."
+    )
     st.dataframe(formater_tabell(filt), use_container_width=True, hide_index=True, height=560)
     st.caption("Sortert etter nyeste 7/7-dato øverst. Tips: klikk på en kolonne-overskrift for å sortere selv.")
 
