@@ -1,111 +1,14 @@
-# Liste over aksjer (tickere) på Oslo Børs.
-# - Én ticker per linje. Alle slutter på .OL (= Oslo).
-# - Linjer som starter med # er kommentarer og hoppes over.
-# - Vil du følge flere aksjer? Legg dem bare til nederst og lagre.
-#   Roboten hopper automatisk over tickere som ikke finnes lenger.
-
-EQNR.OL
-DNB.OL
-TEL.OL
-NHY.OL
-MOWI.OL
-YAR.OL
-AKRBP.OL
-ORK.OL
-GJF.OL
-KOG.OL
-SUBC.OL
-SALM.OL
-TGS.OL
-STB.OL
-BAKKA.OL
-LSG.OL
-TOM.OL
-SCHA.OL
-SCHB.OL
-NOD.OL
-AKER.OL
-AKSO.OL
-FRO.OL
-GOGL.OL
-BWLPG.OL
-FLNG.OL
-WAWI.OL
-HAFNI.OL
-MPCC.OL
-SNI.OL
-BORR.OL
-DOFG.OL
-ODF.OL
-SDRL.OL
-SHLF.OL
-VAR.OL
-ELK.OL
-NEL.OL
-SCATC.OL
-ACR.OL
-PHO.OL
-KIT.OL
-KID.OL
-XXL.OL
-AUSS.OL
-GSF.OL
-ENTRA.OL
-OLT.OL
-SBO.OL
-PROT.OL
-MING.OL
-SRBNK.OL
-NONG.OL
-HELG.OL
-VEI.OL
-AFG.OL
-BRG.OL
-NSKOG.OL
-NAS.OL
-FLYR.OL
-ATEA.OL
-BOUV.OL
-CRAYN.OL
-LINK.OL
-VOW.OL
-NEXT.OL
-IDEX.OL
-PCIB.OL
-BGBIO.OL
-ULTI.OL
-VISTIN.OL
-MULTI.OL
-NORBIT.OL
-HEX.OL
-HPUR.OL
-CADLR.OL
-AFK.OL
-HAUTO.OL
-KCC.OL
-JIN.OL
-2020.OL
-BELCO.OL
-AGLX.OL
-PEXIP.OL
-ABG.OL
-PARB.OL
-ZAL.OL
-NAPA.OL
-AGAS.OL
-SOFF.OL
-NYKD.OL
-OTOVO.OL
-B2I.OL
-EPR.OL
-MEDI.OL
-OKEA.OL
-RECSI.OL
-KOMPL.OL
-SATS.OL
-ENDUR.OL
-AKH.OL
-SPOL.OL
-SVEG.OL
-ODFB.OL
-KOA.OL
+# DINE EGNE EKSTRA TICKERE (valgfritt)
+# --------------------------------------------------------------------
+# Hele Oslo Børs hentes AUTOMATISK – du trenger ikke liste opp noe her.
+# Denne fila er kun for aksjer du vil følge I TILLEGG, f.eks. utenlandske.
+#
+# Regler:
+#   - Én ticker per linje, skrevet slik Yahoo Finance skriver den.
+#   - Linjer som starter med # er kommentarer og hoppes over.
+#
+# Eksempler (fjern # foran linja for å ta dem i bruk):
+# AAPL       (Apple, USA)
+# NVDA       (Nvidia, USA)
+# VOLV-B.ST  (Volvo, Stockholm)
+# NOVO-B.CO  (Novo Nordisk, København)

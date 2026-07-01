@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
-from . import konfig
+from . import konfig, univers
 
 KOLONNER = ["Date", "Ticker", "Open", "High", "Low", "Close", "Volume"]
 
@@ -25,17 +25,12 @@ KOLONNER = ["Date", "Ticker", "Open", "High", "Low", "Close", "Volume"]
 # ---------------------------------------------------------------------------
 # Univers (lista over tickere)
 # ---------------------------------------------------------------------------
-def les_univers(sti: str = konfig.UNIVERS_FIL) -> list[str]:
-    """Leser lista over tickere fra en tekstfil (én ticker per linje)."""
-    if not os.path.exists(sti):
-        return []
-    tickere: list[str] = []
-    with open(sti, encoding="utf-8") as f:
-        for linje in f:
-            t = linje.strip().upper()
-            if t and not t.startswith("#"):
-                tickere.append(t)
-    return tickere
+def les_univers(oppdater: bool = False) -> list[str]:
+    """
+    Henter hele lista over tickere (Oslo Børs + dine manuelle ekstra).
+    oppdater=True henter fersk liste fra Euronext; False bruker lagret cache.
+    """
+    return univers.hent_alle_tickere(oppdater=oppdater)
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +176,7 @@ def hent_og_oppdater() -> pd.DataFrame:
     - Deretter: henter bare de siste dagene og legger dem til.
     Til slutt lagres og returneres hele den oppdaterte historikken.
     """
-    tickere = les_univers()
+    tickere = les_univers(oppdater=True)
     if konfig.BENCHMARK not in tickere:
         tickere = tickere + [konfig.BENCHMARK]
 

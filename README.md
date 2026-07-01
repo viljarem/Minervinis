@@ -31,7 +31,8 @@ alltid ferske tall.
 | Motoren | `motor/` | All beregning: kriterier, VCP, RS (ingen nettside – lett å teste) |
 | Nettsiden | `app.py` | Viser liste, chart og søk (Streamlit) |
 | Roboten | `oppdater.py` + `.github/workflows/daglig.yml` | Henter data, lagrer, screener, sender e-post |
-| Dataene | `data/` | Tickerliste + kurshistorikk (parquet) som vokser dag for dag |
+| Univers | `motor/univers.py` | Henter HELE Oslo Børs automatisk fra Euronext |
+| Dataene | `data/` | Aksjelister + kurshistorikk (parquet) som vokser dag for dag |
 | Tester | `tester/` | Sjekker at motoren regner riktig |
 
 ---
@@ -133,13 +134,17 @@ Enklest med Gmail:
 ## 🖱️ Daglig bruk
 
 Du trenger ikke gjøre noe. Hver hverdag:
-1. Roboten henter dagens kurser og utvider historikken.
-2. Den sender deg en e-post med endringer + topp 10.
-3. Nettsiden oppdaterer seg selv med ferske tall.
+1. Roboten henter en **fersk komplett liste over hele Oslo Børs** (alle tre
+   lister: Oslo Børs, Euronext Expand og Euronext Growth – ~300 aksjer) direkte
+   fra Euronext. Nye selskaper kommer med av seg selv når de noteres.
+2. Den henter dagens kurser og utvider historikken.
+3. Den sender deg en e-post med endringer + topp 10.
+4. Nettsiden oppdaterer seg selv med ferske tall.
 
-Vil du følge flere aksjer? Åpne [data/univers.txt](data/univers.txt) på GitHub,
-klikk blyant-ikonet ✏️, legg til én ticker per linje (må slutte på `.OL`), og
-klikk **Commit changes**.
+Vil du følge aksjer **utenfor** Oslo Børs (f.eks. amerikanske)? Åpne
+[data/univers.txt](data/univers.txt) på GitHub, klikk blyant-ikonet ✏️, legg til
+én ticker per linje (skrevet slik Yahoo gjør det, f.eks. `AAPL`), og klikk
+**Commit changes**. Oslo Børs trenger du aldri liste opp – det er automatisk.
 
 ---
 
@@ -184,8 +189,14 @@ appen (både robot og nettside). Ferdige oppsett:
 **«Nettsiden sier at det mangler data.»** Kjør roboten (Steg 2) – den lager
 datafila. Streamlit oppdaterer seg selv rett etter.
 
-**«En ticker mangler / er feil.»** Rediger [data/univers.txt](data/univers.txt).
-Roboten hopper automatisk over tickere Yahoo ikke kjenner igjen.
+**«Hvordan vet appen hvilke aksjer som finnes på Oslo Børs?»** Roboten laster ned
+den offisielle lista fra Euronext hver kjøring og lagrer den i
+[data/univers_oslobors.txt](data/univers_oslobors.txt). Skulle Euronext være nede,
+brukes den sist lagrede lista automatisk. Du trenger ikke røre denne fila.
+
+**«En Oslo Børs-aksje mangler.»** Sjekk at roboten har kjørt. Vil du følge noe
+**utenfor** Oslo Børs, legg det i [data/univers.txt](data/univers.txt). Roboten
+hopper automatisk over tickere Yahoo ikke kjenner igjen.
 
 **«Hvor lagres historikken?»** I `data/priser.parquet` på GitHub. Den vokser for
 hver dag roboten kjører, så du bygger opp din egen faste historikk.

@@ -13,13 +13,25 @@ BENCHMARK = "^OSEBX"          # Oslo Børs hovedindeks (brukes til relativ styrk
 HISTORIKK_AAR = 10            # antall år som hentes ved aller første kjøring
 BORS_SUFFIKS = ".OL"         # Oslo Børs-tickere slutter på dette
 
+# Børser som hentes AUTOMATISK fra Euronext (MIC-kode -> Yahoo-suffiks).
+# Oslo Børs består av tre lister – alle bruker .OL på Yahoo:
+#   XOSL = Oslo Børs (hovedliste), XOAS = Euronext Expand, MERK = Euronext Growth.
+# Vil du følge en annen Euronext-børs senere? Legg den bare til her,
+# f.eks. "XPAR": ".PA" for Paris eller "XAMS": ".AS" for Amsterdam.
+EURONEXT_MARKEDER = {
+    "XOSL": ".OL",
+    "XOAS": ".OL",
+    "MERK": ".OL",
+}
+
 # ---------------------------------------------------------------------------
 # Filstier (relativt til prosjektmappa)
 # ---------------------------------------------------------------------------
 DATA_MAPPE = "data"
-PRISER_FIL = f"{DATA_MAPPE}/priser.parquet"        # all kurshistorikk (vokser dag for dag)
-UNIVERS_FIL = f"{DATA_MAPPE}/univers.txt"           # liste over tickere
-SISTE_LISTE_FIL = f"{DATA_MAPPE}/siste_liste.json"  # forrige screening (til e-post-sammenligning)
+PRISER_FIL = f"{DATA_MAPPE}/priser.parquet"           # all kurshistorikk (vokser dag for dag)
+UNIVERS_FIL = f"{DATA_MAPPE}/univers.txt"              # DINE egne ekstra tickere (valgfritt)
+OSLOBORS_CACHE_FIL = f"{DATA_MAPPE}/univers_oslobors.txt"  # auto-hentet Oslo Børs-liste (+ fallback)
+SISTE_LISTE_FIL = f"{DATA_MAPPE}/siste_liste.json"     # forrige screening (til e-post-sammenligning)
 
 # ---------------------------------------------------------------------------
 # Likviditetsfilter (fjern aksjer det handles for lite i)
