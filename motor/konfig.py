@@ -74,6 +74,7 @@ VCP_MAKS_UNDER_PIVOT = 0.12   # dagens kurs maks 12 % under pivot for å være "
 BRUDD_FERSK_DAGER = 5         # brudd regnes som "ferskt" i så mange dager
 BRUDD_VOLUM_FAKTOR = 1.4      # volum >= 1.4x snittet av FORUTGÅENDE 50 dager = bekreftet
 BRUDD_FORLENGET = 0.10        # mer enn 10 % over pivot = "forlenget" (ikke jag)
+HIST_BRUDD_VINDU = 40         # historiske utbrudd: motstand = høyeste High siste ~8 uker
 
 # ---------------------------------------------------------------------------
 # Multi-timeframe (ukentlig bekreftelse)

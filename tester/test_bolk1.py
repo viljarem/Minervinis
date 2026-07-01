@@ -97,3 +97,42 @@ def test_brudd_uten_volum_er_ikke_gronn():
     )
     b = vcp.bruddstatus(df, pivot=100.0)
     assert b["emoji"] != "🟢"
+
+
+# ---------------------------------------------------------------------------
+# Historiske volumbrudd (til chartet)
+# ---------------------------------------------------------------------------
+def test_historiske_brudd_finner_volumbrudd_gjennom_motstand():
+    n = 200
+    close = np.full(n, 100.0)
+    high = close * 1.001
+    low = close * 0.999
+    vol = np.full(n, 1000.0)
+    high[150] = 110.0              # motstand (topp-wick) 40 dager før bruddet
+    close[185:] = 112.0           # bryter opp gjennom 110
+    high[185:] = 112.0 * 1.001
+    low[185:] = 112.0 * 0.999
+    vol[185] = 10_000.0           # kraftig volum på bruddagen
+    idx = pd.bdate_range("2022-01-01", periods=n)
+    df = pd.DataFrame({"Open": close, "High": high, "Low": low,
+                       "Close": close, "Volume": vol}, index=idx)
+
+    brudd = vcp.historiske_brudd(df, vindu=40)
+    assert len(brudd) >= 1
+    assert brudd[-1]["dato"] == idx[185]
+    assert abs(brudd[-1]["pivot"] - 110.0) < 1.0
+
+
+def test_historiske_brudd_tom_uten_volum():
+    # Samme kryss, men uten volumøkning -> ingen bekreftede brudd
+    n = 200
+    close = np.full(n, 100.0)
+    high = close * 1.001
+    high[150] = 110.0
+    close[185:] = 112.0
+    high[185:] = 112.0 * 1.001
+    idx = pd.bdate_range("2022-01-01", periods=n)
+    df = pd.DataFrame({"Open": close, "High": high, "Low": close * 0.999,
+                       "Close": close, "Volume": np.full(n, 1000.0)}, index=idx)
+
+    assert vcp.historiske_brudd(df, vindu=40) == []

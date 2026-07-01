@@ -230,3 +230,58 @@ def bruddstatus(df: pd.DataFrame, pivot: float) -> dict:
     else:
         resultat.update(emoji="🟡", tekst=f"Brudd uten volum ({dager_siden} d siden)")
     return resultat
+
+
+def _desimaler(pris: float) -> int:
+    """Passe antall desimaler ut fra kursnivå (så pivot vises pent)."""
+    if pris >= 100:
+        return 1
+    if pris >= 1:
+        return 2
+    return 3
+
+
+def historiske_brudd(df: pd.DataFrame, vindu: int | None = None) -> list:
+    """Finner TIDLIGERE volumbekreftede utbrudd gjennom motstand.
+
+    Et utbrudd = dagen kursen lukker over den forutgående N-dagers toppen
+    (motstanden), på volum >= BRUDD_VOLUM_FAKTOR x snittet av de forutgående
+    50 dagene. For hvert utbrudd får vi datoen, pivot-nivået (motstanden som
+    ble brutt) og hvor "basen" startet – slik at chartet kan tegne en kort
+    pivotlinje fram til bruddet.
+
+    Returnerer liste av {dato, base_start, pivot, pris}, eldste først.
+    """
+    vindu = vindu or konfig.HIST_BRUDD_VINDU
+    d = df.dropna(subset=["Close"])
+    if len(d) < vindu + 55:
+        return []
+
+    close = d["Close"]
+    motstand = d["High"].rolling(vindu).max().shift(1)
+    snittvol = d["Volume"].rolling(50, min_periods=10).mean().shift(1)
+    kryss = (close > motstand) & (close.shift(1) <= motstand.shift(1))
+    volum_ok = d["Volume"] >= konfig.BRUDD_VOLUM_FAKTOR * snittvol
+    er_brudd = (kryss & volum_ok).to_numpy()
+
+    idx = d.index
+    motstand_v = motstand.to_numpy()
+    close_v = close.to_numpy()
+
+    resultater: list = []
+    sist = -10 ** 9
+    for i in range(len(d)):
+        if not er_brudd[i] or (i - sist) < vindu:
+            continue
+        niva = motstand_v[i]
+        if not np.isfinite(niva):
+            continue
+        base_i = max(0, i - vindu)
+        resultater.append({
+            "dato": idx[i],
+            "base_start": idx[base_i],
+            "pivot": round(float(niva), _desimaler(float(niva))),
+            "pris": float(close_v[i]),
+        })
+        sist = i
+    return resultater
