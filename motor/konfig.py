@@ -9,7 +9,11 @@ from dataclasses import dataclass
 # ---------------------------------------------------------------------------
 # Datahenting
 # ---------------------------------------------------------------------------
-BENCHMARK = "^OSEBX"          # Oslo Børs hovedindeks (brukes til relativ styrke)
+# Hovedindeksen lagres kun for evt. framtidig markedssammenligning/graf.
+# NB: RS-ratingen bruker den IKKE – den rangerer aksjene mot hverandre (persentil),
+# ikke mot indeksen. (Det gamle symbolet ^OSEBX sluttet å oppdatere seg på Yahoo
+# i 2021; OSEBX.OL er den levende erstatningen.)
+BENCHMARK = "OSEBX.OL"        # Oslo Børs hovedindeks (kun referanse)
 HISTORIKK_AAR = 10            # antall år som hentes ved aller første kjøring
 BORS_SUFFIKS = ".OL"         # Oslo Børs-tickere slutter på dette
 
@@ -23,6 +27,11 @@ EURONEXT_MARKEDER = {
     "XOAS": ".OL",
     "MERK": ".OL",
 }
+
+# Tickere som Euronext lister, men som Yahoo IKKE har kursdata for (feil-/døde
+# noteringer). Disse hoppes over slik at roboten ikke leter forgjeves hver dag.
+# Vil du utelukke flere senere? Legg dem bare til i settet under.
+UTELUKK_TICKERE = {"PLCAN.OL"}
 
 # ---------------------------------------------------------------------------
 # Filstier (relativt til prosjektmappa)

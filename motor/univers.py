@@ -114,6 +114,9 @@ def hent_alle_tickere(oppdater: bool = True) -> list[str]:
         oslo = hent_fra_euronext()
 
     if oslo:
+        # Fjern kjente "problem-tickere" (konfig.UTELUKK_TICKERE) FØR vi lagrer,
+        # slik at selve cache-fila alltid er ren.
+        oslo = [t for t in oslo if t not in konfig.UTELUKK_TICKERE]
         _skriv_fil(
             konfig.OSLOBORS_CACHE_FIL, oslo,
             "# Oslo Børs-tickere hentet AUTOMATISK fra Euronext.\n"
@@ -130,4 +133,5 @@ def hent_alle_tickere(oppdater: bool = True) -> list[str]:
     if manuelle:
         print(f"   + {len(manuelle)} manuelle ekstra tickere fra {konfig.UNIVERS_FIL}.")
 
-    return sorted(set(oslo) | set(manuelle))
+    # Utelukk igjen på det endelige settet (dekker cache-fallback og manuelle).
+    return sorted((set(oslo) | set(manuelle)) - konfig.UTELUKK_TICKERE)
