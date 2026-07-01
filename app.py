@@ -16,7 +16,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from motor import konfig, data as datamod, indikatorer, minervini, screener
+from motor import konfig, data as datamod, indikatorer, minervini, screener, univers
 
 st.set_page_config(page_title="Minervini-screener · Oslo Børs", layout="wide")
 
@@ -38,6 +38,28 @@ def last_priser(versjon: float) -> pd.DataFrame:
 def kjor_screening(preset_navn: str, versjon: float) -> pd.DataFrame:
     priser = datamod.les_priser()
     return screener.screen(priser, konfig.PRESETS[preset_navn])
+
+
+@st.cache_data(show_spinner=False)
+def data_status(versjon: float) -> dict:
+    """Regner ut datadekning: siste handelsdag, antall aksjer med data, universstørrelse."""
+    priser = datamod.les_priser()
+    if priser.empty:
+        return {"tom": True}
+    i_data = set(priser["Ticker"].unique())
+    aksjer_data = len([t for t in i_data if t != konfig.BENCHMARK])
+    univ = set(univers.les_cache()) | set(univers.les_manuelle())
+    aksjer_univ = len(univ) if univ else aksjer_data
+    siste_dato = pd.to_datetime(priser["Date"]).max()
+    alder = (pd.Timestamp.now().normalize() - siste_dato.normalize()).days
+    return {
+        "tom": False,
+        "siste_dato": siste_dato,
+        "aksjer_data": aksjer_data,
+        "aksjer_univ": aksjer_univ,
+        "alder_dager": alder,
+        "fil_tid": pd.to_datetime(versjon, unit="s"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +177,32 @@ if versjon == 0:
         "så fylles data/priser.parquet, og siden viser resultater automatisk."
     )
     st.stop()
+
+# --- Visuell bekreftelse på datastatus (øverst, alltid synlig) ---
+_status = data_status(versjon)
+if not _status["tom"]:
+    _dekning = _status["aksjer_data"] / _status["aksjer_univ"] if _status["aksjer_univ"] else 0
+    if _status["alder_dager"] <= 4:
+        st.success(
+            f"✅ **Data oppdatert** – siste handelsdag **{_status['siste_dato']:%d.%m.%Y}**. "
+            f"Roboten henter automatisk hver hverdag."
+        )
+    else:
+        st.warning(
+            f"⚠️ Nyeste data er fra **{_status['siste_dato']:%d.%m.%Y}** "
+            f"({_status['alder_dager']} dager siden). Roboten kjører hver hverdag ca. kl. 18–19."
+        )
+    _k1, _k2, _k3 = st.columns(3)
+    _k1.metric("📅 Siste handelsdag", f"{_status['siste_dato']:%d.%m.%Y}")
+    _k2.metric("🏦 Aksjer med data", f"{_status['aksjer_data']} / {_status['aksjer_univ']}",
+               help="Antall Oslo Børs-aksjer vi har kurshistorikk på, av hele universet.")
+    _k3.metric("🕔 Sist hentet", f"{_status['fil_tid']:%d.%m kl. %H:%M}")
+    if _dekning < 0.9:
+        st.info(
+            f"ℹ️ Vi har foreløpig data på {_status['aksjer_data']} av {_status['aksjer_univ']} aksjer "
+            f"({_dekning:.0%}). Nye tickere får full historikk automatisk ved neste robotkjøring."
+        )
+    st.divider()
 
 # --- Sidefelt: filtre ---
 with st.sidebar:

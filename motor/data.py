@@ -152,6 +152,18 @@ def flett(gammel: pd.DataFrame, ny: pd.DataFrame) -> pd.DataFrame:
     return alt.reset_index(drop=True)
 
 
+def flett_flere(deler: list[pd.DataFrame]) -> pd.DataFrame:
+    """Fletter flere tabeller til én. Ved dublett (samme ticker+dato) vinner den siste."""
+    reelle = [d for d in deler if d is not None and not d.empty]
+    if not reelle:
+        return pd.DataFrame(columns=KOLONNER)
+    alt = pd.concat(reelle, ignore_index=True)
+    alt["Date"] = pd.to_datetime(alt["Date"])
+    alt = alt.sort_values(["Ticker", "Date"])
+    alt = alt.drop_duplicates(subset=["Ticker", "Date"], keep="last")
+    return alt.reset_index(drop=True)
+
+
 # ---------------------------------------------------------------------------
 # Hent én tickers historikk som en pen tidsserie
 # ---------------------------------------------------------------------------
@@ -172,8 +184,12 @@ def hent_og_oppdater() -> pd.DataFrame:
     """
     Henter ferske kurser og oppdaterer parquet-fila.
 
-    - Første gang (tom fil): henter ~10 år historikk.
-    - Deretter: henter bare de siste dagene og legger dem til.
+    Skiller mellom to grupper, slik at systemet er selvreparerende:
+      - NYE tickere (som ikke finnes i fila ennå) -> full ~10 års historikk.
+        Dette gjelder både første kjøring OG når Euronext noterer nye selskaper,
+        eller når du legger til egne tickere.
+      - KJENTE tickere (som allerede har data) -> bare de siste dagene (1 mnd).
+
     Til slutt lagres og returneres hele den oppdaterte historikken.
     """
     tickere = les_univers(oppdater=True)
@@ -181,12 +197,21 @@ def hent_og_oppdater() -> pd.DataFrame:
         tickere = tickere + [konfig.BENCHMARK]
 
     eksisterende = les_priser()
-    forste_gang = eksisterende.empty
-    periode = f"{konfig.HISTORIKK_AAR}y" if forste_gang else "1mo"
-    print(f"Henter kurser (periode={periode}, {'FØRSTE gang' if forste_gang else 'daglig oppdatering'}).")
+    kjente = set(eksisterende["Ticker"].unique()) if not eksisterende.empty else set()
+    nye_tickere = [t for t in tickere if t not in kjente]
+    kjente_tickere = [t for t in tickere if t in kjente]
 
-    nye = rens(hent_priser(tickere, periode))
-    flettet = flett(eksisterende, nye)
+    deler = [eksisterende] if not eksisterende.empty else []
+
+    if nye_tickere:
+        print(f"Henter FULL historikk ({konfig.HISTORIKK_AAR}y) for {len(nye_tickere)} nye tickere ...")
+        deler.append(rens(hent_priser(nye_tickere, f"{konfig.HISTORIKK_AAR}y")))
+
+    if kjente_tickere:
+        print(f"Henter siste dager (1mo) for {len(kjente_tickere)} kjente tickere ...")
+        deler.append(rens(hent_priser(kjente_tickere, "1mo")))
+
+    flettet = deler[0] if len(deler) == 1 else flett_flere(deler)
     lagre_priser(flettet)
     print(f"Lagret {len(flettet):,} rader for {flettet['Ticker'].nunique()} tickere til {konfig.PRISER_FIL}.")
     return flettet
