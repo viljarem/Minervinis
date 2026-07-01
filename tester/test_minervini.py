@@ -88,6 +88,20 @@ def test_vcp_finner_innsnevring():
     assert 90 < r["pivot"] < 100
 
 
+def test_vcp_gir_svingpunkter_til_chart():
+    # Punktene skal veksle topp/bunn og være sortert i tid (til zigzag-linja)
+    df = lag_zigzag([100, 70, 98, 84, 96, 89, 95])
+    r = vcp.finn_vcp(df)
+    punkter = r["punkter"]
+    assert len(punkter) >= 4
+    datoer = [p["dato"] for p in punkter]
+    assert datoer == sorted(datoer)                 # kronologisk rekkefølge
+    priser = [p["pris"] for p in punkter]
+    veksler = all(priser[i] != priser[i + 1] for i in range(len(priser) - 1))
+    assert veksler                                  # ingen flate gjentakelser
+
+
+
 def test_bruddstatus_bekreftet_paa_volum():
     idx = pd.bdate_range("2022-01-01", periods=60)
     close = np.full(60, 90.0)

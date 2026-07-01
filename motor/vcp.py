@@ -25,6 +25,7 @@ def _tomt_resultat() -> dict:
         "avstand": np.nan,        # hvor langt under pivot kursen er (positivt = under)
         "kontraksjoner": [],       # liste med dybder i prosent
         "antall": 0,
+        "punkter": [],             # svingpunkter (topp/bunn) til chartet
         "volumuttorking": False,
         "volum_ratio": np.nan,
         "kvalitet": 0,
@@ -151,6 +152,16 @@ def finn_vcp(df: pd.DataFrame) -> dict:
     kvalitet = _kvalitetsscore(serie, uttorking, avstand)
     gyldig = avstand <= konfig.VCP_MAKS_UNDER_PIVOT   # maks 12 % under pivot = "klar"
 
+    # Svingpunktene i kontraksjonsserien (topp→bunn→topp ...) til chartet.
+    sving = {}
+    for k in serie:
+        sving[k["topp_i"]] = float(k["topp"])
+        sving[k["bunn_i"]] = float(k["bunn"])
+    punkter = [
+        {"dato": pd.Timestamp(base.index[i]).date().isoformat(), "pris": round(pris, 4)}
+        for i, pris in sorted(sving.items())
+    ]
+
     return {
         "har_vcp": True,
         "pivot": pivot,
@@ -158,6 +169,7 @@ def finn_vcp(df: pd.DataFrame) -> dict:
         "avstand": float(avstand),
         "kontraksjoner": [round(k["dyp"] * 100, 1) for k in serie],
         "antall": len(serie),
+        "punkter": punkter,
         "volumuttorking": bool(uttorking),
         "volum_ratio": volum_ratio,
         "kvalitet": kvalitet,

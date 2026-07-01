@@ -80,6 +80,7 @@ def analyser_ticker(serie: pd.DataFrame, ticker: str, preset: Preset = konfig.ST
         "avstand_pivot": None if pd.isna(v["avstand"]) else round(v["avstand"] * 100, 1),
         "antall_kontr": v["antall"],
         "kontraksjoner": v["kontraksjoner"],
+        "vcp_punkter": v.get("punkter", []),
         "volumuttorking": v["volumuttorking"],
         "kvalitet": v["kvalitet"],
         "vcp_gyldig": v["gyldig"],
