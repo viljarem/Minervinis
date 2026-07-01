@@ -291,9 +291,43 @@ def formater_tabell(df: pd.DataFrame) -> pd.DataFrame:
     vis["Setup"] = df["status"] + " " + df["statustekst"]
     vis["Til pivot"] = df["avstand_pivot"].map(_til_pivot_tekst)
     vis["Kriterie 1-7"] = df["score"].astype(str) + "/7"
+    vis["RVol"] = df["rel_volum"] if "rel_volum" in df.columns else np.nan
     vis["RS"] = df["rs"]
     vis["Uke"] = df["mtf_emoji"] if "mtf_emoji" in df else "⚠️"
     return vis
+
+
+def stil_hovedtabell(vis: pd.DataFrame):
+    """Fargelegger tabellen: grønn bakgrunn på fulle 7/7 og på høyt relativt volum.
+
+    Sterk grønn = toppnivå (7/7 eller bruddvolum ≥ 1,4×), lys grønn = nesten der
+    (6/7 eller volum over snittet). Returnerer en pandas Styler som st.dataframe
+    tegner med farger – column_config styrer fortsatt format og hjelpetekster.
+    """
+    sterk, lys = "background-color:#b7e4c7;font-weight:600", "background-color:#eaf7ec"
+
+    def _krit(v):
+        if v == "7/7":
+            return sterk
+        if v == "6/7":
+            return lys
+        return ""
+
+    def _rvol(v):
+        if pd.isna(v):
+            return ""
+        if v >= konfig.BRUDD_VOLUM_FAKTOR:
+            return sterk
+        if v >= 1.0:
+            return lys
+        return ""
+
+    styler = vis.style
+    if "Kriterie 1-7" in vis.columns:
+        styler = styler.map(_krit, subset=["Kriterie 1-7"])
+    if "RVol" in vis.columns:
+        styler = styler.map(_rvol, subset=["RVol"])
+    return styler
 
 
 # Hjelpetekster på kolonneoverskriftene (så vi kan forenkle uten å miste info).
@@ -305,7 +339,12 @@ TABELL_HJELP = {
         "Til pivot", help="Hvor langt kursen er fra kjøpsnivået (pivot). "
         "Negativt = mangler så mange % på brudd. Positivt = allerede over pivot."),
     "Kriterie 1-7": st.column_config.TextColumn(
-        "Kriterie 1-7", help="Hvor mange av Minervinis 7 trend-kriterier som er oppfylt akkurat nå."),
+        "Kriterie 1-7", help="Hvor mange av Minervinis 7 trend-kriterier som er oppfylt akkurat nå. "
+        "Grønn = 7/7 (full trend), lys grønn = 6/7."),
+    "RVol": st.column_config.NumberColumn(
+        "RVol", format="%.1f×",
+        help="Relativt volum: siste dags volum delt på 50-dagers snitt. 1,0 = normalt. "
+        "Grønn ≥ 1,4× = bruddvolum (Minervini vil se høyt volum når kursen bryter ut)."),
     "RS": st.column_config.NumberColumn(
         "RS", help="Relativ styrke 1–99 (99 = sterkest momentum i universet)."),
     "Uke": st.column_config.TextColumn(
@@ -443,10 +482,11 @@ with fane1:
         f"**{len(filt)} aksjer** – sortert med de mest handlbare øverst: ferske brudd (🟢) "
         f"først, så de som er nærmest et brudd. Ferske brudd vises alltid, også under {min_krit}/7."
     )
-    st.dataframe(formater_tabell(filt), width="stretch", hide_index=True, height=560,
-                 column_config=TABELL_HJELP)
+    st.dataframe(stil_hovedtabell(formater_tabell(filt)), width="stretch", hide_index=True,
+                 height=560, column_config=TABELL_HJELP)
     st.caption("Øverst = skjer nå / nærmest brudd. **Til pivot**: negativt = mangler så mange % "
-               "på brudd, positivt = over pivot. Tips: klikk en kolonne-overskrift for å sortere selv.")
+               "på brudd, positivt = over pivot. **Grønt** = 7/7 eller bruddvolum (≥1,4×). "
+               "Tips: klikk en kolonne-overskrift for å sortere selv.")
 
 # --- Fane 2: Chart ---
 with fane2:

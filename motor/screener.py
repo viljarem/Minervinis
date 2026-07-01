@@ -52,6 +52,11 @@ def analyser_ticker(serie: pd.DataFrame, ticker: str, preset: Preset = konfig.ST
     pris = float(d["Close"].iloc[-1])
     dagsomsetning = float((d["Close"] * d["Volume"]).rolling(konfig.OMSETNING_VINDU).mean().iloc[-1])
 
+    # Relativt volum (RVol): siste dags volum delt på 50-dagers snittvolum (før i dag).
+    # 1,0 = helt normalt, >1 = mer handel enn vanlig. Et ekte brudd skjer typisk
+    # på >1,4 (samme terskel som bruddlogikken bruker).
+    vol_snitt50 = d["Volume"].rolling(50, min_periods=10).mean().shift(1).iloc[-1]
+    rel_volum = float(d["Volume"].iloc[-1] / vol_snitt50) if vol_snitt50 and vol_snitt50 > 0 else np.nan
     # Utvikling siden aksjen gikk inn i full trend (i prosent)
     utvikling = np.nan
     if kv_dato is not None:
@@ -92,6 +97,7 @@ def analyser_ticker(serie: pd.DataFrame, ticker: str, preset: Preset = konfig.ST
         "mtf_tekst": mtf["tekst"],
         "rs_avkastning": indikatorer.rs_avkastning(d["Close"]),
         "dagsomsetning": dagsomsetning,
+        "rel_volum": None if pd.isna(rel_volum) else round(rel_volum, 2),
         "perioder": [(pd.Timestamp(a).date().isoformat(), pd.Timestamp(b).date().isoformat()) for a, b in perioder],
     }
 
