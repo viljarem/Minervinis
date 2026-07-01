@@ -37,6 +37,16 @@ def analyser_ticker(serie: pd.DataFrame, ticker: str, preset: Preset = konfig.ST
 
     v = vcp.finn_vcp(d)
     brudd = vcp.bruddstatus(d, v["pivot"])
+    pivot_vis, stop_vis = v["pivot"], v["stop"]
+
+    # Fallback: fanger ferske volumbrudd gjennom motstand selv når VCP-motoren
+    # ikke fant en pivot (typisk RETT ETTER et brudd, da basen "forsvinner").
+    if pd.isna(v["pivot"]):
+        fersk = vcp.ferskt_brudd(d)
+        if fersk:
+            brudd = fersk
+            pivot_vis, stop_vis = fersk["pivot"], fersk["stop"]
+
     mtf = indikatorer.multi_timeframe(d)
 
     pris = float(d["Close"].iloc[-1])
@@ -65,8 +75,8 @@ def analyser_ticker(serie: pd.DataFrame, ticker: str, preset: Preset = konfig.ST
         "status": brudd["emoji"],
         "statustekst": brudd["tekst"],
         "bruddato": None if brudd["bruddato"] is None else pd.Timestamp(brudd["bruddato"]).date().isoformat(),
-        "pivot": None if pd.isna(v["pivot"]) else round(v["pivot"], 2),
-        "stop": None if pd.isna(v["stop"]) else round(v["stop"], 2),
+        "pivot": None if pd.isna(pivot_vis) else round(pivot_vis, 2),
+        "stop": None if pd.isna(stop_vis) else round(stop_vis, 2),
         "avstand_pivot": None if pd.isna(v["avstand"]) else round(v["avstand"] * 100, 1),
         "antall_kontr": v["antall"],
         "kontraksjoner": v["kontraksjoner"],

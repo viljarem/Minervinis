@@ -285,3 +285,50 @@ def historiske_brudd(df: pd.DataFrame, vindu: int | None = None) -> list:
         })
         sist = i
     return resultater
+
+
+def ferskt_brudd(df: pd.DataFrame) -> dict | None:
+    """Fanger et NYLIG volumbrudd gjennom motstand – uavhengig av VCP-mønster.
+
+    Minervini: et gyldig kjøpssignal er kursen som bryter opp gjennom motstand
+    på høyt volum, SELV om vi ikke rakk å se en perfekt VCP-innsnevring først.
+    (Etter et brudd "forsvinner" ofte VCP-basen, og da mister vi ellers signalet.)
+
+    Bruker historiske_brudd() og returnerer det SISTE bruddet hvis det er ferskt
+    (<= BRUDD_FERSK_DAGER handelsdager siden) og kursen ikke er blitt forlenget.
+    Returnerer en status-dict på samme form som bruddstatus(), eller None.
+    """
+    brudd = historiske_brudd(df)
+    if not brudd:
+        return None
+
+    d = df.dropna(subset=["Close"])
+    b = brudd[-1]
+    try:
+        pos = d.index.get_loc(b["dato"])
+    except KeyError:
+        return None
+
+    dager_siden = (len(d) - 1) - int(pos)
+    if dager_siden > konfig.BRUDD_FERSK_DAGER:
+        return None                      # for lenge siden – ikke ferskt lenger
+
+    pivot = float(b["pivot"])
+    siste_close = float(d["Close"].iloc[-1])
+    if siste_close > pivot * (1 + konfig.BRUDD_FORLENGET):
+        return None                      # blitt forlenget – ikke jag
+
+    # Stop = laveste Low i basen fram til bruddet
+    base = d.loc[b["base_start"]:b["dato"]]
+    stop = float(base["Low"].min()) if not base.empty else np.nan
+
+    return {
+        "emoji": "🟢",
+        "tekst": f"Bekreftet brudd ({dager_siden} d siden)",
+        "bruddindeks": int(pos),
+        "bruddato": b["dato"],
+        "pivot": pivot,
+        "stop": round(stop, _desimaler(stop)) if np.isfinite(stop) else np.nan,
+        "kilde": "motstand",
+    }
+

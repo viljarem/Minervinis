@@ -136,3 +136,37 @@ def test_historiske_brudd_tom_uten_volum():
                        "Close": close, "Volume": np.full(n, 1000.0)}, index=idx)
 
     assert vcp.historiske_brudd(df, vindu=40) == []
+
+
+# ---------------------------------------------------------------------------
+# Ferskt brudd som fallback (fanger kjøpssignal selv uten rent VCP-mønster)
+# ---------------------------------------------------------------------------
+def _serie_med_ferskt_brudd(dager_siden: int) -> pd.DataFrame:
+    """Bygger en serie som bryter motstand på volum for `dager_siden` dager siden."""
+    n = 260
+    close = np.full(n, 100.0)
+    high = close * 1.002
+    low = close * 0.998
+    vol = np.full(n, 1000.0)
+    bp = n - 1 - dager_siden                   # bruddpunkt
+    high[bp - 20] = 110.0                      # motstand INNENFOR 40-dagers vinduet
+    close[bp:] = 111.0                         # bryter opp gjennom 110 (kun ~1 % over)
+    high[bp:] = 111.5
+    low[bp:] = 110.5
+    vol[bp] = 6000.0                           # kraftig volum på bruddagen
+    idx = pd.bdate_range("2022-01-01", periods=n)
+    return pd.DataFrame({"Open": close, "High": high, "Low": low,
+                         "Close": close, "Volume": vol}, index=idx)
+
+
+def test_ferskt_brudd_fanges_som_gronn():
+    f = vcp.ferskt_brudd(_serie_med_ferskt_brudd(dager_siden=2))
+    assert f is not None
+    assert f["emoji"] == "🟢"
+    assert abs(f["pivot"] - 110.0) < 1.5
+    assert f["kilde"] == "motstand"
+
+
+def test_ferskt_brudd_ignorerer_gammelt_brudd():
+    # Brudd for 30 dager siden er ikke "ferskt" lenger
+    assert vcp.ferskt_brudd(_serie_med_ferskt_brudd(dager_siden=30)) is None
