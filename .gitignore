@@ -1,0 +1,17 @@
+# Filer og mapper som IKKE skal lastes opp til GitHub.
+# MERK: data/-mappa er BEVISST ikke her – vi VIL lagre dataene fast på GitHub.
+
+# Python-midlertidige filer
+__pycache__/
+*.pyc
+
+# Virtuelt miljø (lokalt Python-miljø på egen PC)
+.venv/
+venv/
+env/
+
+# Systemfiler
+.DS_Store
+
+# Test-rester
+.pytest_cache/
