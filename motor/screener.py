@@ -77,7 +77,10 @@ def analyser_ticker(serie: pd.DataFrame, ticker: str, preset: Preset = konfig.ST
         "bruddato": None if brudd["bruddato"] is None else pd.Timestamp(brudd["bruddato"]).date().isoformat(),
         "pivot": None if pd.isna(pivot_vis) else round(pivot_vis, 2),
         "stop": None if pd.isna(stop_vis) else round(stop_vis, 2),
-        "avstand_pivot": None if pd.isna(v["avstand"]) else round(v["avstand"] * 100, 1),
+        # Avstand til den VISTE pivoten i prosent (positiv = under pivot). Regnes fra
+        # pivot_vis – ikke v["avstand"] – slik at den også gjelder ferske brudd som kom
+        # via ferskt_brudd-fallbacken (der VCP-motoren ikke fant noen pivot selv).
+        "avstand_pivot": None if pd.isna(pivot_vis) else round((float(pivot_vis) - pris) / float(pivot_vis) * 100, 1),
         "antall_kontr": v["antall"],
         "kontraksjoner": v["kontraksjoner"],
         "vcp_punkter": v.get("punkter", []),
@@ -91,6 +94,36 @@ def analyser_ticker(serie: pd.DataFrame, ticker: str, preset: Preset = konfig.ST
         "dagsomsetning": dagsomsetning,
         "perioder": [(pd.Timestamp(a).date().isoformat(), pd.Timestamp(b).date().isoformat()) for a, b in perioder],
     }
+
+
+# ---------------------------------------------------------------------------
+# Sortering av hovedlista ("hvem skal jeg følge med på?")
+# ---------------------------------------------------------------------------
+# Rekkefølge på status – mest handlbart øverst:
+#   🟢 ferskt brudd  → 🟡 brudd uten volum → ⚪ klar/venter → 🔵 forlenget.
+# ⚪ uten pivot ("Ingen pivot") er ikke handlbart og havner helt nederst (rang 5).
+STATUS_RANG = {"🟢": 0, "🟡": 1, "⚪": 2, "🔵": 3}
+
+
+def sorter_hovedliste(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Sorterer lista slik at det mest handlbare ligger øverst – uten noen oppfunne
+    vekter, bare to objektive akser i rekkefølge:
+      1. STATUS (🟢 → 🟡 → ⚪ klar → 🔵 forlenget → ⚪ uten pivot nederst)
+      2. NÆRHET til pivot (minst absolutt avstand i prosent øverst innen hver gruppe)
+
+    Altså: det som skjer nå først, deretter det som er tettest på å skje.
+    """
+    if df.empty:
+        return df
+    d = df.copy()
+    har_pivot = d["pivot"].notna()
+    d["_rang"] = d["status"].map(STATUS_RANG).fillna(4).astype(int)
+    d.loc[~har_pivot, "_rang"] = 5                      # ⚪ "Ingen pivot" helt nederst
+    d["_naer"] = d["avstand_pivot"].abs()
+    d.loc[~har_pivot, "_naer"] = float("inf")           # uten pivot: uendelig langt bak
+    d = d.sort_values(["_rang", "_naer"], ascending=[True, True], kind="mergesort")
+    return d.drop(columns=["_rang", "_naer"])
 
 
 # ---------------------------------------------------------------------------

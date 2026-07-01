@@ -272,19 +272,45 @@ def vis_vcp_boks(res: dict) -> None:
 # ---------------------------------------------------------------------------
 # Hovedtabell
 # ---------------------------------------------------------------------------
+def _til_pivot_tekst(avstand_pivot) -> str:
+    """Fortegnstall for hvor langt kursen er fra pivot (kjøpsnivået).
+
+    avstand_pivot er positiv NÅR kursen er UNDER pivot. Vi snur fortegnet så det
+    leses som avkastning: negativt = mangler så mange % på brudd, positivt = over
+    pivot (allerede brutt). Ingen ord – bare tallet.
+    """
+    if pd.isna(avstand_pivot):
+        return "—"
+    return f"{-avstand_pivot:+.1f} %"
+
+
 def formater_tabell(df: pd.DataFrame) -> pd.DataFrame:
     vis = pd.DataFrame()
     vis["Ticker"] = df["ticker"]
     vis["Pris"] = df["pris"]
-    vis["RS"] = df["rs"]
-    vis["Kriterie 1-7"] = df["score"].astype(str) + "/7"
-    vis["Dato 7/7"] = df["dato_7av7"].fillna("—")
     vis["Setup"] = df["status"] + " " + df["statustekst"]
+    vis["Til pivot"] = df["avstand_pivot"].map(_til_pivot_tekst)
+    vis["Kriterie 1-7"] = df["score"].astype(str) + "/7"
+    vis["RS"] = df["rs"]
     vis["Uke"] = df["mtf_emoji"] if "mtf_emoji" in df else "⚠️"
-    vis["Utv. siden 7/7"] = df["utvikling_siden"].map(lambda x: "—" if pd.isna(x) else f"{x:+.1f} %")
-    vis["Pivot"] = df["pivot"]
-    vis["Kvalitet"] = df["kvalitet"]
     return vis
+
+
+# Hjelpetekster på kolonneoverskriftene (så vi kan forenkle uten å miste info).
+TABELL_HJELP = {
+    "Setup": st.column_config.TextColumn(
+        "Setup", help="🟢 ferskt brudd (følg nå) · 🟡 brudd uten volum · "
+        "⚪ klar/venter på brudd · 🔵 forlenget (for sent å jage)."),
+    "Til pivot": st.column_config.TextColumn(
+        "Til pivot", help="Hvor langt kursen er fra kjøpsnivået (pivot). "
+        "Negativt = mangler så mange % på brudd. Positivt = allerede over pivot."),
+    "Kriterie 1-7": st.column_config.TextColumn(
+        "Kriterie 1-7", help="Hvor mange av Minervinis 7 trend-kriterier som er oppfylt akkurat nå."),
+    "RS": st.column_config.NumberColumn(
+        "RS", help="Relativ styrke 1–99 (99 = sterkest momentum i universet)."),
+    "Uke": st.column_config.TextColumn(
+        "Uke", help="Ukentlig (høyere tidsramme) trend: ✅ bekreftet opp, ⚠️ blandet, ❌ nedtrend."),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -395,16 +421,18 @@ with fane1:
     if krev_uke:
         filt = filt[filt["mtf_status"] == "bullish"]
 
-    # Standardsortering: nyeste 7/7-dato øverst (aksjer uten dato havner nederst)
-    filt["_sortdato"] = pd.to_datetime(filt["dato_7av7"], errors="coerce")
-    filt = filt.sort_values("_sortdato", ascending=False, na_position="last").drop(columns="_sortdato")
+    # Standardsortering: mest handlbart øverst – status (🟢→🟡→⚪ klar→🔵 forlenget),
+    # deretter nærhet til pivot. Ren, objektiv rekkefølge (ingen oppfunne vekter).
+    filt = screener.sorter_hovedliste(filt)
 
     st.markdown(
-        f"**{len(filt)} aksjer** i lista. Kolonnen **Kriterie 1-7** viser hvor mange av de "
-        f"sju kriteriene som er oppfylt. Ferske brudd (🟢) vises alltid – også under {min_krit}/7."
+        f"**{len(filt)} aksjer** – sortert med de mest handlbare øverst: ferske brudd (🟢) "
+        f"først, så de som er nærmest et brudd. Ferske brudd vises alltid, også under {min_krit}/7."
     )
-    st.dataframe(formater_tabell(filt), width="stretch", hide_index=True, height=560)
-    st.caption("Sortert etter nyeste 7/7-dato øverst. Tips: klikk på en kolonne-overskrift for å sortere selv.")
+    st.dataframe(formater_tabell(filt), width="stretch", hide_index=True, height=560,
+                 column_config=TABELL_HJELP)
+    st.caption("Øverst = skjer nå / nærmest brudd. **Til pivot**: negativt = mangler så mange % "
+               "på brudd, positivt = over pivot. Tips: klikk en kolonne-overskrift for å sortere selv.")
 
 # --- Fane 2: Chart ---
 with fane2:

@@ -2,6 +2,8 @@
 Tester for endrings-sammenligningen som e-posten bygger på.
 Kjør slik (fra prosjektmappa):  pytest -q
 """
+import pandas as pd
+
 from motor import screener
 
 
@@ -27,3 +29,23 @@ def test_sammenlign_uten_endringer():
     assert endr["nye"] == []
     assert endr["falt_ut"] == []
     assert endr["ferske_brudd"] == []
+
+
+def test_sorter_hovedliste_status_forst_saa_naerhet():
+    # avstand_pivot: positiv = under pivot. abs() = nærhet (mindre = nærmere).
+    df = pd.DataFrame([
+        {"ticker": "BLAA",  "status": "🔵", "pivot": 10, "avstand_pivot": -1.0},  # forlenget
+        {"ticker": "INGEN", "status": "⚪", "pivot": None, "avstand_pivot": None},  # ingen pivot
+        {"ticker": "KLAR",  "status": "⚪", "pivot": 10, "avstand_pivot": 3.0},    # klar, 3% under
+        {"ticker": "GUL",   "status": "🟡", "pivot": 10, "avstand_pivot": 0.5},   # brudd uten volum
+        {"ticker": "GRON1", "status": "🟢", "pivot": 10, "avstand_pivot": -2.0},  # brudd, 2% over
+        {"ticker": "GRON2", "status": "🟢", "pivot": 10, "avstand_pivot": -0.5},  # brudd, 0,5% over (ferskest)
+    ])
+    ut = list(screener.sorter_hovedliste(df)["ticker"])
+    # 🟢 nærmest pivot først, så 🟡, så ⚪ klar, så 🔵, og ⚪ uten pivot helt nederst.
+    assert ut == ["GRON2", "GRON1", "GUL", "KLAR", "BLAA", "INGEN"]
+
+
+def test_sorter_hovedliste_tom_gir_tom():
+    tom = pd.DataFrame(columns=["ticker", "status", "pivot", "avstand_pivot"])
+    assert screener.sorter_hovedliste(tom).empty
