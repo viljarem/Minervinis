@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -65,40 +66,62 @@ def data_status(versjon: float) -> dict:
 # ---------------------------------------------------------------------------
 # Chart
 # ---------------------------------------------------------------------------
-def lag_chart(serie: pd.DataFrame, res: dict | None, vis_perioder: bool) -> go.Figure:
-    """Tegner candlestick + glidende snitt + 52u høy/lav + pivot + bruddmarkør."""
-    d = indikatorer.legg_til_indikatorer(serie).iloc[-400:]  # vis ~1,5 år
+CHART_CONFIG = {
+    "scrollZoom": True,          # zoom med musehjul
+    "displaylogo": False,
+    "modeBarButtonsToRemove": ["select2d", "lasso2d"],
+}
+
+# Hvor mange handelsdager hver "Periode"-knapp viser (og skalerer etter)
+PERIODER_VALG = {"3 mnd": 63, "6 mnd": 126, "1 år": 252, "2 år": 504}
+
+
+def lag_chart(serie: pd.DataFrame, res: dict | None, vis_perioder: bool,
+              dager: int = 126) -> go.Figure:
+    """Candlestick + MA50/150/200 + 52u høy/lav + pivot/stop + volum.
+
+    Chartet skaleres etter det valgte tidsvinduet (`dager`), så kursen alltid
+    fyller ruta pent. Volum-panelet fargelegges grønt/rødt og de aller største
+    volumtoppene klippes, slik at normalt volum blir godt synlig.
+    """
+    d = indikatorer.legg_til_indikatorer(serie).iloc[-dager:]
 
     fig = make_subplots(
-        rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03,
-        row_heights=[0.78, 0.22], subplot_titles=("", "Volum"),
+        rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.04,
+        row_heights=[0.76, 0.24], subplot_titles=("", "Volum"),
     )
 
     fig.add_trace(go.Candlestick(
         x=d.index, open=d["Open"], high=d["High"], low=d["Low"], close=d["Close"],
         name="Kurs", increasing_line_color="#26a69a", decreasing_line_color="#ef5350",
+        increasing_fillcolor="#26a69a", decreasing_fillcolor="#ef5350",
     ), row=1, col=1)
 
-    farger = {"SMA50": "#2196f3", "SMA150": "#ff9800", "SMA200": "#9c27b0"}
-    for navn, farge in farger.items():
+    # Glidende snitt – MA50 er tykkest (viktigst for Minervini-kjøpet)
+    for navn, farge, bredde in (("SMA50", "#2196f3", 2.2),
+                                ("SMA150", "#ff9800", 1.3),
+                                ("SMA200", "#9c27b0", 1.3)):
         fig.add_trace(go.Scatter(x=d.index, y=d[navn], name=navn,
-                                  line=dict(color=farge, width=1.3)), row=1, col=1)
+                                 line=dict(color=farge, width=bredde)), row=1, col=1)
 
     fig.add_trace(go.Scatter(x=d.index, y=d["High_52w"], name="52u høy",
-                             line=dict(color="#9e9e9e", width=1, dash="dot")), row=1, col=1)
+                             line=dict(color="#bdbdbd", width=1, dash="dot")), row=1, col=1)
     fig.add_trace(go.Scatter(x=d.index, y=d["Low_52w"], name="52u lav",
-                             line=dict(color="#9e9e9e", width=1, dash="dot")), row=1, col=1)
+                             line=dict(color="#bdbdbd", width=1, dash="dot")), row=1, col=1)
 
-    # Volum nederst
+    # Volum – grønt på opp-dager, rødt på ned-dager
+    opp = (d["Close"] >= d["Open"]).to_numpy()
+    vol_farger = np.where(opp, "rgba(38,166,154,0.55)", "rgba(239,83,80,0.55)")
     fig.add_trace(go.Bar(x=d.index, y=d["Volume"], name="Volum",
-                         marker_color="rgba(120,120,120,0.5)"), row=2, col=1)
+                         marker_color=vol_farger, marker_line_width=0,
+                         showlegend=False), row=2, col=1)
 
     if res:
         # Historiske 7/7-perioder (lys grønn skygge)
         if vis_perioder:
             for start, slutt in res.get("perioder", []):
                 fig.add_vrect(x0=start, x1=slutt, fillcolor="green",
-                              opacity=0.07, line_width=0, row=1, col=1)
+                              opacity=0.06, line_width=0, row=1, col=1)
         # Gull pivotlinje
         if res.get("pivot"):
             fig.add_hline(y=res["pivot"], line=dict(color="gold", width=2),
@@ -118,8 +141,27 @@ def lag_chart(serie: pd.DataFrame, res: dict | None, vis_perioder: bool) -> go.F
                 name="Brudd",
             ), row=1, col=1)
 
+    # Skaler y-aksen til det synlige vinduet (ta med pivot/stop i ramma)
+    lav = float(d["Low"].min())
+    hoy = float(d["High"].max())
+    for niva in ((res or {}).get("pivot"), (res or {}).get("stop")):
+        if niva:
+            lav, hoy = min(lav, float(niva)), max(hoy, float(niva))
+    pad = (hoy - lav) * 0.06 or hoy * 0.02
+    fig.update_yaxes(range=[lav - pad, hoy + pad], row=1, col=1)
+
+    # Klipp de høyeste volumtoppene så normalvolum blir synlig
+    vol_tak = float(np.nanpercentile(d["Volume"], 95)) * 1.35
+    if vol_tak > 0:
+        fig.update_yaxes(range=[0, vol_tak], row=2, col=1)
+
+    fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])  # skjul helger
+    fig.update_xaxes(showspikes=True, spikemode="across", spikethickness=1,
+                     spikecolor="#bbbbbb", spikedash="dot")
+
     fig.update_layout(
-        height=620, xaxis_rangeslider_visible=False, hovermode="x unified",
+        height=680, template="plotly_white", dragmode="pan", bargap=0.1,
+        xaxis_rangeslider_visible=False, hovermode="x unified",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
         margin=dict(l=10, r=10, t=30, b=10),
     )
@@ -240,13 +282,18 @@ with fane1:
 # --- Fane 2: Chart ---
 with fane2:
     valg = st.selectbox("Velg aksje", resultat["ticker"].tolist())
-    vis_perioder = st.checkbox("Marker historiske 7/7-perioder", value=True)
+    kol_a, kol_b = st.columns([3, 2])
+    periode = kol_a.radio("Periode", list(PERIODER_VALG.keys()), index=1, horizontal=True)
+    vis_perioder = kol_b.checkbox("Marker historiske 7/7-perioder", value=True)
     serie = datamod.serie_for(last_priser(versjon), valg)
     res = screener.analyser_ticker(serie, valg, konfig.PRESETS[preset_navn])
     if res is None:
         st.info("For lite historikk til å tegne chart for denne aksjen.")
     else:
-        st.plotly_chart(lag_chart(serie, res, vis_perioder), use_container_width=True)
+        st.plotly_chart(lag_chart(serie, res, vis_perioder, PERIODER_VALG[periode]),
+                        use_container_width=True, config=CHART_CONFIG)
+        st.caption("💡 Dra for å flytte, rull med musehjulet for å zoome. "
+                   "Dobbeltklikk for å nullstille. Bruk periode-knappene for å skalere.")
         vis_vcp_boks(res)
 
 # --- Fane 3: Søk ---
@@ -268,5 +315,8 @@ with fane3:
                 st.info("For lite historikk (trenger ~200 handelsdager) til full analyse.")
             else:
                 st.subheader(f"{sok} · {res['score']}/7 · {res['status']} {res['statustekst']}")
-                st.plotly_chart(lag_chart(serie, res, vis_perioder=True), use_container_width=True)
+                periode3 = st.radio("Periode", list(PERIODER_VALG.keys()), index=1,
+                                    horizontal=True, key="periode_sok")
+                st.plotly_chart(lag_chart(serie, res, vis_perioder=True, dager=PERIODER_VALG[periode3]),
+                                use_container_width=True, config=CHART_CONFIG)
                 vis_vcp_boks(res)
