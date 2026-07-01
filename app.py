@@ -129,8 +129,13 @@ def lag_chart(serie: pd.DataFrame, res: dict | None, vis_perioder: bool,
             for start, slutt in res.get("perioder", []):
                 fig.add_vrect(x0=start, x1=slutt, fillcolor="green",
                               opacity=0.06, line_width=0, row=1, col=1)
-        # Historiske volumbrudd: kort pivotlinje + trekant der kursen brøt motstand
-        hist = vcp.historiske_brudd(serie)
+        # Historiske volumbrudd: kort pivotlinje + trekant der kursen brøt motstand.
+        # Pakket i try/except så et enkelt chart aldri kan krasje hele appen.
+        try:
+            finn_hist = getattr(vcp, "historiske_brudd", None)
+            hist = finn_hist(serie) if finn_hist else []
+        except Exception:
+            hist = []
         if hist:
             seg_x, seg_y, mk_x, mk_y = [], [], [], []
             for b in hist:
