@@ -72,8 +72,15 @@ VCP_MAKS_UNDER_PIVOT = 0.12   # dagens kurs maks 12 % under pivot for å være "
 # Brudd (kjøpstriggeren)
 # ---------------------------------------------------------------------------
 BRUDD_FERSK_DAGER = 5         # brudd regnes som "ferskt" i så mange dager
-BRUDD_VOLUM_FAKTOR = 1.2      # volum >= 1.2x 50-dagers snitt = bekreftet
+BRUDD_VOLUM_FAKTOR = 1.4      # volum >= 1.4x snittet av FORUTGÅENDE 50 dager = bekreftet
 BRUDD_FORLENGET = 0.10        # mer enn 10 % over pivot = "forlenget" (ikke jag)
+
+# ---------------------------------------------------------------------------
+# Multi-timeframe (ukentlig bekreftelse)
+# ---------------------------------------------------------------------------
+# Vi sjekker at også den UKENTLIGE trenden peker opp før et brudd stoles på.
+MTF_MIN_DAGER = 100          # trenger minst så mange dager for å bygge ukedata
+MTF_MIN_UKER = 40            # og minst så mange uker (for 40-ukers snitt)
 
 
 # ---------------------------------------------------------------------------

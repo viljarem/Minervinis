@@ -37,6 +37,7 @@ def analyser_ticker(serie: pd.DataFrame, ticker: str, preset: Preset = konfig.ST
 
     v = vcp.finn_vcp(d)
     brudd = vcp.bruddstatus(d, v["pivot"])
+    mtf = indikatorer.multi_timeframe(d)
 
     pris = float(d["Close"].iloc[-1])
     dagsomsetning = float((d["Close"] * d["Volume"]).rolling(konfig.OMSETNING_VINDU).mean().iloc[-1])
@@ -72,6 +73,9 @@ def analyser_ticker(serie: pd.DataFrame, ticker: str, preset: Preset = konfig.ST
         "volumuttorking": v["volumuttorking"],
         "kvalitet": v["kvalitet"],
         "vcp_gyldig": v["gyldig"],
+        "mtf_status": mtf["status"],
+        "mtf_emoji": mtf["emoji"],
+        "mtf_tekst": mtf["tekst"],
         "rs_avkastning": indikatorer.rs_avkastning(d["Close"]),
         "dagsomsetning": dagsomsetning,
         "perioder": [(pd.Timestamp(a).date().isoformat(), pd.Timestamp(b).date().isoformat()) for a, b in perioder],

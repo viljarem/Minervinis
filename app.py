@@ -129,6 +129,7 @@ def lag_chart(serie: pd.DataFrame, res: dict | None, vis_perioder: bool) -> go.F
 def vis_vcp_boks(res: dict) -> None:
     """Viser VCP-detaljer under chartet."""
     st.markdown(f"**Setup-status:** {res['status']} {res['statustekst']}")
+    st.markdown(f"**Ukentlig trend:** {res.get('mtf_emoji', '⚠️')} {res.get('mtf_tekst', '–')}")
     kol = st.columns(4)
     kol[0].metric("Pivot (kjøp)", "—" if res["pivot"] is None else f"{res['pivot']}")
     kol[1].metric("Stop", "—" if res["stop"] is None else f"{res['stop']}")
@@ -157,6 +158,7 @@ def formater_tabell(df: pd.DataFrame) -> pd.DataFrame:
     vis["Score"] = df["score"].astype(str) + "/7"
     vis["Dato 7/7"] = df["dato_7av7"].fillna("—")
     vis["Setup"] = df["status"] + " " + df["statustekst"]
+    vis["Uke"] = df["mtf_emoji"] if "mtf_emoji" in df else "⚠️"
     vis["Utv. siden 7/7"] = df["utvikling_siden"].map(lambda x: "—" if pd.isna(x) else f"{x:+.1f} %")
     vis["Pivot"] = df["pivot"]
     vis["Kvalitet"] = df["kvalitet"]
@@ -211,6 +213,8 @@ with st.sidebar:
     min_krit = st.slider("Minimum antall kriterier", 0, 7, konfig.PRESETS[preset_navn].krev_antall)
     min_rs = st.slider("Minimum RS-rating", 0, 99, 0)
     kun_ferske = st.checkbox("Vis kun ferske brudd (🟢)", value=False)
+    krev_uke = st.checkbox("Krev ukentlig bekreftelse (✅)", value=False,
+                           help="Vis kun aksjer der også den ukentlige trenden peker opp.")
     st.caption(f"Sist oppdatert: {pd.to_datetime(versjon, unit='s'):%d.%m.%Y %H:%M}")
 
 resultat = kjor_screening(preset_navn, versjon)
@@ -226,6 +230,8 @@ with fane1:
     filt = filt[filt["rs"].fillna(0) >= min_rs]
     if kun_ferske:
         filt = filt[filt["status"] == "🟢"]
+    if krev_uke:
+        filt = filt[filt["mtf_status"] == "bullish"]
 
     st.markdown(f"**{len(filt)} aksjer** oppfyller filtrene. Kolonnene 1–7 = de sju kriteriene.")
     st.dataframe(formater_tabell(filt), use_container_width=True, hide_index=True, height=560)

@@ -78,7 +78,7 @@ def full_trend(k: pd.DataFrame, krev_antall: int) -> pd.Series:
 def kvalifiseringsdato(d: pd.DataFrame, k: pd.DataFrame, krev_antall: int) -> tuple:
     """
     Finner NÅR aksjen sist gikk inn i full trend (starten på nyeste periode),
-    og om det skjedde med volumstøtte (volum >= 1.2x 50-dagers snitt den dagen).
+    og om det skjedde med volumstøtte (volum >= 1.4x snittet av forutgående dager).
 
     Returnerer (dato eller None, volumstøtte True/False).
     """
@@ -86,7 +86,8 @@ def kvalifiseringsdato(d: pd.DataFrame, k: pd.DataFrame, krev_antall: int) -> tu
     if not perioder:
         return None, False
     start, _slutt = perioder[-1]
-    snitt50 = d["Volume"].rolling(50, min_periods=10).mean()
+    # Snittvolum av de FORUTGÅENDE dagene (shift 1 ekskluderer dagen selv).
+    snitt50 = d["Volume"].rolling(50, min_periods=10).mean().shift(1)
     try:
         volumstotte = bool(d["Volume"].loc[start] >= konfig.BRUDD_VOLUM_FAKTOR * snitt50.loc[start])
     except (KeyError, TypeError):

@@ -47,6 +47,49 @@ def _svingpunkter(hoy: np.ndarray, lav: np.ndarray, vindu: int):
     return topper, bunner
 
 
+def _alternerende(hoy: np.ndarray, lav: np.ndarray, topper: list, bunner: list) -> list:
+    """Fletter topper/bunner til en ren vekslende topp→bunn→topp-sekvens.
+
+    Når to like typer følger etter hverandre, beholdes den mest ekstreme (høyeste
+    High / laveste Low). Da unngår vi falske, grunne kontraksjoner og får en mer
+    presis pivot. Returnerer liste av (type, indeks) der type ∈ {"topp", "bunn"}.
+    """
+    alle = [("topp", i) for i in topper] + [("bunn", i) for i in bunner]
+    alle.sort(key=lambda x: x[1])
+    renset: list = []
+    for typ, idx in alle:
+        if renset and renset[-1][0] == typ:
+            _, forrige = renset[-1]
+            if typ == "topp" and hoy[idx] > hoy[forrige]:
+                renset[-1] = (typ, idx)
+            elif typ == "bunn" and lav[idx] < lav[forrige]:
+                renset[-1] = (typ, idx)
+        else:
+            renset.append((typ, idx))
+    return renset
+
+
+def _bygg_kontraksjoner(hoy: np.ndarray, lav: np.ndarray, sekvens: list) -> list:
+    """Bygger kontraksjoner (topp→påfølgende bunn) fra en vekslende sekvens.
+
+    Hver kontraksjon = fall fra en lokal topp (High) ned til neste lokale bunn (Low),
+    målt i prosent – klassisk Minervini peak-to-trough.
+    """
+    kontr = []
+    for k in range(len(sekvens) - 1):
+        typ, idx = sekvens[k]
+        neste_typ, neste_idx = sekvens[k + 1]
+        if typ != "topp" or neste_typ != "bunn":
+            continue
+        topp = float(hoy[idx])
+        bunn = float(lav[neste_idx])
+        if topp <= 0:
+            continue
+        kontr.append({"topp_i": idx, "topp": topp, "bunn_i": neste_idx,
+                      "bunn": bunn, "dyp": (topp - bunn) / topp})
+    return kontr
+
+
 def finn_vcp(df: pd.DataFrame) -> dict:
     """Analyserer de siste ~120 dagene og returnerer VCP-detaljer (se _tomt_resultat)."""
     d = df.dropna(subset=["Close"]).copy()
@@ -58,24 +101,16 @@ def finn_vcp(df: pd.DataFrame) -> dict:
     lav = base["Low"].to_numpy()
     close = base["Close"].to_numpy()
     vol = base["Volume"].to_numpy()
-    n = len(base)
 
-    topper, _bunner = _svingpunkter(hoy, lav, konfig.VCP_SVING_VINDU)
-    if len(topper) < konfig.VCP_MIN_KONTR:
+    topper, bunner = _svingpunkter(hoy, lav, konfig.VCP_SVING_VINDU)
+    if len(topper) < konfig.VCP_MIN_KONTR or not bunner:
         return _tomt_resultat()
 
-    # Bygg kontraksjoner: fra hver lokal topp ned til laveste bunn før neste topp.
-    kontr = []
-    for a, t in enumerate(topper):
-        neste_topp = topper[a + 1] if a + 1 < len(topper) else n
-        segment = lav[t:neste_topp]
-        if len(segment) == 0:
-            continue
-        b = t + int(segment.argmin())
-        dyp = (hoy[t] - lav[b]) / hoy[t]
-        if dyp >= konfig.VCP_STOY_GRENSE:   # fjern småstøy
-            kontr.append({"topp_i": t, "topp": hoy[t], "bunn_i": b, "bunn": lav[b], "dyp": dyp})
-
+    # Flett topper/bunner til en ren vekslende topp→bunn→topp-sekvens, og bygg
+    # kontraksjoner (topp→neste bunn). Fjern småstøy under terskelen.
+    sekvens = _alternerende(hoy, lav, topper, bunner)
+    kontr = [k for k in _bygg_kontraksjoner(hoy, lav, sekvens)
+             if k["dyp"] >= konfig.VCP_STOY_GRENSE]
     if len(kontr) < konfig.VCP_MIN_KONTR:
         return _tomt_resultat()
 
@@ -159,7 +194,9 @@ def bruddstatus(df: pd.DataFrame, pivot: float) -> dict:
     d = df.dropna(subset=["Close"])
     close = d["Close"].to_numpy()
     vol = d["Volume"].to_numpy()
-    snitt50 = d["Volume"].rolling(50, min_periods=10).mean().to_numpy()
+    # Snittvolum av de FORUTGÅENDE dagene (shift 1 = ekskluder dagen selv),
+    # slik at et brudd måles mot normalvolumet før selve bruddet.
+    snitt50 = d["Volume"].rolling(50, min_periods=10).mean().shift(1).to_numpy()
     n = len(close)
     siste = close[-1]
 
