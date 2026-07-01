@@ -78,7 +78,7 @@ PERIODER_VALG = {"3 mnd": 63, "6 mnd": 126, "1 år": 252, "2 år": 504,
 
 
 def lag_chart(serie: pd.DataFrame, res: dict | None, vis_perioder: bool,
-              dager: int = 504) -> go.Figure:
+              dager: int = 504, vis_7av7: bool = False) -> go.Figure:
     """Candlestick + MA50/150/200 + 52u høy/lav + pivot/stop + volum.
 
     HELE historikken legges i figuren, men chartet åpner på de siste `dager`
@@ -157,6 +157,36 @@ def lag_chart(serie: pd.DataFrame, res: dict | None, vis_perioder: bool,
                 marker=dict(symbol="triangle-up", size=9, color="rgba(255,193,7,0.95)",
                             line=dict(color="black", width=0.5)),
                 hovertemplate="Hist. brudd %{x|%d.%m.%Y}<br>pivot %{y}<extra></extra>",
+            ), row=1, col=1)
+
+    # 7/7 av/på-markører: grønn trekant der aksjen BLE 7/7, rødt kryss der den
+    # MISTET ett av de sju kriteriene (dagen etter at en 7/7-periode tok slutt).
+    if vis_7av7 and res:
+        paa_x, paa_y, av_x, av_y = [], [], [], []
+        for start, slutt in res.get("perioder", []):
+            s_ts, e_ts = pd.Timestamp(start), pd.Timestamp(slutt)
+            if s_ts in full.index:
+                paa_x.append(s_ts)
+                paa_y.append(float(full.loc[s_ts, "Low"]))
+            if e_ts in full.index:
+                pos = full.index.get_loc(e_ts)
+                if isinstance(pos, int) and pos + 1 < len(full):
+                    tap = full.index[pos + 1]
+                    av_x.append(tap)
+                    av_y.append(float(full.loc[tap, "High"]))
+        if paa_x:
+            fig.add_trace(go.Scatter(
+                x=paa_x, y=paa_y, mode="markers", name="Ble 7/7",
+                marker=dict(symbol="triangle-up", size=13, color="#2e7d32",
+                            line=dict(color="black", width=0.6)),
+                hovertemplate="Ble 7/7 %{x|%d.%m.%Y}<extra></extra>",
+            ), row=1, col=1)
+        if av_x:
+            fig.add_trace(go.Scatter(
+                x=av_x, y=av_y, mode="markers", name="Mistet 1 av 7",
+                marker=dict(symbol="x", size=11, color="#c62828",
+                            line=dict(color="black", width=0.6)),
+                hovertemplate="Mistet 1 av 7 %{x|%d.%m.%Y}<extra></extra>",
             ), row=1, col=1)
 
     if res:
@@ -342,12 +372,13 @@ with fane2:
     kol_a, kol_b = st.columns([3, 2])
     periode = kol_a.radio("Periode", list(PERIODER_VALG.keys()), index=3, horizontal=True)
     vis_perioder = kol_b.checkbox("Marker historikk (7/7, pivoter, brudd)", value=True)
+    vis_7av7 = kol_b.checkbox("Vis 7/7-treff (grønn = ble 7/7, rød = mistet ett)", value=False)
     serie = datamod.serie_for(last_priser(versjon), valg)
     res = screener.analyser_ticker(serie, valg, konfig.PRESETS[preset_navn])
     if res is None:
         st.info("For lite historikk til å tegne chart for denne aksjen.")
     else:
-        st.plotly_chart(lag_chart(serie, res, vis_perioder, PERIODER_VALG[periode]),
+        st.plotly_chart(lag_chart(serie, res, vis_perioder, PERIODER_VALG[periode], vis_7av7),
                         use_container_width=True, config=CHART_CONFIG)
         st.caption("💡 Dra sidelengs for å se eldre kurs, rull med musehjulet for å zoome, "
                    "dobbeltklikk for å nullstille. Bruk periode-knappene for perfekt skalering. "
@@ -375,6 +406,9 @@ with fane3:
                 st.subheader(f"{sok} · {res['score']}/7 · {res['status']} {res['statustekst']}")
                 periode3 = st.radio("Periode", list(PERIODER_VALG.keys()), index=3,
                                     horizontal=True, key="periode_sok")
-                st.plotly_chart(lag_chart(serie, res, vis_perioder=True, dager=PERIODER_VALG[periode3]),
+                vis_7av7_3 = st.checkbox("Vis 7/7-treff (grønn = ble 7/7, rød = mistet ett)",
+                                         value=False, key="vis7_sok")
+                st.plotly_chart(lag_chart(serie, res, vis_perioder=True,
+                                          dager=PERIODER_VALG[periode3], vis_7av7=vis_7av7_3),
                                 use_container_width=True, config=CHART_CONFIG)
                 vis_vcp_boks(res)
