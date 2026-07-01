@@ -423,7 +423,21 @@ with fane1:
 
     # Standardsortering: mest handlbart øverst – status (🟢→🟡→⚪ klar→🔵 forlenget),
     # deretter nærhet til pivot. Ren, objektiv rekkefølge (ingen oppfunne vekter).
-    filt = screener.sorter_hovedliste(filt)
+    # getattr-fallback så appen ikke krasjer om Streamlit Cloud kjører en gammel,
+    # bufret utgave av screener-modulen (kan skje det første minuttet etter utrulling).
+    _sorter = getattr(screener, "sorter_hovedliste", None)
+    if _sorter is not None:
+        filt = _sorter(filt)
+    elif not filt.empty:
+        _har_pivot = filt["pivot"].notna()
+        filt = filt.assign(
+            _rang=filt["status"].map({"🟢": 0, "🟡": 1, "⚪": 2, "🔵": 3}).fillna(4).astype(int),
+            _naer=filt["avstand_pivot"].abs(),
+        )
+        filt.loc[~_har_pivot, "_rang"] = 5
+        filt.loc[~_har_pivot, "_naer"] = float("inf")
+        filt = (filt.sort_values(["_rang", "_naer"], kind="mergesort")
+                    .drop(columns=["_rang", "_naer"]))
 
     st.markdown(
         f"**{len(filt)} aksjer** – sortert med de mest handlbare øverst: ferske brudd (🟢) "
