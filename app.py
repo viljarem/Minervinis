@@ -280,10 +280,16 @@ def vis_vcp_boks(res: dict) -> None:
 # ---------------------------------------------------------------------------
 # Chart 2.0 (test) – TradingViews lightweight-charts
 # ---------------------------------------------------------------------------
-def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504) -> list | None:
-    """Bygger data-spesifikasjonen for lightweight-charts (candles + MA + volum +
-    pivot/stop + 7/7-markører). Returnerer lista renderLightweightCharts venter,
-    eller None hvis noe mangler. Pakket i try/except så testfanen aldri krasjer.
+def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
+                  vis_ma: bool = True, vis_52u: bool = True, vis_vcp: bool = True,
+                  vis_7av7: bool = True, vis_hist: bool = False) -> list | None:
+    """Bygger data-spesifikasjonen for lightweight-charts.
+
+    Tar med alt det gamle Plotly-chartet hadde: candles, MA50/150/200, 52-ukers
+    høy/lav, volum + volum-SMA50, pivot/stop, VCP-kontraksjonene (zigzag),
+    7/7-markører (ble/mistet), historiske volumbrudd og «brudd nå». Hvert lag kan
+    slås av/på. Returnerer lista renderLightweightCharts venter, eller None.
+    Pakket i try/except så testfanen aldri kan krasje appen.
     """
     try:
         full = indikatorer.legg_til_indikatorer(serie)
@@ -293,12 +299,15 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504) -> li
         t = list(d.index.strftime("%Y-%m-%d"))
         t_sett = set(t)
 
-        def linje(kol, farge, bredde):
+        def linje(kol, farge, bredde, stil=0, skala=None):
             data = [{"time": ti, "value": round(float(v), 4)}
                     for ti, v in zip(t, d[kol]) if pd.notna(v)]
-            return {"type": "Line", "data": data,
-                    "options": {"color": farge, "lineWidth": bredde,
-                                "priceLineVisible": False, "lastValueVisible": False}}
+            opts = {"color": farge, "lineWidth": bredde, "lineStyle": stil,
+                    "priceLineVisible": False, "lastValueVisible": False}
+            s = {"type": "Line", "data": data, "options": opts}
+            if skala is not None:
+                s["options"]["priceScaleId"] = skala
+            return s
 
         candles = [{"time": ti, "open": float(o), "high": float(h),
                     "low": float(lo), "close": float(c)}
@@ -309,44 +318,95 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504) -> li
                   "color": "rgba(38,166,154,0.5)" if up else "rgba(239,83,80,0.5)"}
                  for ti, v, up in zip(t, d["Volume"], opp)]
 
-        # 7/7-markører: grønn pil opp der aksjen ble 7/7 (siste ~10 for å unngå rot).
+        # --- Samle ALLE markører i én liste (LWC tillater kun én per serie) ---
         markorer = []
-        for start, _slutt in (res or {}).get("perioder", [])[-10:]:
-            if start in t_sett:
-                markorer.append({"time": start, "position": "belowBar",
-                                 "color": "#2e7d32", "shape": "arrowUp", "text": "7/7"})
-        markorer.sort(key=lambda m: m["time"])
+        if vis_7av7 and res:
+            for start, slutt in res.get("perioder", [])[-12:]:
+                if start in t_sett:
+                    markorer.append({"time": start, "position": "belowBar",
+                                     "color": "#2e7d32", "shape": "arrowUp", "text": "7/7"})
+                # «Mistet ett» = dagen etter at perioden sluttet
+                if slutt in t_sett:
+                    pos = t.index(slutt)
+                    if pos + 1 < len(t):
+                        markorer.append({"time": t[pos + 1], "position": "aboveBar",
+                                         "color": "#c62828", "shape": "arrowDown", "text": "×"})
+        if vis_hist:
+            try:
+                finn_hist = getattr(vcp, "historiske_brudd", None)
+                for b in (finn_hist(serie) if finn_hist else []):
+                    dato = pd.Timestamp(b["dato"]).strftime("%Y-%m-%d")
+                    if dato in t_sett:
+                        markorer.append({"time": dato, "position": "belowBar",
+                                         "color": "#f6c343", "shape": "circle", "text": "brudd"})
+            except Exception:
+                pass
+        if res and res.get("bruddato"):
+            bd = pd.Timestamp(res["bruddato"]).strftime("%Y-%m-%d")
+            if bd in t_sett:
+                markorer.append({"time": bd, "position": "belowBar",
+                                 "color": "#f6c343", "shape": "arrowUp", "text": "BRUDD"})
+        # Fjern duplikater (samme tid+form) og sorter stigende på tid (LWC-krav)
+        sett = set()
+        rene = []
+        for m in sorted(markorer, key=lambda x: x["time"]):
+            nk = (m["time"], m["shape"], m["position"])
+            if nk not in sett:
+                sett.add(nk)
+                rene.append(m)
 
         hoved = {"type": "Candlestick", "data": candles,
                  "options": {"upColor": "#26a69a", "downColor": "#ef5350",
                              "borderVisible": False, "wickUpColor": "#26a69a",
                              "wickDownColor": "#ef5350"}}
-        if markorer:
-            hoved["markers"] = markorer
+        if rene:
+            hoved["markers"] = rene
 
-        serier = [
-            hoved,
-            linje("SMA50", "#2196f3", 2),
-            linje("SMA150", "#ff9800", 1),
-            linje("SMA200", "#9c27b0", 1),
-            {"type": "Histogram", "data": volum,
-             "options": {"priceFormat": {"type": "volume"}, "priceScaleId": ""},
-             "priceScale": {"scaleMargins": {"top": 0.78, "bottom": 0}}},
-        ]
+        serier = [hoved]
 
-        # Pivot (gull) og stop (rød) som flate linjer over hele vinduet.
+        # Glidende snitt
+        if vis_ma:
+            serier += [linje("SMA50", "#2196f3", 2),
+                       linje("SMA150", "#ff9800", 1),
+                       linje("SMA200", "#9c27b0", 1)]
+
+        # 52-ukers høy/lav (grå stiplede referanselinjer – kriterium 6 og 7)
+        if vis_52u:
+            serier += [linje("High_52w", "#9e9e9e", 1, stil=1),
+                       linje("Low_52w", "#9e9e9e", 1, stil=1)]
+
+        # VCP-kontraksjoner (gul stiplet zigzag topp→bunn→topp mot pivot)
+        if vis_vcp and res:
+            pkt = [{"time": pd.Timestamp(p["dato"]).strftime("%Y-%m-%d"),
+                    "value": float(p["pris"])}
+                   for p in (res.get("vcp_punkter") or [])
+                   if pd.Timestamp(p["dato"]).strftime("%Y-%m-%d") in t_sett]
+            if len(pkt) >= 2:
+                serier.append({"type": "Line", "data": pkt,
+                               "options": {"color": "#e0b000", "lineWidth": 2, "lineStyle": 2,
+                                           "priceLineVisible": False, "lastValueVisible": False,
+                                           "pointMarkersVisible": True}})
+
+        # Volum + 50-dagers snittvolum (delt overlay-skala i bunnen)
+        serier.append({"type": "Histogram", "data": volum,
+                       "options": {"priceFormat": {"type": "volume"}, "priceScaleId": "vol"},
+                       "priceScale": {"scaleMargins": {"top": 0.78, "bottom": 0}}})
+        d["_volsnitt"] = d["Volume"].rolling(50, min_periods=10).mean()
+        serier.append(linje("_volsnitt", "#3949ab", 1, skala="vol"))
+
+        # Pivot (gull) og stop (rød stiplet) som flate linjer
         if res and res.get("pivot"):
             serier.append({"type": "Line",
                            "data": [{"time": ti, "value": res["pivot"]} for ti in t],
-                           "options": {"color": "#f6c343", "lineWidth": 2,
-                                       "lineStyle": 0, "priceLineVisible": False,
-                                       "lastValueVisible": True, "title": "Pivot"}})
+                           "options": {"color": "#f6c343", "lineWidth": 2, "lineStyle": 0,
+                                       "priceLineVisible": False, "lastValueVisible": True,
+                                       "title": "Pivot"}})
         if res and res.get("stop"):
             serier.append({"type": "Line",
                            "data": [{"time": ti, "value": res["stop"]} for ti in t],
-                           "options": {"color": "#ef5350", "lineWidth": 1,
-                                       "lineStyle": 2, "priceLineVisible": False,
-                                       "lastValueVisible": True, "title": "Stop"}})
+                           "options": {"color": "#ef5350", "lineWidth": 1, "lineStyle": 2,
+                                       "priceLineVisible": False, "lastValueVisible": True,
+                                       "title": "Stop"}})
 
         chart_options = {
             "height": 620,
@@ -644,16 +704,27 @@ with fane4:
         valg4 = st.selectbox("Velg aksje", resultat["ticker"].tolist(), key="valg_lwc")
         periode4 = st.radio("Periode", list(PERIODER_VALG.keys()), index=3, horizontal=True,
                             key="periode_lwc")
+        with st.popover("⚙️ Tilpass chartet"):
+            st.caption("Huk av hva du vil se. Færre lag = renere bilde.")
+            vis_ma4 = st.checkbox("Glidende snitt (MA50/150/200)", value=True, key="lwc_ma")
+            vis_52u4 = st.checkbox("52-ukers høy/lav (grå stiplet)", value=True, key="lwc_52u")
+            vis_vcp4 = st.checkbox("VCP-kontraksjoner (gul zigzag)", value=True, key="lwc_vcp")
+            vis_7av74 = st.checkbox("7/7-markører (ble/mistet)", value=True, key="lwc_7av7")
+            vis_hist4 = st.checkbox("Historiske volumbrudd", value=False, key="lwc_hist")
         serie4 = datamod.serie_for(last_priser(versjon), valg4)
         res4 = screener.analyser_ticker(serie4, valg4, konfig.PRESETS[preset_navn])
         if res4 is None:
             st.info("For lite historikk til å tegne chart for denne aksjen.")
         else:
-            spec = lag_chart_lwc(serie4, res4, PERIODER_VALG[periode4])
+            spec = lag_chart_lwc(serie4, res4, PERIODER_VALG[periode4],
+                                 vis_ma=vis_ma4, vis_52u=vis_52u4, vis_vcp=vis_vcp4,
+                                 vis_7av7=vis_7av74, vis_hist=vis_hist4)
             if spec is None:
                 st.info("Klarte ikke bygge chartet for denne aksjen.")
             else:
-                renderLightweightCharts(spec, key=f"lwc_{valg4}_{periode4}")
-                st.caption("🟡 Gull = pivot (kjøpsnivå) · 🔴 stiplet rød = stop · grønn pil = ble 7/7. "
-                           "Blå = MA50, oransje = MA150, lilla = MA200.")
+                noekkel = f"lwc_{valg4}_{periode4}_{vis_ma4}{vis_52u4}{vis_vcp4}{vis_7av74}{vis_hist4}"
+                renderLightweightCharts(spec, key=noekkel)
+                st.caption("🟡 Gull = pivot (kjøpsnivå) · 🔴 stiplet rød = stop · 🟢 pil opp = ble 7/7 · "
+                           "🔴 pil ned = mistet 7/7. Blå = MA50, oransje = MA150, lilla = MA200, "
+                           "blå strek i volum = 50-dagers snittvolum.")
                 vis_vcp_boks(res4)
