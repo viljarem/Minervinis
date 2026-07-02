@@ -401,8 +401,8 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
             serier.append({"type": "Line",
                            "data": [{"time": start, "value": niva},
                                     {"time": slutt, "value": niva}],
-                           "options": {"color": "rgba(246,195,67,0.85)", "lineWidth": 1,
-                                       "lineStyle": 0, "priceLineVisible": False,
+                           "options": {"color": "rgba(246,195,67,0.5)", "lineWidth": 1,
+                                       "lineStyle": 2, "priceLineVisible": False,
                                        "lastValueVisible": False}})
 
         # Volum + 50-dagers snittvolum (delt overlay-skala i bunnen)
@@ -412,11 +412,13 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
         d["_volsnitt"] = d["Volume"].rolling(50, min_periods=10).mean()
         serier.append(linje("_volsnitt", "#3949ab", 1, skala="vol"))
 
-        # Pivot (gull) og stop (rød stiplet) som flate linjer
+        # Pivot (gull) og stop (rød stiplet) som flate linjer. Aktiv pivot er
+        # bevisst TYKKEST og solid, så den skiller seg klart fra de svakere,
+        # stiplede historiske pivotlinjene.
         if res and res.get("pivot"):
             serier.append({"type": "Line",
                            "data": [{"time": ti, "value": res["pivot"]} for ti in t],
-                           "options": {"color": "#f6c343", "lineWidth": 2, "lineStyle": 0,
+                           "options": {"color": "#f6c343", "lineWidth": 3, "lineStyle": 0,
                                        "priceLineVisible": False, "lastValueVisible": True,
                                        "title": "Pivot"}})
         if res and res.get("stop"):
@@ -742,8 +744,9 @@ with fane4:
             else:
                 noekkel = f"lwc_{valg4}_{periode4}_{vis_ma4}{vis_52u4}{vis_vcp4}{vis_7av74}{vis_hist4}"
                 renderLightweightCharts(spec, key=noekkel)
-                st.caption("🟡 Gull = pivot (kjøpsnivå) · 🔴 stiplet rød = stop · 🟢 pil opp = ble 7/7 · "
-                           "🔴 pil ned = mistet 7/7. Blå = MA50, oransje = MA150, lilla = MA200, "
-                           "blå strek i volum = 50-dagers snittvolum. Korte gule streker = "
-                           "historiske brudd (ubiased – motstanden slik den var *før* bruddet).")
+                st.caption("🟡 **Kraftig gull linje = aktiv pivot** (kjøpsnivået nå) · "
+                           "🔴 stiplet rød = stop · 🟢 pil opp = ble 7/7 · 🔴 pil ned = mistet 7/7. "
+                           "Blå = MA50, oransje = MA150, lilla = MA200, blå strek i volum = "
+                           "50-dagers snittvolum. Svake stiplede gull-streker = historiske brudd "
+                           "(ubiased – motstanden slik den var *før* bruddet).")
                 vis_vcp_boks(res4)
