@@ -58,15 +58,33 @@ def data_status(versjon: float) -> dict:
     univ = set(univers.les_cache()) | set(univers.les_manuelle())
     aksjer_univ = len(univ) if univ else aksjer_data
     siste_dato = pd.to_datetime(priser["Date"]).max()
-    alder = (pd.Timestamp.now().normalize() - siste_dato.normalize()).days
+    naa_oslo = pd.Timestamp.now(tz="Europe/Oslo").normalize().tz_localize(None)
+    alder = (naa_oslo - siste_dato.normalize()).days
+    # «Sist hentet»: robotens EGEN loggede tid (norsk tid) er fasit. Vi kan ikke stole
+    # på filas endringstid på serveren – Streamlit Cloud skriver ny fil-tid hver gang
+    # den henter koden (ved utrulling), ikke når roboten faktisk kjørte. Faller tilbake
+    # til fil-tida (tolket som UTC og vist i norsk tid) hvis metadata mangler.
+    sist_hentet = datamod.les_oppdateringstid()
+    if sist_hentet is None:
+        sist_hentet = pd.Timestamp(versjon, unit="s", tz="UTC").tz_convert("Europe/Oslo")
     return {
         "tom": False,
         "siste_dato": siste_dato,
         "aksjer_data": aksjer_data,
         "aksjer_univ": aksjer_univ,
         "alder_dager": alder,
-        "fil_tid": pd.to_datetime(versjon, unit="s"),
+        "sist_hentet": sist_hentet,
     }
+
+
+@st.cache_data(ttl=120, show_spinner="Henter live-kurser (≈15 min forsinket) ...")
+def hent_live_priser(tickere: tuple[str, ...]) -> dict:
+    """Cachet innpakning av datamod.hent_sanntid – oppdateres automatisk ~hvert 2. min.
+
+    Helt adskilt fra kurshistorikken: dette lagres ALDRI til fil og kan aldri
+    påvirke tallene vi screener på.
+    """
+    return datamod.hent_sanntid(list(tickere))
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +118,7 @@ def vis_vcp_boks(res: dict) -> None:
 # ---------------------------------------------------------------------------
 def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                   vis_ma: bool = True, vis_52u: bool = True, vis_vcp: bool = True,
-                  vis_7av7: bool = True, vis_hist: bool = False) -> list | None:
+                  vis_7av7: bool = True, vis_hist: bool = False, hoyde: int = 620) -> list | None:
     """Bygger data-spesifikasjonen for lightweight-charts.
 
     Tar med alt det gamle Plotly-chartet hadde: candles, MA50/150/200, 52-ukers
@@ -259,7 +277,7 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                                        "title": "Stop"}})
 
         chart_options = {
-            "height": 620,
+            "height": hoyde,
             "layout": {"background": {"type": "solid", "color": "white"},
                        "textColor": "#333333"},
             "grid": {"vertLines": {"color": "rgba(197,203,206,0.35)"},
@@ -289,12 +307,29 @@ def _til_pivot_tekst(avstand_pivot) -> str:
     return f"{-avstand_pivot:+.1f} %"
 
 
-def formater_tabell(df: pd.DataFrame) -> pd.DataFrame:
+def _pivot_tall(tekst) -> float:
+    """Henter tallet ut av en 'Til pivot'-tekst ('+1.1 %' → 1.1). NaN ved '—'."""
+    if not isinstance(tekst, str) or tekst.strip() == "—":
+        return float("nan")
+    try:
+        return float(tekst.replace("%", "").replace("+", "").replace(" ", "").replace(",", "."))
+    except ValueError:
+        return float("nan")
+
+
+def formater_tabell(df: pd.DataFrame, live_priser: dict | None = None) -> pd.DataFrame:
     vis = pd.DataFrame()
     vis["Ticker"] = df["ticker"]
     vis["Pris"] = df["pris"]
     vis["Setup"] = df["status"] + " " + df["statustekst"]
     vis["Til pivot"] = df["avstand_pivot"].map(_til_pivot_tekst)
+    if live_priser:
+        live = df["ticker"].map(live_priser)
+        # Live avstand til pivot: samme fortegn-konvensjon som avstand_pivot
+        # (positiv = under pivot), regnet fra DAGENS kurs mot lagret pivot.
+        live_avst = (df["pivot"] - live) / df["pivot"] * 100
+        vis["Live"] = live
+        vis["Til pivot (live)"] = live_avst.map(_til_pivot_tekst)
     vis["Kriterie 1-7"] = df["score"].astype(str) + "/7"
     vis["RVol"] = df["rel_volum"] if "rel_volum" in df.columns else np.nan
     vis["RS"] = df["rs"]
@@ -327,16 +362,36 @@ def stil_hovedtabell(vis: pd.DataFrame):
             return lys
         return ""
 
+    def _live(v):
+        x = _pivot_tall(v)
+        if pd.isna(x):
+            return ""
+        if x >= 0:            # dagens kurs er PÅ eller over pivot = bryter nå
+            return sterk
+        if x >= -2:           # innen 2 % under pivot = nærmer seg
+            return lys
+        return ""
+
     styler = vis.style
     if "Kriterie 1-7" in vis.columns:
         styler = styler.map(_krit, subset=["Kriterie 1-7"])
     if "RVol" in vis.columns:
         styler = styler.map(_rvol, subset=["RVol"])
+    if "Til pivot (live)" in vis.columns:
+        styler = styler.map(_live, subset=["Til pivot (live)"])
     return styler
 
 
 # Hjelpetekster på kolonneoverskriftene (så vi kan forenkle uten å miste info).
 TABELL_HJELP = {
+    "Pris": st.column_config.NumberColumn(
+        "Pris", format="%.2f", help="Siste sluttkurs (NOK)."),
+    "Live": st.column_config.NumberColumn(
+        "Live", format="%.2f", help="Dagens kurs akkurat nå (Yahoo, ca. 15 min forsinket). "
+        "Vises bare når «Live-kurser» er huket av i menyen til venstre."),
+    "Til pivot (live)": st.column_config.TextColumn(
+        "Til pivot (live)", help="Hvor langt DAGENS kurs er fra pivot. Negativt = mangler så "
+        "mange % på brudd akkurat nå. Grønn = bryter eller nærmer seg pivot live."),
     "Setup": st.column_config.TextColumn(
         "Setup", help="🟢 ferskt brudd (følg nå) · 🟡 brudd uten volum · "
         "⚪ klar/venter på brudd · 🔵 forlenget (for sent å jage)."),
@@ -377,18 +432,21 @@ if not _status["tom"]:
     if _status["alder_dager"] <= 4:
         st.success(
             f"✅ **Data oppdatert** – siste handelsdag **{_status['siste_dato']:%d.%m.%Y}**. "
-            f"Roboten henter automatisk hver hverdag kl. 19 (norsk tid)."
+            f"Roboten henter automatisk hver hverdag kl. 17 (norsk tid), like etter børsslutt."
         )
     else:
         st.warning(
             f"⚠️ Nyeste data er fra **{_status['siste_dato']:%d.%m.%Y}** "
-            f"({_status['alder_dager']} dager siden). Roboten kjører hver hverdag kl. 19 (norsk tid)."
+            f"({_status['alder_dager']} dager siden). Roboten kjører hver hverdag kl. 17 (norsk tid)."
         )
     _k1, _k2, _k3 = st.columns(3)
-    _k1.metric("📅 Siste handelsdag", f"{_status['siste_dato']:%d.%m.%Y}")
+    _k1.metric("📅 Siste handelsdag", f"{_status['siste_dato']:%d.%m.%Y}",
+               help="Dagen kursene i lista gjelder for – siste børsdag med ferdige sluttkurser.")
     _k2.metric("🏦 Aksjer med data", f"{_status['aksjer_data']} / {_status['aksjer_univ']}",
                help="Antall Oslo Børs-aksjer vi har kurshistorikk på, av hele universet.")
-    _k3.metric("🕔 Sist hentet", f"{_status['fil_tid']:%d.%m kl. %H:%M}")
+    _k3.metric("🕔 Sist hentet", f"{_status['sist_hentet']:%d.%m kl. %H:%M}",
+               help="Da roboten sist lastet ned kurser fra Yahoo (norsk tid). Samme dag som siste "
+                    "handelsdag på hverdager – kan være dagen før i helger/helligdager.")
     if _dekning < 0.9:
         st.info(
             f"ℹ️ Vi har foreløpig data på {_status['aksjer_data']} av {_status['aksjer_univ']} aksjer "
@@ -428,9 +486,14 @@ I tillegg krever oppsettet en god **RS-rating** (relativ styrke mot markedet).
 hvor du kutter tapet hvis bruddet feiler. Begge tegnes inn på chartet.
 
 **De tre fanene**  
-- 📋 **Hovedliste** – alle treff, sortert med nyeste 7/7 øverst.
-- 📊 **Chart** – tegn en aksje med MA-linjer, pivot, stop, volum og historikk.
+- 📋 **Hovedliste** – alle treff, sortert med de mest handlbare øverst. **Huk av rader** for å tegne chart rett under lista.
+- 📊 **Chart** – tegn én aksje med MA-linjer, pivot, stop, volum og historikk.
 - 🔎 **Søk** – slå opp hvilken som helst ticker (også utenfor Oslo Børs, live fra Yahoo).
+
+**Live-kurser (valgfritt)**  
+Huker du av «🔴 Live-kurser» til venstre, vises dagens intradag-kurs (≈15 min forsinket)
+ved siden av lista, så du ser hvem som nærmer seg pivot akkurat nå. Dette er kun til
+visning og rører **aldri** kursdataene screeningen bygger på.
 
 *Dette er et analyseverktøy, ikke en kjøpsanbefaling. Ta alltid egne vurderinger.*
         """
@@ -445,7 +508,14 @@ with st.sidebar:
     kun_ferske = st.checkbox("Vis kun ferske brudd (🟢)", value=False)
     krev_uke = st.checkbox("Krev ukentlig bekreftelse (✅)", value=False,
                            help="Vis kun aksjer der også den ukentlige trenden peker opp.")
-    st.caption(f"Sist oppdatert: {pd.to_datetime(versjon, unit='s'):%d.%m.%Y %H:%M}")
+    st.divider()
+    vis_live = st.checkbox("🔴 Live-kurser (≈15 min forsinket)", value=False,
+                           help="Viser dagens intradag-kurs ved siden av lista, så du ser hvem "
+                                "som nærmer seg pivot akkurat nå. Rører ALDRI dataene vi "
+                                "screener på – kun til visning.")
+    _sh = _status.get("sist_hentet")
+    if _sh is not None:
+        st.caption(f"🕔 Sist hentet: {_sh:%d.%m.%Y kl. %H:%M} (norsk tid)")
 
 resultat = kjor_screening(preset_navn, versjon)
 if resultat.empty:
@@ -483,15 +553,50 @@ with fane1:
         filt = (filt.sort_values(["_rang", "_naer"], kind="mergesort")
                     .drop(columns=["_rang", "_naer"]))
 
+    # Live-kurser (valgfritt): hentes helt adskilt og påvirker ALDRI screening-dataene.
+    live_priser = {}
+    if vis_live and not filt.empty:
+        live_priser = hent_live_priser(tuple(filt["ticker"].head(80).tolist()))
+
     st.markdown(
         f"**{len(filt)} aksjer** – sortert med de mest handlbare øverst: ferske brudd (🟢) "
         f"først, så de som er nærmest et brudd. Ferske brudd vises alltid, også under {min_krit}/7."
     )
-    st.dataframe(stil_hovedtabell(formater_tabell(filt)), width="stretch", hide_index=True,
-                 height=560, column_config=TABELL_HJELP)
+    _tabell = st.dataframe(
+        stil_hovedtabell(formater_tabell(filt, live_priser or None)),
+        width="stretch", hide_index=True, height=560, column_config=TABELL_HJELP,
+        on_select="rerun", selection_mode="multi-row", key="hovedliste_tabell",
+    )
     st.caption("Øverst = skjer nå / nærmest brudd. **Til pivot**: negativt = mangler så mange % "
                "på brudd, positivt = over pivot. **Grønt** = 7/7 eller bruddvolum (≥1,4×). "
-               "Tips: klikk en kolonne-overskrift for å sortere selv.")
+               "💡 **Huk av én eller flere rader** (venstre kant) for å se chartene nederst.")
+
+    # Chart for radene du huker av – tegnes stablet nedover, her på hovedsiden.
+    _valgte_rader = list(getattr(_tabell.selection, "rows", []) or [])
+    _valgte = [filt.iloc[i]["ticker"] for i in _valgte_rader if i < len(filt)]
+    if _valgte:
+        st.divider()
+        _maks = 15
+        if len(_valgte) > _maks:
+            st.info(f"Viser de {_maks} første av {len(_valgte)} valgte (for fartens skyld).")
+            _valgte = _valgte[:_maks]
+        st.subheader(f"📊 Chart for {len(_valgte)} valgte")
+        _priser_alle = last_priser(versjon)
+        for _tk in _valgte:
+            _s = datamod.serie_for(_priser_alle, _tk)
+            _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[preset_navn])
+            _live_txt = f" · 🔴 live ≈ {live_priser[_tk]:.2f}" if _tk in live_priser else ""
+            if _r is None:
+                st.markdown(f"**{_tk}**")
+                st.caption("For lite historikk til å tegne chart.")
+                continue
+            st.markdown(f"**{_tk}** — {_r['status']} {_r['statustekst']}{_live_txt}")
+            if HAR_LWC:
+                _spec = lag_chart_lwc(_s, _r, PERIODER_VALG["2 år"], hoyde=460)
+                if _spec:
+                    renderLightweightCharts(_spec, key=f"hl_{_tk}")
+    else:
+        st.caption("Ingen rader valgt ennå – huk av i tabellen over for å tegne chart her.")
 
 # --- Fane 2: Chart ---
 with fane2:

@@ -10,6 +10,7 @@ Open/High/Low/Close/Volume. Det gjør det enkelt å legge til nye dager senere.
 """
 from __future__ import annotations
 
+import json
 import os
 import time
 
@@ -139,6 +140,31 @@ def lagre_priser(df: pd.DataFrame, sti: str = konfig.PRISER_FIL) -> None:
     df.to_parquet(sti, index=False)
 
 
+def skriv_oppdateringstid(sti: str = konfig.SIST_OPPDATERT_FIL) -> None:
+    """Lagrer NÅR roboten sist hentet data – i NORSK tid – i en liten metadatafil.
+
+    Dette er den pålitelige «Sist hentet»-tiden. (Vi kan ikke stole på selve
+    fil-tidene på serveren, for Streamlit Cloud skriver ny fil-tid hver gang den
+    henter koden på nytt – altså ved utrulling, ikke når roboten faktisk kjørte.)
+    """
+    tid = pd.Timestamp.now(tz="Europe/Oslo")
+    os.makedirs(os.path.dirname(sti), exist_ok=True)
+    with open(sti, "w", encoding="utf-8") as f:
+        json.dump({"sist_oppdatert": tid.isoformat()}, f)
+
+
+def les_oppdateringstid(sti: str = konfig.SIST_OPPDATERT_FIL) -> pd.Timestamp | None:
+    """Leser tidspunktet roboten sist hentet data (tidssone-bevisst). None hvis mangler."""
+    try:
+        if os.path.exists(sti):
+            with open(sti, encoding="utf-8") as f:
+                raw = json.load(f)
+            return pd.Timestamp(raw["sist_oppdatert"])
+    except Exception:
+        return None
+    return None
+
+
 def flett(gammel: pd.DataFrame, ny: pd.DataFrame) -> pd.DataFrame:
     """Slår sammen gammel historikk med nye dager. Nyeste tall vinner ved dublett."""
     if gammel.empty:
@@ -213,6 +239,7 @@ def hent_og_oppdater() -> pd.DataFrame:
 
     flettet = deler[0] if len(deler) == 1 else flett_flere(deler)
     lagre_priser(flettet)
+    skriv_oppdateringstid()
     print(f"Lagret {len(flettet):,} rader for {flettet['Ticker'].nunique()} tickere til {konfig.PRISER_FIL}.")
     return flettet
 
@@ -222,3 +249,52 @@ def hent_live(ticker: str, periode: str = "2y") -> pd.DataFrame:
     ticker = ticker.strip().upper()
     df = rens(_last_ned([ticker], periode))
     return serie_for(df, ticker)
+
+
+def hent_sanntid(tickere: list[str]) -> dict[str, float]:
+    """Henter DAGENS siste kurs (Yahoo, ca. 15 min forsinket) – KUN til visning.
+
+    VIKTIG: dette er helt adskilt fra kurshistorikken. Funksjonen rører ALDRI
+    parquet-fila og lagrer ingenting – den returnerer bare {ticker: siste_pris}
+    som appen kan vise ved siden av. Slik kan vi se hvem som nærmer seg pivot
+    intradag, uten fare for at OHLC-dataene vi screener på blir feil.
+
+    Alle feil svelges (tom dict), så en treg eller nede Yahoo aldri kan krasje
+    siden eller påvirke screeningen.
+    """
+    tickere = [t for t in tickere if t]
+    if not tickere:
+        return {}
+    try:
+        rå = yf.download(
+            tickers=tickere,
+            period="1d",            # kun dagens bar (lett) – oppdateres gjennom dagen
+            auto_adjust=True,
+            group_by="ticker",
+            threads=True,
+            progress=False,
+        )
+    except Exception:
+        return {}
+    if rå is None or len(rå) == 0:
+        return {}
+
+    ut: dict[str, float] = {}
+    try:
+        if isinstance(rå.columns, pd.MultiIndex):
+            tilgjengelige = set(rå.columns.get_level_values(0))
+            for t in tickere:
+                if t not in tilgjengelige or "Close" not in rå[t].columns:
+                    continue
+                lukk = rå[t]["Close"].dropna()
+                if not lukk.empty:
+                    ut[t] = float(lukk.iloc[-1])
+        else:
+            # yfinance gir flatt format når det bare er én ticker
+            lukk = rå["Close"].dropna()
+            if not lukk.empty:
+                ut[tickere[0]] = float(lukk.iloc[-1])
+    except Exception:
+        return {}
+    return ut
+

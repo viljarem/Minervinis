@@ -41,6 +41,7 @@ PRISER_FIL = f"{DATA_MAPPE}/priser.parquet"           # all kurshistorikk (vokse
 UNIVERS_FIL = f"{DATA_MAPPE}/univers.txt"              # DINE egne ekstra tickere (valgfritt)
 OSLOBORS_CACHE_FIL = f"{DATA_MAPPE}/univers_oslobors.txt"  # auto-hentet Oslo Børs-liste (+ fallback)
 SISTE_LISTE_FIL = f"{DATA_MAPPE}/siste_liste.json"     # forrige screening (til e-post-sammenligning)
+SIST_OPPDATERT_FIL = f"{DATA_MAPPE}/sist_oppdatert.json"  # NÅR roboten sist hentet data (norsk tid)
 
 # ---------------------------------------------------------------------------
 # Likviditetsfilter (fjern aksjer det handles for lite i)

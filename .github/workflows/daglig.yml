@@ -6,12 +6,12 @@ name: Daglig oppdatering
 on:
   schedule:
     # GitHub kjører ALLTID etter verdenstid (UTC), som IKKE følger norsk
-    # sommer-/vintertid. For å treffe kl. 19:00 norsk HELE året legger vi inn
+    # sommer-/vintertid. For å treffe kl. 17:00 norsk HELE året legger vi inn
     # to tidspunkt – ett for sommeren og ett for vinteren – og "vakt"-jobben
     # under sørger for at selve oppdateringen bare kjører når klokka faktisk
-    # er 19 i Norge. "1-5" betyr mandag–fredag (hverdager).
-    - cron: "0 17 * * 1-5"   # = 19:00 norsk om SOMMEREN (UTC + 2)
-    - cron: "0 18 * * 1-5"   # = 19:00 norsk om VINTEREN (UTC + 1)
+    # er 17 i Norge (litt etter børsslutt 16:30, så dagens sluttkurser er klare).
+    - cron: "0 15 * * 1-5"   # = 17:00 norsk om SOMMEREN (UTC + 2)
+    - cron: "0 16 * * 1-5"   # = 17:00 norsk om VINTEREN (UTC + 1)
   workflow_dispatch: {}   # gjør at du kan kjøre roboten manuelt med ett klikk
 
 # Gir roboten lov til å lagre (committe) oppdaterte datafiler tilbake til repoet.
@@ -31,7 +31,7 @@ jobs:
         run: |
           norsk_time=$(TZ="Europe/Oslo" date +%H)
           echo "Klokka i Norge er nå $norsk_time."
-          if [ "$norsk_time" = "19" ]; then
+          if [ "$norsk_time" = "17" ]; then
             echo "kjor=ja" >> "$GITHUB_OUTPUT"
           else
             echo "kjor=nei" >> "$GITHUB_OUTPUT"
