@@ -13,9 +13,7 @@ import os
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
-from plotly.subplots import make_subplots
 
 from motor import konfig, data as datamod, indikatorer, minervini, screener, univers, vcp
 
@@ -74,189 +72,9 @@ def data_status(versjon: float) -> dict:
 # ---------------------------------------------------------------------------
 # Chart
 # ---------------------------------------------------------------------------
-CHART_CONFIG = {
-    "scrollZoom": True,          # zoom med musehjul
-    "displaylogo": False,
-    "modeBarButtonsToRemove": ["select2d", "lasso2d"],
-}
-
 # Hvor mange handelsdager hver "Periode"-knapp viser ved åpning (og skalerer etter)
 PERIODER_VALG = {"3 mnd": 63, "6 mnd": 126, "1 år": 252, "2 år": 504,
                  "3 år": 756, "5 år": 1260, "Alt": 100_000}
-
-
-def lag_chart(serie: pd.DataFrame, res: dict | None, vis_perioder: bool,
-              dager: int = 504, vis_7av7: bool = False) -> go.Figure:
-    """Candlestick + MA50/150/200 + 52u høy/lav + pivot/stop + volum.
-
-    HELE historikken legges i figuren, men chartet åpner på de siste `dager`
-    dagene (via x-aksens område). Da kan du dra/panorere bakover og faktisk se
-    eldre kurs – samtidig som y-aksen og volumet er skalert til startvinduet.
-    """
-    full = indikatorer.legg_til_indikatorer(serie)
-    if full.empty:
-        return go.Figure()
-    n = len(full)
-    dager = min(dager, n)
-    synlig = full.iloc[-dager:]          # det som vises ved åpning (styrer skalering)
-    d = full                             # alt ligger i figuren (så panorering funker)
-
-    fig = make_subplots(
-        rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.04,
-        row_heights=[0.76, 0.24], subplot_titles=("", "Volum"),
-    )
-
-    fig.add_trace(go.Candlestick(
-        x=d.index, open=d["Open"], high=d["High"], low=d["Low"], close=d["Close"],
-        name="Kurs", increasing_line_color="#26a69a", decreasing_line_color="#ef5350",
-        increasing_fillcolor="#26a69a", decreasing_fillcolor="#ef5350",
-    ), row=1, col=1)
-
-    # Glidende snitt – MA50 er tykkest (viktigst for Minervini-kjøpet)
-    for navn, farge, bredde in (("SMA50", "#2196f3", 2.2),
-                                ("SMA150", "#ff9800", 1.3),
-                                ("SMA200", "#9c27b0", 1.3)):
-        fig.add_trace(go.Scatter(x=d.index, y=d[navn], name=navn,
-                                 line=dict(color=farge, width=bredde)), row=1, col=1)
-
-    fig.add_trace(go.Scatter(x=d.index, y=d["High_52w"], name="52u høy",
-                             line=dict(color="#bdbdbd", width=1, dash="dot")), row=1, col=1)
-    fig.add_trace(go.Scatter(x=d.index, y=d["Low_52w"], name="52u lav",
-                             line=dict(color="#bdbdbd", width=1, dash="dot")), row=1, col=1)
-
-    # Volum – grønt på opp-dager, rødt på ned-dager
-    opp = (d["Close"] >= d["Open"]).to_numpy()
-    vol_farger = np.where(opp, "rgba(38,166,154,0.55)", "rgba(239,83,80,0.55)")
-    fig.add_trace(go.Bar(x=d.index, y=d["Volume"], name="Volum",
-                         marker_color=vol_farger, marker_line_width=0,
-                         showlegend=False), row=2, col=1)
-
-    # 50-dagers snittvolum – viser når volumet er over/under det normale
-    vol_snitt = d["Volume"].rolling(50, min_periods=10).mean()
-    fig.add_trace(go.Scatter(x=d.index, y=vol_snitt, name="Volum SMA50",
-                             line=dict(color="#3949ab", width=1.4),
-                             hoverinfo="skip"), row=2, col=1)
-
-    if vis_perioder:
-        # Historiske 7/7-perioder (lys grønn skygge)
-        if res:
-            for start, slutt in res.get("perioder", []):
-                fig.add_vrect(x0=start, x1=slutt, fillcolor="green",
-                              opacity=0.06, line_width=0, row=1, col=1)
-        # Historiske volumbrudd: kort pivotlinje + trekant der kursen brøt motstand.
-        # Pakket i try/except så et enkelt chart aldri kan krasje hele appen.
-        try:
-            finn_hist = getattr(vcp, "historiske_brudd", None)
-            hist = finn_hist(serie) if finn_hist else []
-        except Exception:
-            hist = []
-        if hist:
-            seg_x, seg_y, mk_x, mk_y = [], [], [], []
-            for b in hist:
-                seg_x += [b["base_start"], b["dato"], None]
-                seg_y += [b["pivot"], b["pivot"], None]
-                mk_x.append(b["dato"])
-                mk_y.append(b["pivot"])
-            fig.add_trace(go.Scatter(x=seg_x, y=seg_y, mode="lines", name="Hist. pivot",
-                                     line=dict(color="rgba(255,193,7,0.75)", width=1.4),
-                                     hoverinfo="skip"), row=1, col=1)
-            fig.add_trace(go.Scatter(
-                x=mk_x, y=mk_y, mode="markers", name="Hist. brudd",
-                marker=dict(symbol="triangle-up", size=9, color="rgba(255,193,7,0.95)",
-                            line=dict(color="black", width=0.5)),
-                hovertemplate="Hist. brudd %{x|%d.%m.%Y}<br>pivot %{y}<extra></extra>",
-            ), row=1, col=1)
-
-    # 7/7 av/på-markører: grønn trekant der aksjen BLE 7/7, rødt kryss der den
-    # MISTET ett av de sju kriteriene (dagen etter at en 7/7-periode tok slutt).
-    if vis_7av7 and res:
-        paa_x, paa_y, av_x, av_y = [], [], [], []
-        for start, slutt in res.get("perioder", []):
-            s_ts, e_ts = pd.Timestamp(start), pd.Timestamp(slutt)
-            if s_ts in full.index:
-                paa_x.append(s_ts)
-                paa_y.append(float(full.loc[s_ts, "Low"]))
-            if e_ts in full.index:
-                pos = full.index.get_loc(e_ts)
-                if isinstance(pos, int) and pos + 1 < len(full):
-                    tap = full.index[pos + 1]
-                    av_x.append(tap)
-                    av_y.append(float(full.loc[tap, "High"]))
-        if paa_x:
-            fig.add_trace(go.Scatter(
-                x=paa_x, y=paa_y, mode="markers", name="Ble 7/7",
-                marker=dict(symbol="triangle-up", size=13, color="#2e7d32",
-                            line=dict(color="black", width=0.6)),
-                hovertemplate="Ble 7/7 %{x|%d.%m.%Y}<extra></extra>",
-            ), row=1, col=1)
-        if av_x:
-            fig.add_trace(go.Scatter(
-                x=av_x, y=av_y, mode="markers", name="Mistet 1 av 7",
-                marker=dict(symbol="x", size=11, color="#c62828",
-                            line=dict(color="black", width=0.6)),
-                hovertemplate="Mistet 1 av 7 %{x|%d.%m.%Y}<extra></extra>",
-            ), row=1, col=1)
-
-    if res:
-        # Gul stiplet zigzag gjennom VCP-kontraksjonene (topp→bunn→topp ...),
-        # så du ser hvordan aksjen strammer seg sammen mot pivot.
-        vcp_pkt = res.get("vcp_punkter") or []
-        if len(vcp_pkt) >= 2:
-            fig.add_trace(go.Scatter(
-                x=[p["dato"] for p in vcp_pkt], y=[p["pris"] for p in vcp_pkt],
-                mode="lines+markers", name="VCP-kontraksjoner",
-                line=dict(color="gold", width=1.6, dash="dash"),
-                marker=dict(size=5, color="gold"),
-                hovertemplate="VCP %{y}<br>%{x|%d.%m.%Y}<extra></extra>",
-            ), row=1, col=1)
-        # Gjeldende pivotlinje (gull)
-        if res.get("pivot"):
-            fig.add_hline(y=res["pivot"], line=dict(color="gold", width=2),
-                          annotation_text=f"Pivot {res['pivot']}", annotation_position="top left",
-                          row=1, col=1)
-        # Stop-nivå (rød stiplet)
-        if res.get("stop"):
-            fig.add_hline(y=res["stop"], line=dict(color="#ef5350", width=1, dash="dash"),
-                          annotation_text=f"Stop {res['stop']}", annotation_position="bottom left",
-                          row=1, col=1)
-        # Markør der kursen brøt gjeldende pivot
-        if res.get("bruddato") and res.get("pivot"):
-            fig.add_trace(go.Scatter(
-                x=[res["bruddato"]], y=[res["pivot"]], mode="markers",
-                marker=dict(symbol="triangle-up", size=15, color="gold",
-                            line=dict(color="black", width=1)),
-                name="Brudd nå",
-            ), row=1, col=1)
-
-    # Skaler y-aksen til startvinduet (ta med gjeldende pivot/stop i ramma)
-    lav = float(synlig["Low"].min())
-    hoy = float(synlig["High"].max())
-    for niva in ((res or {}).get("pivot"), (res or {}).get("stop")):
-        if niva is not None and np.isfinite(niva):
-            lav, hoy = min(lav, float(niva)), max(hoy, float(niva))
-    pad = (hoy - lav) * 0.06 or hoy * 0.02
-    fig.update_yaxes(range=[lav - pad, hoy + pad], row=1, col=1)
-
-    # Klipp de høyeste volumtoppene i vinduet så normalvolum blir synlig
-    vol_tak = float(np.nanpercentile(synlig["Volume"], 95)) * 1.35
-    if vol_tak > 0:
-        fig.update_yaxes(range=[0, vol_tak], row=2, col=1)
-
-    # Åpne på startvinduet, men la hele historikken være tilgjengelig å dra til
-    x0 = synlig.index[0]
-    x1 = full.index[-1] + pd.Timedelta(days=5)
-    fig.update_xaxes(range=[x0, x1])
-    fig.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])  # skjul helger
-    fig.update_xaxes(showspikes=True, spikemode="across", spikethickness=1,
-                     spikecolor="#bbbbbb", spikedash="dot")
-
-    fig.update_layout(
-        height=680, template="plotly_white", dragmode="pan", bargap=0.1,
-        xaxis_rangeslider_visible=False, hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-        margin=dict(l=10, r=10, t=30, b=10),
-    )
-    return fig
 
 
 def vis_vcp_boks(res: dict) -> None:
@@ -392,6 +210,18 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                                "options": {"color": "#e0b000", "lineWidth": 2, "lineStyle": 2,
                                            "priceLineVisible": False, "lastValueVisible": False,
                                            "pointMarkersVisible": True}})
+                # «Pågår»-strek: tynn, lys, prikket linje fra siste bekreftede
+                # svingpunkt fram til dagens kurs. Tentativ – det aller siste
+                # svinget er ikke bekreftet ennå (svingpunkt trenger ~1 uke), men
+                # dette viser at «fjæra» fortsatt strammer seg helt til i dag.
+                siste = pkt[-1]
+                sluttpris = round(float(d["Close"].iloc[-1]), 4)
+                if siste["time"] < t[-1]:
+                    serier.append({"type": "Line",
+                                   "data": [siste, {"time": t[-1], "value": sluttpris}],
+                                   "options": {"color": "rgba(224,176,0,0.5)", "lineWidth": 1,
+                                               "lineStyle": 1, "priceLineVisible": False,
+                                               "lastValueVisible": False}})
 
         # Historiske pivotlinjer: kort gull strek langs motstanden fram til hvert
         # brudd. UBIASED / point-in-time – motstanden er høyeste High i de
@@ -622,7 +452,7 @@ if resultat.empty:
     st.info("Screeningen ga ingen treff ennå. Har roboten fått hentet nok historikk?")
     st.stop()
 
-fane1, fane2, fane3, fane4 = st.tabs(["📋 Hovedliste", "📊 Chart", "🔎 Søk", "🧪 Chart 2.0 (test)"])
+fane1, fane2, fane3 = st.tabs(["📋 Hovedliste", "📊 Chart", "🔎 Søk"])
 
 # --- Fane 1: Hovedliste ---
 with fane1:
@@ -665,22 +495,37 @@ with fane1:
 
 # --- Fane 2: Chart ---
 with fane2:
-    valg = st.selectbox("Velg aksje", resultat["ticker"].tolist())
-    kol_a, kol_b = st.columns([3, 2])
-    periode = kol_a.radio("Periode", list(PERIODER_VALG.keys()), index=3, horizontal=True)
-    vis_perioder = kol_b.checkbox("Marker historikk (7/7, pivoter, brudd)", value=True)
-    vis_7av7 = kol_b.checkbox("Vis 7/7-treff (grønn = ble 7/7, rød = mistet ett)", value=False)
-    serie = datamod.serie_for(last_priser(versjon), valg)
-    res = screener.analyser_ticker(serie, valg, konfig.PRESETS[preset_navn])
-    if res is None:
-        st.info("For lite historikk til å tegne chart for denne aksjen.")
+    if not HAR_LWC:
+        st.warning("Chart-komponenten er ikke lastet i dette miljøet ennå (kommer ved neste utrulling).")
     else:
-        st.plotly_chart(lag_chart(serie, res, vis_perioder, PERIODER_VALG[periode], vis_7av7),
-                        width="stretch", config=CHART_CONFIG)
-        st.caption("💡 Dra sidelengs for å se eldre kurs, rull med musehjulet for å zoome, "
-                   "dobbeltklikk for å nullstille. Bruk periode-knappene for perfekt skalering. "
-                   "Gule trekanter = historiske volumbrudd gjennom motstand.")
-        vis_vcp_boks(res)
+        valg = st.selectbox("Velg aksje", resultat["ticker"].tolist())
+        periode = st.radio("Periode", list(PERIODER_VALG.keys()), index=3, horizontal=True,
+                           key="periode_chart")
+        with st.popover("⚙️ Tilpass chartet"):
+            st.caption("Huk av hva du vil se. Færre lag = renere bilde.")
+            vis_ma = st.checkbox("Glidende snitt (MA50/150/200)", value=True, key="chart_ma")
+            vis_52u = st.checkbox("52-ukers høy/lav (grå stiplet)", value=True, key="chart_52u")
+            vis_vcp = st.checkbox("VCP-kontraksjoner (gul zigzag)", value=True, key="chart_vcp")
+            vis_7av7 = st.checkbox("7/7-markører (ble/mistet)", value=True, key="chart_7av7")
+            vis_hist = st.checkbox("Historiske volumbrudd", value=False, key="chart_hist")
+        serie = datamod.serie_for(last_priser(versjon), valg)
+        res = screener.analyser_ticker(serie, valg, konfig.PRESETS[preset_navn])
+        if res is None:
+            st.info("For lite historikk til å tegne chart for denne aksjen.")
+        else:
+            spec = lag_chart_lwc(serie, res, PERIODER_VALG[periode],
+                                 vis_ma=vis_ma, vis_52u=vis_52u, vis_vcp=vis_vcp,
+                                 vis_7av7=vis_7av7, vis_hist=vis_hist)
+            if spec is None:
+                st.info("Klarte ikke bygge chartet for denne aksjen.")
+            else:
+                noekkel = f"chart_{valg}_{periode}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}"
+                renderLightweightCharts(spec, key=noekkel)
+                st.caption("💡 Dra sidelengs, rull musehjulet for å zoome, dra loddrett på "
+                           "prisaksen for å strekke høyden. 🟡 **Kraftig gull = aktiv pivot** · "
+                           "🔴 stiplet rød = stop · 🟢/🔴 pil = ble/mistet 7/7. Svake stiplede "
+                           "gull-streker = historiske brudd (ubiased).")
+                vis_vcp_boks(res)
 
 # --- Fane 3: Søk ---
 with fane3:
@@ -703,50 +548,21 @@ with fane3:
                 st.subheader(f"{sok} · {res['score']}/7 · {res['status']} {res['statustekst']}")
                 periode3 = st.radio("Periode", list(PERIODER_VALG.keys()), index=3,
                                     horizontal=True, key="periode_sok")
-                vis_7av7_3 = st.checkbox("Vis 7/7-treff (grønn = ble 7/7, rød = mistet ett)",
-                                         value=False, key="vis7_sok")
-                st.plotly_chart(lag_chart(serie, res, vis_perioder=True,
-                                          dager=PERIODER_VALG[periode3], vis_7av7=vis_7av7_3),
-                                width="stretch", config=CHART_CONFIG)
+                with st.popover("⚙️ Tilpass chartet"):
+                    st.caption("Huk av hva du vil se. Færre lag = renere bilde.")
+                    vis_ma3 = st.checkbox("Glidende snitt (MA50/150/200)", value=True, key="sok_ma")
+                    vis_52u3 = st.checkbox("52-ukers høy/lav (grå stiplet)", value=True, key="sok_52u")
+                    vis_vcp3 = st.checkbox("VCP-kontraksjoner (gul zigzag)", value=True, key="sok_vcp")
+                    vis_7av7_3 = st.checkbox("7/7-markører (ble/mistet)", value=True, key="sok_7av7")
+                    vis_hist3 = st.checkbox("Historiske volumbrudd", value=False, key="sok_hist")
+                if not HAR_LWC:
+                    st.warning("Chart-komponenten er ikke lastet i dette miljøet ennå.")
+                else:
+                    spec3 = lag_chart_lwc(serie, res, PERIODER_VALG[periode3],
+                                          vis_ma=vis_ma3, vis_52u=vis_52u3, vis_vcp=vis_vcp3,
+                                          vis_7av7=vis_7av7_3, vis_hist=vis_hist3)
+                    if spec3 is not None:
+                        renderLightweightCharts(
+                            spec3,
+                            key=f"sok_{sok}_{periode3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}")
                 vis_vcp_boks(res)
-
-# --- Fane 4: Chart 2.0 (test) ---
-with fane4:
-    st.markdown(
-        "🧪 **Testversjon** av chartet med TradingViews motor (*lightweight-charts*). "
-        "Prøv gjerne: **dra sidelengs**, **rull musehjulet** for å zoome, og – det du ønsket – "
-        "**dra loddrett på prisaksen** (tallene til høyre) for å strekke/skalere høyden. "
-        "Y-aksen følger automatisk når du panorerer. Si ifra om dette føles bedre enn dagens chart."
-    )
-    if not HAR_LWC:
-        st.warning("Chart-komponenten er ikke lastet i dette miljøet ennå (kommer ved neste utrulling).")
-    else:
-        valg4 = st.selectbox("Velg aksje", resultat["ticker"].tolist(), key="valg_lwc")
-        periode4 = st.radio("Periode", list(PERIODER_VALG.keys()), index=3, horizontal=True,
-                            key="periode_lwc")
-        with st.popover("⚙️ Tilpass chartet"):
-            st.caption("Huk av hva du vil se. Færre lag = renere bilde.")
-            vis_ma4 = st.checkbox("Glidende snitt (MA50/150/200)", value=True, key="lwc_ma")
-            vis_52u4 = st.checkbox("52-ukers høy/lav (grå stiplet)", value=True, key="lwc_52u")
-            vis_vcp4 = st.checkbox("VCP-kontraksjoner (gul zigzag)", value=True, key="lwc_vcp")
-            vis_7av74 = st.checkbox("7/7-markører (ble/mistet)", value=True, key="lwc_7av7")
-            vis_hist4 = st.checkbox("Historiske volumbrudd", value=False, key="lwc_hist")
-        serie4 = datamod.serie_for(last_priser(versjon), valg4)
-        res4 = screener.analyser_ticker(serie4, valg4, konfig.PRESETS[preset_navn])
-        if res4 is None:
-            st.info("For lite historikk til å tegne chart for denne aksjen.")
-        else:
-            spec = lag_chart_lwc(serie4, res4, PERIODER_VALG[periode4],
-                                 vis_ma=vis_ma4, vis_52u=vis_52u4, vis_vcp=vis_vcp4,
-                                 vis_7av7=vis_7av74, vis_hist=vis_hist4)
-            if spec is None:
-                st.info("Klarte ikke bygge chartet for denne aksjen.")
-            else:
-                noekkel = f"lwc_{valg4}_{periode4}_{vis_ma4}{vis_52u4}{vis_vcp4}{vis_7av74}{vis_hist4}"
-                renderLightweightCharts(spec, key=noekkel)
-                st.caption("🟡 **Kraftig gull linje = aktiv pivot** (kjøpsnivået nå) · "
-                           "🔴 stiplet rød = stop · 🟢 pil opp = ble 7/7 · 🔴 pil ned = mistet 7/7. "
-                           "Blå = MA50, oransje = MA150, lilla = MA200, blå strek i volum = "
-                           "50-dagers snittvolum. Svake stiplede gull-streker = historiske brudd "
-                           "(ubiased – motstanden slik den var *før* bruddet).")
-                vis_vcp_boks(res4)
