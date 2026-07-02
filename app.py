@@ -114,22 +114,21 @@ def vis_vcp_boks(res: dict) -> None:
 
     kropp = "".join(
         f'<tr style="background:{"#eef4ee" if i % 2 else "#ffffff"};">'
-        f'<td style="padding:9px 14px;border-bottom:1px solid #e2e8e2;">{navn}</td>'
-        f'<td style="padding:9px 14px;border-bottom:1px solid #e2e8e2;'
+        f'<td style="padding:3px 12px;border-bottom:1px solid #e2e8e2;">{navn}</td>'
+        f'<td style="padding:3px 12px;border-bottom:1px solid #e2e8e2;'
         f'text-align:right;font-weight:600;font-variant-numeric:tabular-nums;">{verdi}</td>'
         f'</tr>'
         for i, (navn, verdi) in enumerate(rader)
     )
     st.markdown(
-        '<table style="width:100%;border-collapse:collapse;font-size:0.95rem;'
-        'border:1px solid #cdddcd;border-radius:10px;overflow:hidden;">'
+        '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;'
+        'line-height:1.25;border:1px solid #cdddcd;border-radius:8px;overflow:hidden;">'
         '<thead><tr style="background:#5b8a5b;color:#ffffff;">'
-        '<th style="text-align:left;padding:10px 14px;font-weight:600;">Nøkkeltall</th>'
-        '<th style="text-align:right;padding:10px 14px;font-weight:600;">Verdi</th>'
+        '<th style="text-align:left;padding:4px 12px;font-weight:600;">Nøkkeltall</th>'
+        '<th style="text-align:right;padding:4px 12px;font-weight:600;">Verdi</th>'
         f'</tr></thead><tbody>{kropp}</tbody></table>',
         unsafe_allow_html=True,
     )
-    st.write("")  # litt luft under tabellen
 
 
 
