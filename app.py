@@ -113,35 +113,6 @@ def vis_vcp_boks(res: dict) -> None:
     kol2[3].metric("RS-avkastning (rå)", "—" if pd.isna(res["rs_avkastning"]) else f"{res['rs_avkastning'] * 100:.0f} %")
 
 
-def sjekkliste_df(res: dict, preset) -> pd.DataFrame:
-    """Bygger Minervini-sjekklista (de 7 kriteriene) som en tabell for én aksje.
-
-    Kolonnen «Oppfylt» er ✅/❌ ut fra k1–k7 som allerede er regnet ut. Prosentene
-    for 52-ukers lav/høy følger valgt preset, så teksten stemmer alltid. Tabellen
-    er ekte tekst – marker og kopier den rett inn i Pages/Numbers.
-    """
-    over = int(round(preset.over_lav * 100))
-    under = int(round(preset.under_hoy * 100))
-    rader = [
-        ("Pris over SMA 150 og 200", res.get("k1")),
-        ("SMA 150 over SMA 200", res.get("k2")),
-        ("SMA 200 stiger (positiv trend)", res.get("k3")),
-        ("SMA 50 over SMA 150 og 200", res.get("k4")),
-        ("Pris over SMA 50", res.get("k5")),
-        (f"Pris minst {over} % over 52u lav", res.get("k6")),
-        (f"Innenfor {under} % av 52u høy", res.get("k7")),
-    ]
-    return pd.DataFrame({"Kriterie": [r[0] for r in rader],
-                         "Oppfylt": ["✅" if r[1] else "❌" for r in rader]})
-
-
-def vis_sjekkliste(res: dict, preset, tittel: str) -> None:
-    """Viser Minervini-sjekklista som en kopierbar tabell (til Pages/Numbers)."""
-    st.markdown(f"**📋 Minervini sjekkliste – {tittel} ({res['score']}/7)**")
-    st.dataframe(sjekkliste_df(res, preset), hide_index=True, use_container_width=True)
-    st.caption("Marker tabellen og kopier (⌘C) → lim inn i Pages. Da blir det en ekte tabell.")
-
-
 def _kr(x) -> str:
     """Kroner med mellomrom som tusenskille (norsk stil): 12345 → '12 345'."""
     try:
@@ -197,7 +168,7 @@ def posisjon_verktoy(res: dict, nokkel: str) -> None:
     """Kalkulator for long-posisjon med prosent-input og kroner som output."""
     _init_posisjon_state(res, nokkel)
 
-    with st.expander("📐 Posisjon & risk/reward (helt nederst)"):
+    with st.expander("📐 Posisjon & risk/reward"):
         entry_def, stop_pct_def, mal_pct_def = _pos_defaults(res)
         h1, h2 = st.columns([1, 3])
         if h1.button("Reset til standard", key=f"pos_reset_{nokkel}"):
@@ -873,7 +844,6 @@ with fane2:
                            "🔴 stiplet rød = stop · 🟢/🔴 pil = ble/mistet 7/7. Svake stiplede "
                            "gull-streker = historiske brudd (ubiased).")
                 vis_vcp_boks(res)
-                vis_sjekkliste(res, konfig.PRESETS[preset_navn], valg)
                 st.divider()
                 posisjon_verktoy(res, f"chart_{valg}")
 
@@ -918,6 +888,5 @@ with fane3:
                             spec3,
                             key=f"sok_{sok}_{periode3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{pos_suffix3}")
                 vis_vcp_boks(res)
-                vis_sjekkliste(res, konfig.PRESETS[preset_navn], sok)
                 st.divider()
                 posisjon_verktoy(res, f"sok_{sok}")
