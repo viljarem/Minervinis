@@ -169,6 +169,16 @@ def posisjon_verktoy(res: dict, nokkel: str) -> None:
     _init_posisjon_state(res, nokkel)
 
     with st.expander("📐 Posisjon & risk/reward (helt nederst)"):
+        entry_def, stop_pct_def, mal_pct_def = _pos_defaults(res)
+        h1, h2 = st.columns([1, 3])
+        if h1.button("Reset til standard", key=f"pos_reset_{nokkel}"):
+            st.session_state[f"pos_e_{nokkel}"] = entry_def
+            st.session_state[f"pos_sp_{nokkel}"] = stop_pct_def
+            st.session_state[f"pos_mp_{nokkel}"] = mal_pct_def
+            st.session_state[f"pos_n_{nokkel}"] = 0
+            st.rerun()
+        h2.caption("Standard = pivot som inngang, 5 % stop og 10 % mål.")
+
         c1, c2, c3, c4 = st.columns(4)
         entry_v = c1.number_input("Inngang (kr)", min_value=0.0,
                                   value=float(st.session_state[f"pos_e_{nokkel}"]),
