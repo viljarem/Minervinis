@@ -317,6 +317,21 @@ def _pivot_tall(tekst) -> float:
         return float("nan")
 
 
+def _live_verdi(v):
+    """Plukker (pris, volum) ut av én live-oppføring, uansett format.
+
+    Tåler både det nye formatet {"pris": .., "volum": ..} OG et gammelt/bufret
+    format der verdien bare var prisen (float). Sistnevnte kan henge igjen i
+    Streamlit Cloud sin cache rett etter en utrulling – da vil vi ikke krasje,
+    bare vise pris uten live-volum. Ukjent/tomt gir (None, None).
+    """
+    if isinstance(v, dict):
+        return v.get("pris"), v.get("volum")
+    if isinstance(v, (int, float)):
+        return float(v), None
+    return None, None
+
+
 def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None) -> pd.DataFrame:
     vis = pd.DataFrame()
     vis["Ticker"] = df["ticker"]
@@ -324,18 +339,23 @@ def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None) -
     vis["Setup"] = df["status"] + " " + df["statustekst"]
     vis["Til pivot"] = df["avstand_pivot"].map(_til_pivot_tekst)
     if live:
-        # Live-kurs og -volum per ticker (tom → NaN, så regnestykkene tåler hull).
-        pris_live = pd.to_numeric(df["ticker"].map(lambda t: live.get(t, {}).get("pris")),
-                                  errors="coerce")
+        # Live-kurs og -volum per ticker. Vi bygger lister eksplisitt (i stedet for
+        # .map med lambda) så det er robust mot både nytt/gammelt cache-format og
+        # PyArrow-baserte kolonner. Tomt → NaN, så regnestykkene tåler hull.
+        pris_liste, vol_liste = [], []
+        for t in df["ticker"]:
+            p, vol = _live_verdi(live.get(t))
+            pris_liste.append(p)
+            vol_liste.append(vol)
+        pris_live = pd.to_numeric(pd.Series(pris_liste, index=df.index), errors="coerce")
         # Live avstand til pivot: samme fortegn-konvensjon som avstand_pivot
         # (positiv = under pivot), regnet fra DAGENS kurs mot lagret pivot.
         live_avst = (df["pivot"] - pris_live) / df["pivot"] * 100
         vis["Live"] = pris_live
         vis["Til pivot (live)"] = live_avst.map(_til_pivot_tekst)
         if naa_oslo is not None and "snittvolum50" in df.columns:
-            vol_live = df["ticker"].map(lambda t: live.get(t, {}).get("volum"))
             vis["RVol (live)"] = [datamod.live_rvol(v, s, naa_oslo)
-                                  for v, s in zip(vol_live, df["snittvolum50"])]
+                                  for v, s in zip(vol_liste, df["snittvolum50"])]
     vis["Kriterie 1-7"] = df["score"].astype(str) + "/7"
     vis["RVol"] = df["rel_volum"] if "rel_volum" in df.columns else np.nan
     vis["RS"] = df["rs"]
@@ -608,8 +628,8 @@ with fane1:
         for _tk in _valgte:
             _s = datamod.serie_for(_priser_alle, _tk)
             _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[preset_navn])
-            _live_txt = (f" · 🔴 live ≈ {live_priser[_tk]['pris']:.2f}"
-                         if _tk in live_priser else "")
+            _lp, _ = _live_verdi(live_priser.get(_tk))
+            _live_txt = f" · 🔴 live ≈ {_lp:.2f}" if _lp is not None else ""
             if _r is None:
                 st.markdown(f"**{_tk}**")
                 st.caption("For lite historikk til å tegne chart.")
