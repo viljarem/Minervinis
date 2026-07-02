@@ -96,21 +96,41 @@ PERIODER_VALG = {"3 mnd": 63, "6 mnd": 126, "1 år": 252, "2 år": 504,
 
 
 def vis_vcp_boks(res: dict) -> None:
-    """Viser VCP-detaljer under chartet."""
+    """Viser VCP-detaljer under chartet som én pen, skalerbar tabell."""
     st.markdown(f"**Setup-status:** {res['status']} {res['statustekst']}")
     st.markdown(f"**Ukentlig trend:** {res.get('mtf_emoji', '⚠️')} {res.get('mtf_tekst', '–')}")
-    kol = st.columns(4)
-    kol[0].metric("Pivot (kjøp)", "—" if res["pivot"] is None else f"{res['pivot']}")
-    kol[1].metric("Stop", "—" if res["stop"] is None else f"{res['stop']}")
-    kol[2].metric("Avstand til pivot", "—" if res["avstand_pivot"] is None else f"{res['avstand_pivot']} %")
-    kol[3].metric("Kvalitetsscore", f"{res['kvalitet']}/100")
 
-    kol2 = st.columns(4)
-    kol2[0].metric("Antall kontraksjoner", res["antall_kontr"])
     kontr = ", ".join(f"{x} %" for x in res["kontraksjoner"]) if res["kontraksjoner"] else "—"
-    kol2[1].metric("Dybder", kontr)
-    kol2[2].metric("Volumuttørking", "Ja ✅" if res["volumuttorking"] else "Nei")
-    kol2[3].metric("RS-avkastning (rå)", "—" if pd.isna(res["rs_avkastning"]) else f"{res['rs_avkastning'] * 100:.0f} %")
+    rader = [
+        ("Pivot (kjøp)", "—" if res["pivot"] is None else f"{res['pivot']}"),
+        ("Stop", "—" if res["stop"] is None else f"{res['stop']}"),
+        ("Avstand til pivot", "—" if res["avstand_pivot"] is None else f"{res['avstand_pivot']} %"),
+        ("Kvalitetsscore", f"{res['kvalitet']}/100"),
+        ("Antall kontraksjoner", str(res["antall_kontr"])),
+        ("Dybder", kontr),
+        ("Volumuttørking", "Ja ✅" if res["volumuttorking"] else "Nei"),
+        ("RS-avkastning (rå)", "—" if pd.isna(res["rs_avkastning"]) else f"{res['rs_avkastning'] * 100:.0f} %"),
+    ]
+
+    kropp = "".join(
+        f'<tr style="background:{"#eef4ee" if i % 2 else "#ffffff"};">'
+        f'<td style="padding:9px 14px;border-bottom:1px solid #e2e8e2;">{navn}</td>'
+        f'<td style="padding:9px 14px;border-bottom:1px solid #e2e8e2;'
+        f'text-align:right;font-weight:600;font-variant-numeric:tabular-nums;">{verdi}</td>'
+        f'</tr>'
+        for i, (navn, verdi) in enumerate(rader)
+    )
+    st.markdown(
+        '<table style="width:100%;border-collapse:collapse;font-size:0.95rem;'
+        'border:1px solid #cdddcd;border-radius:10px;overflow:hidden;">'
+        '<thead><tr style="background:#5b8a5b;color:#ffffff;">'
+        '<th style="text-align:left;padding:10px 14px;font-weight:600;">Nøkkeltall</th>'
+        '<th style="text-align:right;padding:10px 14px;font-weight:600;">Verdi</th>'
+        f'</tr></thead><tbody>{kropp}</tbody></table>',
+        unsafe_allow_html=True,
+    )
+    st.write("")  # litt luft under tabellen
+
 
 
 def _kr(x) -> str:
