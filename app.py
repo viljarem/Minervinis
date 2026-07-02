@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from motor import konfig, data as datamod, indikatorer, minervini, screener, univers, vcp
+from motor import konfig, data as datamod, indikatorer, minervini, posisjon, screener, univers, vcp
 
 # TradingViews lightweight-charts (testfane). Pakket i try/except så appen aldri
 # krasjer om komponenten ikke er installert i miljøet (f.eks. rett etter utrulling).
@@ -113,12 +113,75 @@ def vis_vcp_boks(res: dict) -> None:
     kol2[3].metric("RS-avkastning (rå)", "—" if pd.isna(res["rs_avkastning"]) else f"{res['rs_avkastning'] * 100:.0f} %")
 
 
+def _kr(x) -> str:
+    """Kroner med mellomrom som tusenskille (norsk stil): 12345 → '12 345'."""
+    try:
+        return f"{float(x):,.0f}".replace(",", " ")
+    except (TypeError, ValueError):
+        return "—"
+
+
+def posisjon_verktoy(res: dict, nokkel: str) -> tuple[dict | None, str]:
+    """«Long Position»-verktøy under chartet – avstander, prosent og risk/reward.
+
+    lightweight-charts kan ikke tegnes med musa slik TradingView gjør, så i stedet
+    skriver du inn inngang, stop og mål i tre felt. Vi regner ut hvor mye du
+    risikerer, hvor mye du kan tjene, forholdet mellom dem (risk/reward), og – hvis
+    du fyller inn hvor mange kroner du vil risikere – hvor mange aksjer du skal
+    kjøpe. Returnerer (pos, suffix): pos = {entry, stop, mal} når du vil tegne den
+    i chartet (ellers None), og suffix legges på chart-nøkkelen så bildet tegnes på
+    nytt når tallene endres.
+    """
+    pos, suffix = None, ""
+    with st.expander("📐 Posisjon & risk/reward (tegn long-posisjon)"):
+        piv = res.get("pivot")
+        entry_def = float(piv) if piv else float(res.get("pris") or 0.0)
+        stp = res.get("stop")
+        stop_def = float(stp) if stp else (round(entry_def * 0.92, 2) if entry_def else 0.0)
+
+        c1, c2, c3, c4 = st.columns(4)
+        entry_v = c1.number_input("Inngang", min_value=0.0, value=round(entry_def, 2),
+                                  step=0.1, format="%.2f", key=f"pos_e_{nokkel}")
+        stop_v = c2.number_input("Stop", min_value=0.0, value=round(stop_def, 2),
+                                 step=0.1, format="%.2f", key=f"pos_s_{nokkel}")
+        mal_def = posisjon.forslag_mal(entry_v, stop_v) or (round(entry_v * 1.15, 2) if entry_v else 0.0)
+        mal_v = c3.number_input("Mål", min_value=0.0, value=round(float(mal_def), 2),
+                                step=0.1, format="%.2f", key=f"pos_m_{nokkel}")
+        risiko_kr = c4.number_input("Risiker (kr)", min_value=0.0, value=0.0, step=500.0,
+                                    format="%.0f", key=f"pos_r_{nokkel}",
+                                    help="Valgfritt: hvor mange kroner du vil tape hvis stop "
+                                         "treffes. Gir antall aksjer å kjøpe.")
+
+        nt = posisjon.nokkeltall(entry_v, stop_v, mal_v, risiko_kr if risiko_kr > 0 else None)
+        if nt["gyldig"]:
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Risiko ↓", f"−{nt['risiko_pct']:.1f} %")
+            m2.metric("Gevinst ↑", f"+{nt['gevinst_pct']:.1f} %")
+            m3.metric("Risk/reward", f"{nt['rr']:.2f} : 1" if nt["rr"] else "—")
+            if nt["rr"] and nt["rr"] >= 2:
+                st.caption(f"✅ Risk/reward {nt['rr']:.2f} : 1 – oppsiden er {nt['rr']:.1f}× "
+                           "så stor som det du risikerer.")
+            elif nt["rr"]:
+                st.caption(f"⚠️ Risk/reward {nt['rr']:.2f} : 1 – Minervini liker helst minst 2 : 1.")
+            if "antall" in nt:
+                st.caption(f"💰 Kjøp **{nt['antall']} aksjer** (~{_kr(nt['kostnad'])} kr) for å "
+                           f"risikere ca. {_kr(risiko_kr)} kr.")
+            if st.checkbox("Tegn posisjonen i chartet", value=True, key=f"pos_p_{nokkel}"):
+                pos = {"entry": entry_v, "stop": stop_v, "mal": mal_v}
+                suffix = f"_pos{entry_v}_{stop_v}_{mal_v}"
+        else:
+            st.caption("Sett **stop < inngang < mål** (stop under kursen, mål over) for å "
+                       "regne risk/reward.")
+    return pos, suffix
+
+
 # ---------------------------------------------------------------------------
 # Chart 2.0 (test) – TradingViews lightweight-charts
 # ---------------------------------------------------------------------------
 def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                   vis_ma: bool = True, vis_52u: bool = True, vis_vcp: bool = True,
-                  vis_7av7: bool = True, vis_hist: bool = False, hoyde: int = 620) -> list | None:
+                  vis_7av7: bool = True, vis_hist: bool = False, hoyde: int = 620,
+                  pos: dict | None = None) -> list | None:
     """Bygger data-spesifikasjonen for lightweight-charts.
 
     Tar med alt det gamle Plotly-chartet hadde: candles, MA50/150/200, 52-ukers
@@ -134,6 +197,16 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
         d = full.iloc[-min(dager, len(full)):].copy()
         t = list(d.index.strftime("%Y-%m-%d"))
         t_sett = set(t)
+
+        # Valider long-posisjonen (inngang/stop/mål) hvis den er sendt inn.
+        posn = None
+        if pos:
+            try:
+                _e = float(pos.get("entry")); _s = float(pos.get("stop")); _m = float(pos.get("mal"))
+                if _e > 0 and _s < _e < _m:
+                    posn = {"entry": _e, "stop": _s, "mal": _m}
+            except (TypeError, ValueError):
+                posn = None
 
         def linje(kol, farge, bredde, stil=0, skala=None):
             data = [{"time": ti, "value": round(float(v), 4)}
@@ -163,9 +236,9 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                                      "color": "#2e7d32", "shape": "arrowUp", "text": "7/7"})
                 # «Mistet ett» = dagen etter at perioden sluttet
                 if slutt in t_sett:
-                    pos = t.index(slutt)
-                    if pos + 1 < len(t):
-                        markorer.append({"time": t[pos + 1], "position": "aboveBar",
+                    idx = t.index(slutt)
+                    if idx + 1 < len(t):
+                        markorer.append({"time": t[idx + 1], "position": "aboveBar",
                                          "color": "#c62828", "shape": "arrowDown", "text": "×"})
         hist_segmenter = []   # (start, brudd, niva) for korte historiske pivotstreker
         if vis_hist:
@@ -204,7 +277,35 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
         if rene:
             hoved["markers"] = rene
 
-        serier = [hoved]
+        # Risk/reward-soner (long): grønn gevinstsone inngang→mål, rød risikosone
+        # inngang→stop. Lagt BAK candlene (svak farge) så de blir bakteppe, som
+        # TradingViews «Long Position»-verktøy. Baseline fyller mellom en flat linje
+        # og «baseValue» (= inngangen).
+        zone_serier = []
+        if posn:
+            gjennomsiktig = "rgba(0,0,0,0)"
+            zone_serier = [
+                {"type": "Baseline",
+                 "data": [{"time": ti, "value": posn["mal"]} for ti in t],
+                 "options": {"baseValue": {"type": "price", "price": posn["entry"]},
+                             "topLineColor": gjennomsiktig,
+                             "topFillColor1": "rgba(38,166,154,0.22)",
+                             "topFillColor2": "rgba(38,166,154,0.22)",
+                             "bottomLineColor": gjennomsiktig,
+                             "bottomFillColor1": gjennomsiktig, "bottomFillColor2": gjennomsiktig,
+                             "priceLineVisible": False, "lastValueVisible": False}},
+                {"type": "Baseline",
+                 "data": [{"time": ti, "value": posn["stop"]} for ti in t],
+                 "options": {"baseValue": {"type": "price", "price": posn["entry"]},
+                             "topLineColor": gjennomsiktig,
+                             "topFillColor1": gjennomsiktig, "topFillColor2": gjennomsiktig,
+                             "bottomLineColor": gjennomsiktig,
+                             "bottomFillColor1": "rgba(239,83,80,0.22)",
+                             "bottomFillColor2": "rgba(239,83,80,0.22)",
+                             "priceLineVisible": False, "lastValueVisible": False}},
+            ]
+
+        serier = [*zone_serier, hoved]
 
         # Glidende snitt
         if vis_ma:
@@ -262,19 +363,34 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
 
         # Pivot (gull) og stop (rød stiplet) som flate linjer. Aktiv pivot er
         # bevisst TYKKEST og solid, så den skiller seg klart fra de svakere,
-        # stiplede historiske pivotlinjene.
-        if res and res.get("pivot"):
+        # stiplede historiske pivotlinjene. Skjules når posisjonsverktøyet er på
+        # (da tegner vi inngang/stop/mål i stedet, så det ikke blir dobbelt opp).
+        if res and res.get("pivot") and not posn:
             serier.append({"type": "Line",
                            "data": [{"time": ti, "value": res["pivot"]} for ti in t],
                            "options": {"color": "#f6c343", "lineWidth": 3, "lineStyle": 0,
                                        "priceLineVisible": False, "lastValueVisible": True,
                                        "title": "Pivot"}})
-        if res and res.get("stop"):
+        if res and res.get("stop") and not posn:
             serier.append({"type": "Line",
                            "data": [{"time": ti, "value": res["stop"]} for ti in t],
                            "options": {"color": "#ef5350", "lineWidth": 1, "lineStyle": 2,
                                        "priceLineVisible": False, "lastValueVisible": True,
                                        "title": "Stop"}})
+
+        # Posisjon (long): inngang (blå solid), stop (rød stiplet) og mål (grønn
+        # stiplet) som tydelige nivålinjer med pris-etikett til høyre.
+        if posn:
+            for verdi, farge, bredde, stil, tittel in [
+                (posn["entry"], "#1e88e5", 2, 0, "Inngang"),
+                (posn["stop"], "#ef5350", 1, 2, "Stop"),
+                (posn["mal"], "#26a69a", 1, 2, "Mål"),
+            ]:
+                serier.append({"type": "Line",
+                               "data": [{"time": ti, "value": verdi} for ti in t],
+                               "options": {"color": farge, "lineWidth": bredde, "lineStyle": stil,
+                                           "priceLineVisible": False, "lastValueVisible": True,
+                                           "title": tittel}})
 
         chart_options = {
             "height": hoyde,
@@ -662,13 +778,14 @@ with fane2:
         if res is None:
             st.info("For lite historikk til å tegne chart for denne aksjen.")
         else:
+            pos, pos_suffix = posisjon_verktoy(res, f"chart_{valg}")
             spec = lag_chart_lwc(serie, res, PERIODER_VALG[periode],
                                  vis_ma=vis_ma, vis_52u=vis_52u, vis_vcp=vis_vcp,
-                                 vis_7av7=vis_7av7, vis_hist=vis_hist)
+                                 vis_7av7=vis_7av7, vis_hist=vis_hist, pos=pos)
             if spec is None:
                 st.info("Klarte ikke bygge chartet for denne aksjen.")
             else:
-                noekkel = f"chart_{valg}_{periode}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}"
+                noekkel = f"chart_{valg}_{periode}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{pos_suffix}"
                 renderLightweightCharts(spec, key=noekkel)
                 st.caption("💡 Dra sidelengs, rull musehjulet for å zoome, dra loddrett på "
                            "prisaksen for å strekke høyden. 🟡 **Kraftig gull = aktiv pivot** · "
@@ -707,11 +824,12 @@ with fane3:
                 if not HAR_LWC:
                     st.warning("Chart-komponenten er ikke lastet i dette miljøet ennå.")
                 else:
+                    pos3, pos_suffix3 = posisjon_verktoy(res, f"sok_{sok}")
                     spec3 = lag_chart_lwc(serie, res, PERIODER_VALG[periode3],
                                           vis_ma=vis_ma3, vis_52u=vis_52u3, vis_vcp=vis_vcp3,
-                                          vis_7av7=vis_7av7_3, vis_hist=vis_hist3)
+                                          vis_7av7=vis_7av7_3, vis_hist=vis_hist3, pos=pos3)
                     if spec3 is not None:
                         renderLightweightCharts(
                             spec3,
-                            key=f"sok_{sok}_{periode3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}")
+                            key=f"sok_{sok}_{periode3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{pos_suffix3}")
                 vis_vcp_boks(res)
