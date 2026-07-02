@@ -28,6 +28,18 @@ except Exception:
 st.set_page_config(page_title="DEMO-Screener · Oslo Børs", layout="wide")
 
 
+def _er_morkt() -> bool:
+    """True hvis appen står i mørkt tema.
+
+    Leser brukerens FAKTISKE valgte tema (også når det byttes i ⋮-menyen), via
+    st.context.theme. Faller trygt tilbake til lyst tema hvis noe skulle mangle.
+    """
+    try:
+        return st.context.theme.type == "dark"
+    except Exception:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Data-innlasting (bufres/caches så siden blir rask)
 # ---------------------------------------------------------------------------
@@ -121,7 +133,7 @@ def vis_vcp_boks(res: dict) -> None:
         for i, (navn, verdi) in enumerate(rader)
     )
     st.markdown(
-        '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;'
+        '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;color:#1f2937;'
         'line-height:1.25;border:1px solid #cdddcd;border-radius:8px;overflow:hidden;">'
         '<thead><tr style="background:#5b8a5b;color:#ffffff;">'
         '<th style="text-align:left;padding:4px 12px;font-weight:600;">Nøkkeltall</th>'
@@ -232,7 +244,7 @@ def _fund_tabell(overskrifter: list[str], rader_html: str) -> str:
     celler = "".join(
         f'<th style="text-align:{"left" if i == 0 else "right"};padding:5px 10px;'
         f'font-weight:600;">{h}</th>' for i, h in enumerate(overskrifter))
-    return ('<table style="width:100%;border-collapse:collapse;font-size:0.82rem;'
+    return ('<table style="width:100%;border-collapse:collapse;font-size:0.82rem;color:#1f2937;'
             'line-height:1.25;border:1px solid #cdddcd;border-radius:8px;overflow:hidden;">'
             f'<thead><tr style="background:#5b8a5b;color:#ffffff;">{celler}</tr></thead>'
             f'<tbody>{rader_html}</tbody></table>')
@@ -300,7 +312,7 @@ def _tegn_fundamenta(fund: dict) -> None:
         f'<br><span style="font-weight:400;font-size:0.7rem;">{aar_p} vs {aar_pi}</span></th>'
         '</tr></thead>'
     )
-    tabell = ('<table style="width:100%;border-collapse:collapse;font-size:0.82rem;'
+    tabell = ('<table style="width:100%;border-collapse:collapse;font-size:0.82rem;color:#1f2937;'
               'line-height:1.25;border:1px solid #cdddcd;border-radius:8px;overflow:hidden;">'
               + topphode + f'<tbody>{kropp}</tbody></table>')
     st.markdown(tabell, unsafe_allow_html=True)
@@ -468,7 +480,7 @@ def posisjon_verktoy(res: dict, nokkel: str) -> None:
 def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                   vis_ma: bool = True, vis_52u: bool = True, vis_vcp: bool = True,
                   vis_7av7: bool = True, vis_hist: bool = False, hoyde: int = 620,
-                  pos: dict | None = None) -> list | None:
+                  pos: dict | None = None, morkt: bool = False) -> list | None:
     """Bygger data-spesifikasjonen for lightweight-charts.
 
     Tar med alt det gamle Plotly-chartet hadde: candles, MA50/150/200, 52-ukers
@@ -679,12 +691,18 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                                            "priceLineVisible": False, "lastValueVisible": True,
                                            "title": tittel}})
 
+        # Farger som følger app-temaet: mørk bakgrunn + lys tekst i dark mode,
+        # ellers hvitt med mørk tekst. Candle-, MA- og pivotfargene funker i begge.
+        if morkt:
+            bg, tekstfarge, grid = "#131722", "#d1d4dc", "rgba(120,123,134,0.22)"
+        else:
+            bg, tekstfarge, grid = "white", "#333333", "rgba(197,203,206,0.35)"
         chart_options = {
             "height": hoyde,
-            "layout": {"background": {"type": "solid", "color": "white"},
-                       "textColor": "#333333"},
-            "grid": {"vertLines": {"color": "rgba(197,203,206,0.35)"},
-                     "horzLines": {"color": "rgba(197,203,206,0.35)"}},
+            "layout": {"background": {"type": "solid", "color": bg},
+                       "textColor": tekstfarge},
+            "grid": {"vertLines": {"color": grid},
+                     "horzLines": {"color": grid}},
             "rightPriceScale": {"scaleMargins": {"top": 0.06, "bottom": 0.26},
                                 "borderVisible": False},
             "timeScale": {"borderVisible": False, "rightOffset": 4},
@@ -969,6 +987,11 @@ if resultat.empty:
 
 fane1, fane2, fane3 = st.tabs(["📋 Hovedliste", "📊 Chart", "🔎 Søk"])
 
+# Følg app-temaet i chartet (mørk bakgrunn i dark mode). Legges i chart-nøklene
+# lenger nede så bildet tegnes på nytt når du bytter tema.
+MORKT = _er_morkt()
+TEMA = "d" if MORKT else "l"
+
 # --- Fane 1: Hovedliste ---
 with fane1:
     # Ferske brudd (🟢) vises ALLTID – selv om de har færre enn valgt antall kriterier,
@@ -1039,9 +1062,9 @@ with fane1:
                 continue
             st.markdown(f"**{_tk}** — {_r['status']} {_r['statustekst']}{_live_txt}")
             if HAR_LWC:
-                _spec = lag_chart_lwc(_s, _r, PERIODER_VALG["2 år"], hoyde=460)
+                _spec = lag_chart_lwc(_s, _r, PERIODER_VALG["2 år"], hoyde=460, morkt=MORKT)
                 if _spec:
-                    renderLightweightCharts(_spec, key=f"hl_{_tk}")
+                    renderLightweightCharts(_spec, key=f"hl_{_tk}_{TEMA}")
     else:
         st.caption("Ingen rader valgt ennå – huk av i tabellen over for å tegne chart her.")
 
@@ -1069,11 +1092,11 @@ with fane2:
             pos, pos_suffix = _posisjon_fra_state(f"chart_{valg}")
             spec = lag_chart_lwc(serie, res, PERIODER_VALG[periode],
                                  vis_ma=vis_ma, vis_52u=vis_52u, vis_vcp=vis_vcp,
-                                 vis_7av7=vis_7av7, vis_hist=vis_hist, pos=pos)
+                                 vis_7av7=vis_7av7, vis_hist=vis_hist, pos=pos, morkt=MORKT)
             if spec is None:
                 st.info("Klarte ikke bygge chartet for denne aksjen.")
             else:
-                noekkel = f"chart_{valg}_{periode}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{pos_suffix}"
+                noekkel = f"chart_{valg}_{periode}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{pos_suffix}_{TEMA}"
                 renderLightweightCharts(spec, key=noekkel)
                 st.caption("💡 Dra sidelengs, rull musehjulet for å zoome, dra loddrett på "
                            "prisaksen for å strekke høyden. 🟡 **Kraftig gull = aktiv pivot** · "
@@ -1119,11 +1142,11 @@ with fane3:
                     pos3, pos_suffix3 = _posisjon_fra_state(f"sok_{sok}")
                     spec3 = lag_chart_lwc(serie, res, PERIODER_VALG[periode3],
                                           vis_ma=vis_ma3, vis_52u=vis_52u3, vis_vcp=vis_vcp3,
-                                          vis_7av7=vis_7av7_3, vis_hist=vis_hist3, pos=pos3)
+                                          vis_7av7=vis_7av7_3, vis_hist=vis_hist3, pos=pos3, morkt=MORKT)
                     if spec3 is not None:
                         renderLightweightCharts(
                             spec3,
-                            key=f"sok_{sok}_{periode3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{pos_suffix3}")
+                            key=f"sok_{sok}_{periode3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{pos_suffix3}_{TEMA}")
                 vis_vcp_boks(res)
                 fundamenta_seksjon(sok, f"sok_{sok}")
                 st.divider()
