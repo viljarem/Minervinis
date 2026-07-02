@@ -253,7 +253,7 @@ def _tegn_fundamenta(fund: dict) -> None:
         aar_v = _belop(aar.get(nokkel), valuta)
         kv_p = kv.get(f"{nokkel}_vekst")
         aar_p = aar.get(f"{nokkel}_vekst")
-        return ("<tr>" + _navn_celle(tittel)
+        return ("<tr>" + _navn_celle("&nbsp;&nbsp;" + tittel)
                 + _celle(kv_v)
                 + _celle(_pct_txt(kv_p), _vekst_farge(kv_p), sterk=(kv_p is not None and kv_p >= 25))
                 + _celle(aar_v)
@@ -263,26 +263,53 @@ def _tegn_fundamenta(fund: dict) -> None:
     def margin_rad(tittel, nokkel):
         kv_e = kv.get(f"{nokkel}_endring")
         aar_e = aar.get(f"{nokkel}_endring")
-        return ("<tr>" + _navn_celle(tittel)
+        return ("<tr>" + _navn_celle("&nbsp;&nbsp;" + tittel)
                 + _celle(_margin_txt(kv.get(nokkel)))
                 + _celle(_pp_txt(kv_e), _pp_farge(kv_e))
                 + _celle(_margin_txt(aar.get(nokkel)))
                 + _celle(_pp_txt(aar_e), _pp_farge(aar_e))
                 + "</tr>")
 
-    kropp1 = (belop_rad("Omsetning", "omsetning")
-              + belop_rad("Resultat", "resultat")
-              + margin_rad("Bruttomargin", "brutto_margin")
-              + margin_rad("Driftsmargin", "drift_margin")
-              + margin_rad("Nettomargin", "netto_margin"))
-    st.markdown(_fund_tabell(["Vekst & marginer", "Kvartal", "Δ år/år", "År", "Δ år/år"], kropp1),
-                unsafe_allow_html=True)
+    def seksjon_rad(navn, kol1, kol2):
+        """Seksjons-skille som samtidig forklarer de to kolonnene under."""
+        liten = ('padding:4px 10px;text-align:right;font-size:0.7rem;'
+                 'font-weight:400;color:#557055;border-bottom:1px solid #cdddcd;')
+        return (f'<tr style="background:#dcebdc;">'
+                f'<td style="padding:4px 10px;font-weight:700;'
+                f'border-bottom:1px solid #cdddcd;">{navn}</td>'
+                f'<td style="{liten}">{kol1}</td><td style="{liten}">{kol2}</td>'
+                f'<td style="{liten}">{kol1}</td><td style="{liten}">{kol2}</td></tr>')
+
+    kropp = (seksjon_rad("📈 Vekst", "Beløp", "vs i fjor")
+             + belop_rad("Omsetning", "omsetning")
+             + belop_rad("Resultat", "resultat")
+             + seksjon_rad("📊 Marginer", "Nivå", "endring")
+             + margin_rad("Bruttomargin", "brutto_margin")
+             + margin_rad("Driftsmargin", "drift_margin")
+             + margin_rad("Nettomargin", "netto_margin"))
 
     kv_p = _kvartal_navn(kv.get("dato")); kv_pi = _kvartal_navn(kv.get("dato_ifjor"))
     aar_p = _aar_navn(aar.get("dato")); aar_pi = _aar_navn(aar.get("dato_ifjor"))
-    val_txt = f" · Beløp i {valuta}" if valuta else ""
-    st.caption(f"Kvartal (år/år): {kv_p} vs {kv_pi} · År: {aar_p} vs {aar_pi}{val_txt}. "
-               "🟩 ≥ 25 % · 🟢 15–25 % · 🟥 negativ. Marginendring i prosentpoeng (pp).")
+    kant = "border-left:1px solid rgba(255,255,255,0.35);"
+    topphode = (
+        '<thead><tr style="background:#5b8a5b;color:#ffffff;">'
+        '<th style="text-align:left;padding:6px 10px;">Vekst &amp; marginer</th>'
+        f'<th colspan="2" style="text-align:center;padding:6px 10px;{kant}">Siste kvartal'
+        f'<br><span style="font-weight:400;font-size:0.7rem;">{kv_p} vs {kv_pi}</span></th>'
+        f'<th colspan="2" style="text-align:center;padding:6px 10px;{kant}">Siste år'
+        f'<br><span style="font-weight:400;font-size:0.7rem;">{aar_p} vs {aar_pi}</span></th>'
+        '</tr></thead>'
+    )
+    tabell = ('<table style="width:100%;border-collapse:collapse;font-size:0.82rem;'
+              'line-height:1.25;border:1px solid #cdddcd;border-radius:8px;overflow:hidden;">'
+              + topphode + f'<tbody>{kropp}</tbody></table>')
+    st.markdown(tabell, unsafe_allow_html=True)
+
+    val_txt = f" Beløp vises i {valuta}." if valuta else ""
+    st.caption("Slik leser du den: **Beløp/Nivå** = tallet nå · **vs i fjor** = endring mot "
+               "samme periode året før. 🟩 vekst ≥ 25 % · 🟢 15–25 % · 🟥 negativ. "
+               f"Marginer måles i prosentpoeng (pp).{val_txt}")
+
 
     # --- Tabell 2: Aksjestruktur ---
     s = fund.get("struktur") or {}
