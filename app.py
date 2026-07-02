@@ -122,19 +122,11 @@ def _kr(x) -> str:
 
 
 def _pos_defaults(res: dict) -> tuple[float, float, float]:
-    """Default for inngang/stop%/mål% basert på pivot + stop fra analysen."""
+    """Default for inngang + faste prosentnivåer (5 % stop, 10 % mål)."""
     piv = res.get("pivot")
     entry_def = float(piv) if piv else float(res.get("pris") or 0.0)
-    stp = res.get("stop")
-    stop_pct_def = 8.0
-    if entry_def > 0 and stp is not None:
-        try:
-            stp = float(stp)
-            if stp < entry_def:
-                stop_pct_def = max(0.1, round((entry_def - stp) / entry_def * 100, 1))
-        except (TypeError, ValueError):
-            pass
-    mal_pct_def = round(stop_pct_def * 2, 1)
+    stop_pct_def = 5.0
+    mal_pct_def = 10.0
     return round(entry_def, 2), stop_pct_def, mal_pct_def
 
 
