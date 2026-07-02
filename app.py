@@ -317,19 +317,25 @@ def _pivot_tall(tekst) -> float:
         return float("nan")
 
 
-def formater_tabell(df: pd.DataFrame, live_priser: dict | None = None) -> pd.DataFrame:
+def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None) -> pd.DataFrame:
     vis = pd.DataFrame()
     vis["Ticker"] = df["ticker"]
     vis["Pris"] = df["pris"]
     vis["Setup"] = df["status"] + " " + df["statustekst"]
     vis["Til pivot"] = df["avstand_pivot"].map(_til_pivot_tekst)
-    if live_priser:
-        live = df["ticker"].map(live_priser)
+    if live:
+        # Live-kurs og -volum per ticker (tom → NaN, så regnestykkene tåler hull).
+        pris_live = pd.to_numeric(df["ticker"].map(lambda t: live.get(t, {}).get("pris")),
+                                  errors="coerce")
         # Live avstand til pivot: samme fortegn-konvensjon som avstand_pivot
         # (positiv = under pivot), regnet fra DAGENS kurs mot lagret pivot.
-        live_avst = (df["pivot"] - live) / df["pivot"] * 100
-        vis["Live"] = live
+        live_avst = (df["pivot"] - pris_live) / df["pivot"] * 100
+        vis["Live"] = pris_live
         vis["Til pivot (live)"] = live_avst.map(_til_pivot_tekst)
+        if naa_oslo is not None and "snittvolum50" in df.columns:
+            vol_live = df["ticker"].map(lambda t: live.get(t, {}).get("volum"))
+            vis["RVol (live)"] = [datamod.live_rvol(v, s, naa_oslo)
+                                  for v, s in zip(vol_live, df["snittvolum50"])]
     vis["Kriterie 1-7"] = df["score"].astype(str) + "/7"
     vis["RVol"] = df["rel_volum"] if "rel_volum" in df.columns else np.nan
     vis["RS"] = df["rs"]
@@ -372,6 +378,15 @@ def stil_hovedtabell(vis: pd.DataFrame):
             return lys
         return ""
 
+    def _rvol_live(v):
+        if pd.isna(v):
+            return ""
+        if v >= konfig.BRUDD_VOLUM_FAKTOR:
+            return sterk
+        if v >= 1.0:
+            return lys
+        return ""
+
     styler = vis.style
     if "Kriterie 1-7" in vis.columns:
         styler = styler.map(_krit, subset=["Kriterie 1-7"])
@@ -379,6 +394,8 @@ def stil_hovedtabell(vis: pd.DataFrame):
         styler = styler.map(_rvol, subset=["RVol"])
     if "Til pivot (live)" in vis.columns:
         styler = styler.map(_live, subset=["Til pivot (live)"])
+    if "RVol (live)" in vis.columns:
+        styler = styler.map(_rvol_live, subset=["RVol (live)"])
     return styler
 
 
@@ -392,6 +409,11 @@ TABELL_HJELP = {
     "Til pivot (live)": st.column_config.TextColumn(
         "Til pivot (live)", help="Hvor langt DAGENS kurs er fra pivot. Negativt = mangler så "
         "mange % på brudd akkurat nå. Grønn = bryter eller nærmer seg pivot live."),
+    "RVol (live)": st.column_config.NumberColumn(
+        "RVol (live)", format="%.1f×",
+        help="Projisert relativt volum i dag mot 50-dagers snitt: 1,0 = på vei mot en normal "
+        "dag, 2,0 = dobbelt så travelt. Justert for at volum er tyngst ved åpning/slutt – "
+        "grovt tidlig på dagen, mest presist utover ettermiddagen. Grønn ≥ 1,4×."),
     "Setup": st.column_config.TextColumn(
         "Setup", help="🟢 ferskt brudd (følg nå) · 🟡 brudd uten volum · "
         "⚪ klar/venter på brudd · 🔵 forlenget (for sent å jage)."),
@@ -510,9 +532,9 @@ with st.sidebar:
                            help="Vis kun aksjer der også den ukentlige trenden peker opp.")
     st.divider()
     vis_live = st.checkbox("🔴 Live-kurser (≈15 min forsinket)", value=False,
-                           help="Viser dagens intradag-kurs ved siden av lista, så du ser hvem "
-                                "som nærmer seg pivot akkurat nå. Rører ALDRI dataene vi "
-                                "screener på – kun til visning.")
+                           help="Viser dagens intradag-kurs OG projisert relativt volum ved siden "
+                                "av lista, så du ser hvem som nærmer seg pivot – og om det er volum "
+                                "på gang – akkurat nå. Rører ALDRI dataene vi screener på.")
     _sh = _status.get("sist_hentet")
     if _sh is not None:
         st.caption(f"🕔 Sist hentet: {_sh:%d.%m.%Y kl. %H:%M} (norsk tid)")
@@ -555,6 +577,7 @@ with fane1:
 
     # Live-kurser (valgfritt): hentes helt adskilt og påvirker ALDRI screening-dataene.
     live_priser = {}
+    naa_oslo = pd.Timestamp.now(tz="Europe/Oslo")
     if vis_live and not filt.empty:
         live_priser = hent_live_priser(tuple(filt["ticker"].head(80).tolist()))
 
@@ -563,7 +586,7 @@ with fane1:
         f"først, så de som er nærmest et brudd. Ferske brudd vises alltid, også under {min_krit}/7."
     )
     _tabell = st.dataframe(
-        stil_hovedtabell(formater_tabell(filt, live_priser or None)),
+        stil_hovedtabell(formater_tabell(filt, live_priser or None, naa_oslo)),
         width="stretch", hide_index=True, height=560, column_config=TABELL_HJELP,
         on_select="rerun", selection_mode="multi-row", key="hovedliste_tabell",
     )
@@ -585,7 +608,8 @@ with fane1:
         for _tk in _valgte:
             _s = datamod.serie_for(_priser_alle, _tk)
             _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[preset_navn])
-            _live_txt = f" · 🔴 live ≈ {live_priser[_tk]:.2f}" if _tk in live_priser else ""
+            _live_txt = (f" · 🔴 live ≈ {live_priser[_tk]['pris']:.2f}"
+                         if _tk in live_priser else "")
             if _r is None:
                 st.markdown(f"**{_tk}**")
                 st.caption("For lite historikk til å tegne chart.")

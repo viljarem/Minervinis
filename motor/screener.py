@@ -57,6 +57,8 @@ def analyser_ticker(serie: pd.DataFrame, ticker: str, preset: Preset = konfig.ST
     # på >1,4 (samme terskel som bruddlogikken bruker).
     vol_snitt50 = d["Volume"].rolling(50, min_periods=10).mean().shift(1).iloc[-1]
     rel_volum = float(d["Volume"].iloc[-1] / vol_snitt50) if vol_snitt50 and vol_snitt50 > 0 else np.nan
+    # Rent 50-dagers snittvolum (uten shift) – baseline for LIVE relativt volum i appen.
+    snitt_vol_50 = d["Volume"].rolling(50, min_periods=10).mean().iloc[-1]
     # Utvikling siden aksjen gikk inn i full trend (i prosent)
     utvikling = np.nan
     if kv_dato is not None:
@@ -98,6 +100,7 @@ def analyser_ticker(serie: pd.DataFrame, ticker: str, preset: Preset = konfig.ST
         "rs_avkastning": indikatorer.rs_avkastning(d["Close"]),
         "dagsomsetning": dagsomsetning,
         "rel_volum": None if pd.isna(rel_volum) else round(rel_volum, 2),
+        "snittvolum50": None if pd.isna(snitt_vol_50) else round(float(snitt_vol_50), 0),
         "perioder": [(pd.Timestamp(a).date().isoformat(), pd.Timestamp(b).date().isoformat()) for a, b in perioder],
     }
 

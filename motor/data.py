@@ -251,13 +251,61 @@ def hent_live(ticker: str, periode: str = "2y") -> pd.DataFrame:
     return serie_for(df, ticker)
 
 
-def hent_sanntid(tickere: list[str]) -> dict[str, float]:
-    """Henter DAGENS siste kurs (Yahoo, ca. 15 min forsinket) – KUN til visning.
+# ---------------------------------------------------------------------------
+# Live-kurser + projisert relativt volum (KUN til visning – rører aldri fila)
+# ---------------------------------------------------------------------------
+# Typisk andel av en dags volum som er handlet innen et gitt klokkeslett på Oslo
+# Børs. Volum er U-formet – tyngst rundt åpning (09:00) og mot slutten (~16:25) –
+# så en rett linje ville bommet. Tallene er anslag, men fanger formen godt nok.
+# Minutter fra 09:00  ->  andel av dagsvolum (0–1).
+_VOLUMKURVE_MIN = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390, 420, 445]
+_VOLUMKURVE_AND = [0.0, 0.12, 0.21, 0.29, 0.36, 0.42, 0.48, 0.54,
+                   0.60, 0.66, 0.72, 0.78, 0.84, 0.90, 0.95, 1.0]
+
+
+def dagsandel(naa) -> float:
+    """Typisk andel (0–1) av dagens volum som er handlet innen tidspunktet `naa`.
+
+    Brukes til å projisere dagens volum-så-langt til et helt døgn, slik at «live»
+    relativt volum blir meningsfullt også tidlig på dagen (da rått volum ellers
+    alltid ser lavt ut). Utenfor børstid returneres 1.0 (økta er komplett).
+    `naa` er en tidssone-bevisst Timestamp i norsk tid.
+    """
+    aapen = naa.replace(hour=9, minute=0, second=0, microsecond=0)
+    minutter = (naa - aapen).total_seconds() / 60.0
+    if minutter <= 0 or minutter >= _VOLUMKURVE_MIN[-1]:
+        return 1.0
+    return float(np.interp(minutter, _VOLUMKURVE_MIN, _VOLUMKURVE_AND))
+
+
+def live_rvol(volum, snitt50, naa) -> float:
+    """Projisert relativt volum for inneværende dag, målt mot 50-dagers snittvolum.
+
+    1,0 = på vei mot et helt normalt dagsvolum · 2,0 = dobbelt så travelt som
+    normalt. Vi deler dagens volum-så-langt på den TYPISKE andelen som pleier å
+    være handlet på dette klokkeslettet (se dagsandel), så tallet ikke blir
+    kunstig lavt om morgenen. Fortsatt et anslag – mest presist utover dagen.
+    Returnerer NaN når vi mangler tall.
+    """
+    try:
+        volum = float(volum)
+        snitt50 = float(snitt50)
+    except (TypeError, ValueError):
+        return float("nan")
+    if pd.isna(volum) or pd.isna(snitt50) or snitt50 <= 0 or volum <= 0:
+        return float("nan")
+    andel = max(dagsandel(naa), 0.05)          # gulv så vi ikke deler på ~0 ved åpning
+    return (volum / andel) / snitt50
+
+
+def hent_sanntid(tickere: list[str]) -> dict[str, dict]:
+    """Henter DAGENS siste kurs OG volum (Yahoo, ca. 15 min forsinket) – KUN til visning.
 
     VIKTIG: dette er helt adskilt fra kurshistorikken. Funksjonen rører ALDRI
-    parquet-fila og lagrer ingenting – den returnerer bare {ticker: siste_pris}
-    som appen kan vise ved siden av. Slik kan vi se hvem som nærmer seg pivot
-    intradag, uten fare for at OHLC-dataene vi screener på blir feil.
+    parquet-fila og lagrer ingenting – den returnerer bare
+    {ticker: {"pris": .., "volum": ..}} som appen kan vise ved siden av. Slik kan
+    vi se hvem som nærmer seg pivot – og om det er volum på gang – intradag, uten
+    fare for at OHLC-dataene vi screener på blir feil.
 
     Alle feil svelges (tom dict), så en treg eller nede Yahoo aldri kan krasje
     siden eller påvirke screeningen.
@@ -279,21 +327,29 @@ def hent_sanntid(tickere: list[str]) -> dict[str, float]:
     if rå is None or len(rå) == 0:
         return {}
 
-    ut: dict[str, float] = {}
+    def _siste(serie) -> float:
+        s = serie.dropna()
+        return float(s.iloc[-1]) if not s.empty else float("nan")
+
+    ut: dict[str, dict] = {}
     try:
         if isinstance(rå.columns, pd.MultiIndex):
             tilgjengelige = set(rå.columns.get_level_values(0))
             for t in tickere:
                 if t not in tilgjengelige or "Close" not in rå[t].columns:
                     continue
-                lukk = rå[t]["Close"].dropna()
-                if not lukk.empty:
-                    ut[t] = float(lukk.iloc[-1])
+                kol = rå[t]
+                pris = _siste(kol["Close"])
+                if pd.isna(pris):
+                    continue
+                volum = _siste(kol["Volume"]) if "Volume" in kol.columns else float("nan")
+                ut[t] = {"pris": pris, "volum": volum}
         else:
             # yfinance gir flatt format når det bare er én ticker
-            lukk = rå["Close"].dropna()
-            if not lukk.empty:
-                ut[tickere[0]] = float(lukk.iloc[-1])
+            pris = _siste(rå["Close"]) if "Close" in rå.columns else float("nan")
+            if not pd.isna(pris):
+                volum = _siste(rå["Volume"]) if "Volume" in rå.columns else float("nan")
+                ut[tickere[0]] = {"pris": pris, "volum": volum}
     except Exception:
         return {}
     return ut
