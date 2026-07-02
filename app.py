@@ -121,58 +121,107 @@ def _kr(x) -> str:
         return "—"
 
 
-def posisjon_verktoy(res: dict, nokkel: str) -> tuple[dict | None, str]:
-    """«Long Position»-verktøy under chartet – avstander, prosent og risk/reward.
+def _pos_defaults(res: dict) -> tuple[float, float, float]:
+    """Default for inngang/stop%/mål% basert på pivot + stop fra analysen."""
+    piv = res.get("pivot")
+    entry_def = float(piv) if piv else float(res.get("pris") or 0.0)
+    stp = res.get("stop")
+    stop_pct_def = 8.0
+    if entry_def > 0 and stp is not None:
+        try:
+            stp = float(stp)
+            if stp < entry_def:
+                stop_pct_def = max(0.1, round((entry_def - stp) / entry_def * 100, 1))
+        except (TypeError, ValueError):
+            pass
+    mal_pct_def = round(stop_pct_def * 2, 1)
+    return round(entry_def, 2), stop_pct_def, mal_pct_def
 
-    lightweight-charts kan ikke tegnes med musa slik TradingView gjør, så i stedet
-    skriver du inn inngang, stop og mål i tre felt. Vi regner ut hvor mye du
-    risikerer, hvor mye du kan tjene, forholdet mellom dem (risk/reward), og – hvis
-    du fyller inn hvor mange kroner du vil risikere – hvor mange aksjer du skal
-    kjøpe. Returnerer (pos, suffix): pos = {entry, stop, mal} når du vil tegne den
-    i chartet (ellers None), og suffix legges på chart-nøkkelen så bildet tegnes på
-    nytt når tallene endres.
-    """
-    pos, suffix = None, ""
-    with st.expander("📐 Posisjon & risk/reward (tegn long-posisjon)"):
-        piv = res.get("pivot")
-        entry_def = float(piv) if piv else float(res.get("pris") or 0.0)
-        stp = res.get("stop")
-        stop_def = float(stp) if stp else (round(entry_def * 0.92, 2) if entry_def else 0.0)
 
+def _init_posisjon_state(res: dict, nokkel: str) -> None:
+    """Legger inn førsteverdier i session_state for posisjonsverktøyet."""
+    entry_def, stop_pct_def, mal_pct_def = _pos_defaults(res)
+    st.session_state.setdefault(f"pos_e_{nokkel}", entry_def)
+    st.session_state.setdefault(f"pos_sp_{nokkel}", stop_pct_def)
+    st.session_state.setdefault(f"pos_mp_{nokkel}", mal_pct_def)
+    st.session_state.setdefault(f"pos_n_{nokkel}", 0)
+    st.session_state.setdefault(f"pos_p_{nokkel}", True)
+
+
+def _posisjon_fra_state(nokkel: str) -> tuple[dict | None, str]:
+    """Henter aktiv posisjon (entry/stop/mål i kr) ut fra prosent-input i state."""
+    try:
+        entry_v = float(st.session_state.get(f"pos_e_{nokkel}", 0.0))
+        stop_pct_v = float(st.session_state.get(f"pos_sp_{nokkel}", 0.0))
+        mal_pct_v = float(st.session_state.get(f"pos_mp_{nokkel}", 0.0))
+    except (TypeError, ValueError):
+        return None, ""
+
+    if not st.session_state.get(f"pos_p_{nokkel}", True):
+        return None, ""
+    if not (entry_v > 0 and stop_pct_v > 0 and mal_pct_v > 0):
+        return None, ""
+
+    stop_v = round(entry_v * (1 - stop_pct_v / 100), 4)
+    mal_v = round(entry_v * (1 + mal_pct_v / 100), 4)
+    if not (0 < stop_v < entry_v < mal_v):
+        return None, ""
+
+    pos = {"entry": entry_v, "stop": stop_v, "mal": mal_v}
+    suffix = f"_pos{entry_v:.2f}_{stop_pct_v:.1f}_{mal_pct_v:.1f}"
+    return pos, suffix
+
+
+def posisjon_verktoy(res: dict, nokkel: str) -> None:
+    """Kalkulator for long-posisjon med prosent-input og kroner som output."""
+    _init_posisjon_state(res, nokkel)
+
+    with st.expander("📐 Posisjon & risk/reward (helt nederst)"):
         c1, c2, c3, c4 = st.columns(4)
-        entry_v = c1.number_input("Inngang", min_value=0.0, value=round(entry_def, 2),
+        entry_v = c1.number_input("Inngang (kr)", min_value=0.0,
+                                  value=float(st.session_state[f"pos_e_{nokkel}"]),
                                   step=0.1, format="%.2f", key=f"pos_e_{nokkel}")
-        stop_v = c2.number_input("Stop", min_value=0.0, value=round(stop_def, 2),
-                                 step=0.1, format="%.2f", key=f"pos_s_{nokkel}")
-        mal_def = posisjon.forslag_mal(entry_v, stop_v) or (round(entry_v * 1.15, 2) if entry_v else 0.0)
-        mal_v = c3.number_input("Mål", min_value=0.0, value=round(float(mal_def), 2),
-                                step=0.1, format="%.2f", key=f"pos_m_{nokkel}")
-        risiko_kr = c4.number_input("Risiker (kr)", min_value=0.0, value=0.0, step=500.0,
-                                    format="%.0f", key=f"pos_r_{nokkel}",
-                                    help="Valgfritt: hvor mange kroner du vil tape hvis stop "
-                                         "treffes. Gir antall aksjer å kjøpe.")
+        stop_pct_v = c2.number_input("Stop (%)", min_value=0.1,
+                                     value=float(st.session_state[f"pos_sp_{nokkel}"]),
+                                     step=0.1, format="%.1f", key=f"pos_sp_{nokkel}")
+        mal_pct_v = c3.number_input("Mål (%)", min_value=0.1,
+                                    value=float(st.session_state[f"pos_mp_{nokkel}"]),
+                                    step=0.1, format="%.1f", key=f"pos_mp_{nokkel}")
+        antall_v = int(c4.number_input("Antall aksjer", min_value=0,
+                                       value=int(st.session_state[f"pos_n_{nokkel}"]),
+                                       step=10, key=f"pos_n_{nokkel}"))
 
-        nt = posisjon.nokkeltall(entry_v, stop_v, mal_v, risiko_kr if risiko_kr > 0 else None)
+        stop_v = round(entry_v * (1 - stop_pct_v / 100), 4) if entry_v > 0 else 0.0
+        mal_v = round(entry_v * (1 + mal_pct_v / 100), 4) if entry_v > 0 else 0.0
+        nt = posisjon.nokkeltall(entry_v, stop_v, mal_v)
+
         if nt["gyldig"]:
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Risiko ↓", f"−{nt['risiko_pct']:.1f} %")
-            m2.metric("Gevinst ↑", f"+{nt['gevinst_pct']:.1f} %")
-            m3.metric("Risk/reward", f"{nt['rr']:.2f} : 1" if nt["rr"] else "—")
+            tap_pr_aksje = max(0.0, entry_v - stop_v)
+            gev_pr_aksje = max(0.0, mal_v - entry_v)
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Stopkurs", f"{stop_v:.2f} kr", f"−{stop_pct_v:.1f} %")
+            m2.metric("Målkurs", f"{mal_v:.2f} kr", f"+{mal_pct_v:.1f} %")
+            m3.metric("Tap pr aksje", f"{tap_pr_aksje:.2f} kr")
+            m4.metric("Gevinst pr aksje", f"{gev_pr_aksje:.2f} kr")
+
+            m5, m6 = st.columns(2)
+            m5.metric("Risk/reward", f"{nt['rr']:.2f} : 1" if nt["rr"] else "—")
+            m6.metric("Total innsats", f"{_kr(entry_v * antall_v)} kr" if antall_v > 0 else "—")
+
+            if antall_v > 0:
+                totalt_tap = tap_pr_aksje * antall_v
+                total_gevinst = gev_pr_aksje * antall_v
+                st.caption(f"💸 Stop-tap ved **{antall_v} aksjer**: ca. **{_kr(totalt_tap)} kr** · "
+                           f"🎯 potensiell gevinst: **{_kr(total_gevinst)} kr**.")
+
             if nt["rr"] and nt["rr"] >= 2:
-                st.caption(f"✅ Risk/reward {nt['rr']:.2f} : 1 – oppsiden er {nt['rr']:.1f}× "
-                           "så stor som det du risikerer.")
+                st.caption(f"✅ Risk/reward {nt['rr']:.2f} : 1 – oppsiden er {nt['rr']:.1f}× risikoen.")
             elif nt["rr"]:
                 st.caption(f"⚠️ Risk/reward {nt['rr']:.2f} : 1 – Minervini liker helst minst 2 : 1.")
-            if "antall" in nt:
-                st.caption(f"💰 Kjøp **{nt['antall']} aksjer** (~{_kr(nt['kostnad'])} kr) for å "
-                           f"risikere ca. {_kr(risiko_kr)} kr.")
-            if st.checkbox("Tegn posisjonen i chartet", value=True, key=f"pos_p_{nokkel}"):
-                pos = {"entry": entry_v, "stop": stop_v, "mal": mal_v}
-                suffix = f"_pos{entry_v}_{stop_v}_{mal_v}"
         else:
-            st.caption("Sett **stop < inngang < mål** (stop under kursen, mål over) for å "
-                       "regne risk/reward.")
-    return pos, suffix
+            st.caption("Ugyldig oppsett – bruk positive prosentverdier og inngang over 0.")
+
+        st.checkbox("Tegn posisjonen i chartet", value=True, key=f"pos_p_{nokkel}")
 
 
 # ---------------------------------------------------------------------------
@@ -778,7 +827,8 @@ with fane2:
         if res is None:
             st.info("For lite historikk til å tegne chart for denne aksjen.")
         else:
-            pos, pos_suffix = posisjon_verktoy(res, f"chart_{valg}")
+            _init_posisjon_state(res, f"chart_{valg}")
+            pos, pos_suffix = _posisjon_fra_state(f"chart_{valg}")
             spec = lag_chart_lwc(serie, res, PERIODER_VALG[periode],
                                  vis_ma=vis_ma, vis_52u=vis_52u, vis_vcp=vis_vcp,
                                  vis_7av7=vis_7av7, vis_hist=vis_hist, pos=pos)
@@ -792,6 +842,8 @@ with fane2:
                            "🔴 stiplet rød = stop · 🟢/🔴 pil = ble/mistet 7/7. Svake stiplede "
                            "gull-streker = historiske brudd (ubiased).")
                 vis_vcp_boks(res)
+                st.divider()
+                posisjon_verktoy(res, f"chart_{valg}")
 
 # --- Fane 3: Søk ---
 with fane3:
@@ -824,7 +876,8 @@ with fane3:
                 if not HAR_LWC:
                     st.warning("Chart-komponenten er ikke lastet i dette miljøet ennå.")
                 else:
-                    pos3, pos_suffix3 = posisjon_verktoy(res, f"sok_{sok}")
+                    _init_posisjon_state(res, f"sok_{sok}")
+                    pos3, pos_suffix3 = _posisjon_fra_state(f"sok_{sok}")
                     spec3 = lag_chart_lwc(serie, res, PERIODER_VALG[periode3],
                                           vis_ma=vis_ma3, vis_52u=vis_52u3, vis_vcp=vis_vcp3,
                                           vis_7av7=vis_7av7_3, vis_hist=vis_hist3, pos=pos3)
@@ -833,3 +886,5 @@ with fane3:
                             spec3,
                             key=f"sok_{sok}_{periode3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{pos_suffix3}")
                 vis_vcp_boks(res)
+                st.divider()
+                posisjon_verktoy(res, f"sok_{sok}")
