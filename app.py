@@ -137,7 +137,7 @@ def _init_posisjon_state(res: dict, nokkel: str) -> None:
     st.session_state.setdefault(f"pos_sp_{nokkel}", stop_pct_def)
     st.session_state.setdefault(f"pos_mp_{nokkel}", mal_pct_def)
     st.session_state.setdefault(f"pos_n_{nokkel}", 0)
-    st.session_state.setdefault(f"pos_p_{nokkel}", True)
+    st.session_state.setdefault(f"pos_p_{nokkel}", False)
 
 
 def _posisjon_fra_state(nokkel: str) -> tuple[dict | None, str]:
@@ -223,7 +223,7 @@ def posisjon_verktoy(res: dict, nokkel: str) -> None:
         else:
             st.caption("Ugyldig oppsett – bruk positive prosentverdier og inngang over 0.")
 
-        st.checkbox("Tegn posisjonen i chartet", value=True, key=f"pos_p_{nokkel}")
+        st.checkbox("Tegn posisjonen i chartet", value=False, key=f"pos_p_{nokkel}")
 
 
 # ---------------------------------------------------------------------------
