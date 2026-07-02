@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from motor import konfig, data as datamod, indikatorer, minervini, posisjon, screener, univers, vcp
+from motor import konfig, data as datamod, fundamenta, indikatorer, minervini, posisjon, screener, univers, vcp
 
 # TradingViews lightweight-charts (testfane). Pakket i try/except så appen aldri
 # krasjer om komponenten ikke er installert i miljøet (f.eks. rett etter utrulling).
@@ -130,6 +130,196 @@ def vis_vcp_boks(res: dict) -> None:
         unsafe_allow_html=True,
     )
 
+
+# ---------------------------------------------------------------------------
+# Fundamentale tall (vekst, marginer, aksjestruktur) – hentes på forespørsel
+# ---------------------------------------------------------------------------
+@st.cache_data(ttl=43200, show_spinner=False)   # caches i 12 timer per ticker
+def hent_fundamenta_cached(ticker: str) -> dict:
+    """Bufret innpakning – henter fundamentaltall bare én gang per aksje per 12 t."""
+    return fundamenta.hent_fundamenta(ticker)
+
+
+def _stor_tall(x) -> str:
+    """Store tall pent på norsk: 2489187863 → '2,49 mrd', 272700000 → '272,7 mill'."""
+    try:
+        x = float(x)
+    except (TypeError, ValueError):
+        return "—"
+    if pd.isna(x):
+        return "—"
+    a = abs(x)
+    if a >= 1e9:
+        s = f"{x / 1e9:.2f} mrd"
+    elif a >= 1e6:
+        s = f"{x / 1e6:.1f} mill"
+    elif a >= 1e3:
+        s = f"{x / 1e3:.1f} k"
+    else:
+        s = f"{x:.0f}"
+    return s.replace(".", ",")
+
+
+def _belop(x, valuta) -> str:
+    """Beløp med rapporteringsvaluta bak (valuta kan mangle)."""
+    t = _stor_tall(x)
+    if t == "—":
+        return t
+    return f"{t} {valuta}" if valuta else t
+
+
+def _vekst_farge(pct) -> str:
+    """Cellefarge for vekst: ≥25 % kraftig grønn, 15–25 % lys grønn, negativ svak rød."""
+    if pct is None or pd.isna(pct):
+        return ""
+    if pct >= 25:
+        return "#4e8a4e"      # kraftig grønn – Minervini-standard
+    if pct >= 15:
+        return "#cfe6cf"      # lys grønn – bra for Oslo Børs
+    if pct < 0:
+        return "#f3d9d9"      # svak rød – negativ vekst
+    return ""
+
+
+def _pp_farge(pp) -> str:
+    """Cellefarge for margin-endring: utvider seg (grønn) / krymper (rød)."""
+    if pp is None or pd.isna(pp):
+        return ""
+    if pp > 0:
+        return "#cfe6cf"
+    if pp < 0:
+        return "#f3d9d9"
+    return ""
+
+
+def _celle(txt: str, bg: str = "", venstre: bool = False, sterk: bool = False) -> str:
+    align = "left" if venstre else "right"
+    hvit = "color:#ffffff;font-weight:600;" if sterk else ""
+    b = f"background:{bg};" if bg else ""
+    return (f'<td style="padding:3px 10px;border-bottom:1px solid #e2e8e2;'
+            f'text-align:{align};font-variant-numeric:tabular-nums;{b}{hvit}">{txt}</td>')
+
+
+def _pct_txt(pct) -> str:
+    return "—" if pct is None or pd.isna(pct) else f"{pct:+.1f} %"
+
+
+def _pp_txt(pp) -> str:
+    return "—" if pp is None or pd.isna(pp) else f"{pp:+.1f} pp"
+
+
+def _margin_txt(m) -> str:
+    return "—" if m is None or pd.isna(m) else f"{m:.1f} %"
+
+
+def _kvartal_navn(iso) -> str:
+    try:
+        t = pd.Timestamp(iso)
+        return f"Q{(t.month - 1) // 3 + 1} {t.year}"
+    except Exception:
+        return "—"
+
+
+def _aar_navn(iso) -> str:
+    try:
+        return str(pd.Timestamp(iso).year)
+    except Exception:
+        return "—"
+
+
+def _fund_tabell(overskrifter: list[str], rader_html: str) -> str:
+    """Bygger en grønn HTML-tabell med gitt topprad og ferdig kropp."""
+    celler = "".join(
+        f'<th style="text-align:{"left" if i == 0 else "right"};padding:5px 10px;'
+        f'font-weight:600;">{h}</th>' for i, h in enumerate(overskrifter))
+    return ('<table style="width:100%;border-collapse:collapse;font-size:0.82rem;'
+            'line-height:1.25;border:1px solid #cdddcd;border-radius:8px;overflow:hidden;">'
+            f'<thead><tr style="background:#5b8a5b;color:#ffffff;">{celler}</tr></thead>'
+            f'<tbody>{rader_html}</tbody></table>')
+
+
+def _navn_celle(t: str) -> str:
+    return f'<td style="padding:3px 10px;border-bottom:1px solid #e2e8e2;">{t}</td>'
+
+
+def _tegn_fundamenta(fund: dict) -> None:
+    """Tegner de to fundamenttabellene (vekst/marginer + aksjestruktur)."""
+    valuta = fund.get("valuta")
+    kv = fund.get("kvartal") or {}
+    aar = fund.get("aar") or {}
+
+    def belop_rad(tittel, nokkel):
+        kv_v = _belop(kv.get(nokkel), valuta)
+        aar_v = _belop(aar.get(nokkel), valuta)
+        kv_p = kv.get(f"{nokkel}_vekst")
+        aar_p = aar.get(f"{nokkel}_vekst")
+        return ("<tr>" + _navn_celle(tittel)
+                + _celle(kv_v)
+                + _celle(_pct_txt(kv_p), _vekst_farge(kv_p), sterk=(kv_p is not None and kv_p >= 25))
+                + _celle(aar_v)
+                + _celle(_pct_txt(aar_p), _vekst_farge(aar_p), sterk=(aar_p is not None and aar_p >= 25))
+                + "</tr>")
+
+    def margin_rad(tittel, nokkel):
+        kv_e = kv.get(f"{nokkel}_endring")
+        aar_e = aar.get(f"{nokkel}_endring")
+        return ("<tr>" + _navn_celle(tittel)
+                + _celle(_margin_txt(kv.get(nokkel)))
+                + _celle(_pp_txt(kv_e), _pp_farge(kv_e))
+                + _celle(_margin_txt(aar.get(nokkel)))
+                + _celle(_pp_txt(aar_e), _pp_farge(aar_e))
+                + "</tr>")
+
+    kropp1 = (belop_rad("Omsetning", "omsetning")
+              + belop_rad("Resultat", "resultat")
+              + margin_rad("Bruttomargin", "brutto_margin")
+              + margin_rad("Driftsmargin", "drift_margin")
+              + margin_rad("Nettomargin", "netto_margin"))
+    st.markdown(_fund_tabell(["Vekst & marginer", "Kvartal", "Δ år/år", "År", "Δ år/år"], kropp1),
+                unsafe_allow_html=True)
+
+    kv_p = _kvartal_navn(kv.get("dato")); kv_pi = _kvartal_navn(kv.get("dato_ifjor"))
+    aar_p = _aar_navn(aar.get("dato")); aar_pi = _aar_navn(aar.get("dato_ifjor"))
+    val_txt = f" · Beløp i {valuta}" if valuta else ""
+    st.caption(f"Kvartal (år/år): {kv_p} vs {kv_pi} · År: {aar_p} vs {aar_pi}{val_txt}. "
+               "🟩 ≥ 25 % · 🟢 15–25 % · 🟥 negativ. Marginendring i prosentpoeng (pp).")
+
+    # --- Tabell 2: Aksjestruktur ---
+    s = fund.get("struktur") or {}
+    fri_txt = _stor_tall(s.get("float"))
+    if s.get("float_pct") is not None:
+        fri_txt += f" ({s['float_pct']:.1f} % av totalen)"
+    struktur_rader = [
+        ("Utestående aksjer", _stor_tall(s.get("utestaende"))),
+        ("Fritt omsettelige (free float)", fri_txt),
+        ("Eid av innsidere", "—" if s.get("innsidere_pct") is None else f"{s['innsidere_pct']:.1f} %"),
+        ("Eid av institusjoner", "—" if s.get("institusjoner_pct") is None else f"{s['institusjoner_pct']:.1f} %"),
+    ]
+    kropp2 = "".join(
+        f'<tr style="background:{"#eef4ee" if i % 2 else "#ffffff"};">'
+        + _navn_celle(navn)
+        + f'<td style="padding:3px 10px;border-bottom:1px solid #e2e8e2;text-align:right;'
+          f'font-weight:600;font-variant-numeric:tabular-nums;">{verdi}</td></tr>'
+        for i, (navn, verdi) in enumerate(struktur_rader))
+    st.markdown(_fund_tabell(["Aksjestruktur", "Verdi"], kropp2), unsafe_allow_html=True)
+    st.caption("Lav free float = få frie aksjer i omløp – kan gi raskere kursbevegelser "
+               "(Minervini liker det). Tallene er Yahoos anslag; eksakt topp-50-liste finnes "
+               "ikke gratis automatisk.")
+
+
+def fundamenta_seksjon(ticker: str, nokkel: str) -> None:
+    """Toggle + henting + visning. Holder chartet raskt (henter kun når du vil)."""
+    vis = st.toggle("📊 Vis fundamentale tall (vekst, marginer, aksjer)",
+                    value=False, key=f"fund_{nokkel}")
+    if not vis:
+        return
+    with st.spinner(f"Henter fundamentaltall for {ticker} ..."):
+        fund = hent_fundamenta_cached(ticker)
+    if not fund.get("tilgjengelig"):
+        st.info(f"Yahoo har ingen fundamentaldata for {ticker}. Det er vanlig for mindre "
+                "aksjer på Euronext Growth/Expand.")
+        return
+    _tegn_fundamenta(fund)
 
 
 def _kr(x) -> str:
@@ -863,6 +1053,7 @@ with fane2:
                            "🔴 stiplet rød = stop · 🟢/🔴 pil = ble/mistet 7/7. Svake stiplede "
                            "gull-streker = historiske brudd (ubiased).")
                 vis_vcp_boks(res)
+                fundamenta_seksjon(valg, f"chart_{valg}")
                 st.divider()
                 posisjon_verktoy(res, f"chart_{valg}")
 
@@ -907,5 +1098,6 @@ with fane3:
                             spec3,
                             key=f"sok_{sok}_{periode3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{pos_suffix3}")
                 vis_vcp_boks(res)
+                fundamenta_seksjon(sok, f"sok_{sok}")
                 st.divider()
                 posisjon_verktoy(res, f"sok_{sok}")
