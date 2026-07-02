@@ -25,7 +25,7 @@ try:
 except Exception:
     HAR_LWC = False
 
-st.set_page_config(page_title="Minervini-screener · Oslo Børs", layout="wide")
+st.set_page_config(page_title="DEMO-Screener · Oslo Børs", layout="wide")
 
 
 # ---------------------------------------------------------------------------
@@ -360,7 +360,7 @@ TABELL_HJELP = {
 # ---------------------------------------------------------------------------
 # Selve siden
 # ---------------------------------------------------------------------------
-st.title("📈 Minervini-screener · Oslo Børs")
+st.title("📈 DEMO-Screener · Oslo Børs")
 
 versjon = data_versjon()
 if versjon == 0:

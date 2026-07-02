@@ -61,7 +61,7 @@ def _bygg_epost(df: pd.DataFrame, endringer: dict) -> tuple[str, str]:
     """Returnerer (emne, html-innhold) for e-posten."""
     dato = datetime.now().strftime("%d.%m.%Y")
     antall = int(df["oppfyller"].sum()) if not df.empty else 0
-    emne = f"Minervini Oslo Børs · {dato} · {antall} treff · {len(endringer['ferske_brudd'])} ferske brudd"
+    emne = f"DEMO-Screener · Oslo Børs · {dato} · {antall} treff · {len(endringer['ferske_brudd'])} ferske brudd"
 
     def liste(navn, tickere):
         if not tickere:
@@ -69,7 +69,7 @@ def _bygg_epost(df: pd.DataFrame, endringer: dict) -> tuple[str, str]:
         return f"<p><b>{navn}:</b> {', '.join(tickere)}</p>"
 
     html = f"""
-    <h2>Minervini-screener · {dato}</h2>
+    <h2>DEMO-Screener · {dato}</h2>
     <p>{antall} aksjer oppfyller trend-kriteriene i dag.</p>
     {liste("🟢 Ferske brudd (over pivot på volum)", endringer["ferske_brudd"])}
     {liste("🆕 Nye i lista", endringer["nye"])}
