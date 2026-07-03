@@ -344,3 +344,61 @@ def ferskt_brudd(df: pd.DataFrame) -> dict | None:
         "kilde": "motstand",
     }
 
+
+# ---------------------------------------------------------------------------
+# Volum rundt bruddet (RVol-signatur) + volumforløp til lista
+# ---------------------------------------------------------------------------
+def _rvol_kolonne(df: pd.DataFrame) -> pd.Series:
+    """Relativt volum per dag: dagens volum / snittet av de 50 FORUTGÅENDE dagene.
+
+    1,0 = helt normalt, >1 = mer handel enn vanlig. Samme definisjon som ellers
+    i appen (shift(1) så dagen selv ikke er med i snittet den måles mot).
+    """
+    d = df.dropna(subset=["Close"])
+    snitt50 = d["Volume"].rolling(50, min_periods=10).mean().shift(1)
+    rvol = d["Volume"] / snitt50
+    return rvol.replace([np.inf, -np.inf], np.nan)
+
+
+def volum_signatur(df: pd.DataFrame, bruddato, dager_for: int = 2,
+                   dager_etter: int = 2) -> list[dict]:
+    """Relativt volum for dagene rundt et brudd: dag −dager_for … +dager_etter.
+
+    Minervini vil se at volumet TØRKER INN i basen og så EKSPLODERER på selve
+    bruddet (dag 0). Returnerer en liste [{offset, dato, rvol, er_brudd}] – ett
+    element per dag som faktisk finnes. Dager som ikke er kommet ennå (framtid
+    for et ferskt brudd) utelates rett og slett. Tom liste hvis ingen bruddato.
+    """
+    if bruddato is None:
+        return []
+    d = df.dropna(subset=["Close"])
+    try:
+        pos = int(d.index.get_loc(pd.Timestamp(bruddato)))
+    except (KeyError, TypeError):
+        return []
+    rvol = _rvol_kolonne(df)
+    ut: list[dict] = []
+    for off in range(-dager_for, dager_etter + 1):
+        i = pos + off
+        if i < 0 or i >= len(d):
+            continue
+        rv = rvol.iloc[i]
+        ut.append({
+            "offset": off,
+            "dato": pd.Timestamp(d.index[i]).date().isoformat(),
+            "rvol": None if pd.isna(rv) else round(float(rv), 2),
+            "er_brudd": off == 0,
+        })
+    return ut
+
+
+def rvol_serie(df: pd.DataFrame, dager: int = 10) -> list[float]:
+    """Relativt volum for de siste `dager` dagene (til mini-sparklinen i lista).
+
+    Viser volumforløpet – inntørking så sprut – på hver rad. NaN der snittet ennå
+    ikke kan regnes (helt i starten av historikken).
+    """
+    rvol = _rvol_kolonne(df).iloc[-dager:]
+    return [None if pd.isna(x) else round(float(x), 2) for x in rvol.tolist()]
+
+

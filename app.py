@@ -147,6 +147,41 @@ def vis_vcp_boks(res: dict) -> None:
         unsafe_allow_html=True,
     )
 
+    # Volumsignatur rundt bruddet (dag −2 … +2). Bruddagen (0) farges grønn hvis
+    # den kom på høyt volum (≥ trigger), ellers gul – akkurat det Minervini vil se.
+    sig = res.get("volum_signatur") or []
+    if sig:
+        trigger = konfig.BRUDD_VOLUM_FAKTOR
+        chips = []
+        for e in sig:
+            off, rv, er_brudd = e["offset"], e["rvol"], e["er_brudd"]
+            lab = "0" if off == 0 else f"{off:+d}"
+            if rv is None:
+                inn, bg, col = f"{lab}: –", "#eef2f7", "#94a3b8"
+            else:
+                komma = f"{rv:.1f}".replace(".", ",")
+                paa_volum = er_brudd and rv >= trigger
+                inn = f"{lab}: {komma}×" + (" ✅" if paa_volum else "")
+                if er_brudd:
+                    bg, col = ("#b7e4c7", "#14532d") if rv >= trigger else ("#fde68a", "#78350f")
+                else:
+                    bg, col = "#eef4ee", "#1f2937"
+            chips.append(
+                f'<span style="display:inline-block;padding:2px 9px;margin:2px;border-radius:6px;'
+                f'background:{bg};color:{col};font-weight:600;font-variant-numeric:tabular-nums;'
+                f'font-size:0.8rem;">{inn}</span>'
+            )
+        trig_txt = f"{trigger:.1f}".replace(".", ",")
+        st.markdown(
+            '<div style="margin:10px 0 2px;font-size:0.82rem;color:#4b5563;">'
+            '📊 <b>Volum rundt bruddet</b> — × mot 50-dagers snitt · 0 = bruddagen '
+            f'(grønn = brudd på høyt volum ≥ {trig_txt}×):</div>'
+            '<div>' + "".join(chips) + '</div>',
+            unsafe_allow_html=True,
+        )
+    elif res.get("pivot") is not None:
+        st.caption("📊 Volumsignatur rundt bruddet vises så snart aksjen faktisk bryter opp gjennom pivot.")
+
 
 # ---------------------------------------------------------------------------
 # Fundamentale tall (vekst, marginer, aksjestruktur) – hentes på forespørsel
@@ -758,6 +793,22 @@ def _live_verdi(v):
     return None, None
 
 
+def _signatur_kort(sig) -> str:
+    """Kompakt volumsignatur til hovedlista: fem RVol-tall for dag −2 … +2.
+
+    Midterste tall (indeks 2) = selve bruddagen. «–» = dag mangler (framtid for et
+    ferskt brudd, eller før datastart), «—» = aksjen har ikke brutt pivot ennå.
+    """
+    if not isinstance(sig, list) or not sig:
+        return "—"
+    etter_offset = {e["offset"]: e["rvol"] for e in sig}
+    biter = []
+    for off in (-2, -1, 0, 1, 2):
+        rv = etter_offset.get(off)
+        biter.append("–" if rv is None else f"{rv:.1f}".replace(".", ","))
+    return " ".join(biter)
+
+
 def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None) -> pd.DataFrame:
     vis = pd.DataFrame()
     vis["Ticker"] = df["ticker"]
@@ -784,6 +835,8 @@ def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None) -
                                   for v, s in zip(vol_liste, df["snittvolum50"])]
     vis["Kriterie 1-7"] = df["score"].astype(str) + "/7"
     vis["RVol"] = df["rel_volum"] if "rel_volum" in df.columns else np.nan
+    vis["Volum ±2"] = (df["volum_signatur"].map(_signatur_kort)
+                       if "volum_signatur" in df.columns else "—")
     vis["RS"] = df["rs"]
     vis["Uke"] = df["mtf_emoji"] if "mtf_emoji" in df else "⚠️"
     return vis
@@ -833,11 +886,30 @@ def stil_hovedtabell(vis: pd.DataFrame):
             return lys
         return ""
 
+    def _volsig(v):
+        # Farger hele cellen etter bruddagen (midterste av de fem tallene).
+        if not isinstance(v, str):
+            return ""
+        deler = v.split(" ")
+        if len(deler) != 5:
+            return ""
+        try:
+            x = float(deler[2].replace(",", "."))
+        except ValueError:
+            return ""
+        if x >= konfig.BRUDD_VOLUM_FAKTOR:
+            return sterk
+        if x >= 1.0:
+            return lys
+        return ""
+
     styler = vis.style
     if "Kriterie 1-7" in vis.columns:
         styler = styler.map(_krit, subset=["Kriterie 1-7"])
     if "RVol" in vis.columns:
         styler = styler.map(_rvol, subset=["RVol"])
+    if "Volum ±2" in vis.columns:
+        styler = styler.map(_volsig, subset=["Volum ±2"])
     if "Til pivot (live)" in vis.columns:
         styler = styler.map(_live, subset=["Til pivot (live)"])
     if "RVol (live)" in vis.columns:
@@ -873,6 +945,11 @@ TABELL_HJELP = {
         "RVol", format="%.1f×",
         help="Relativt volum: siste dags volum delt på 50-dagers snitt. 1,0 = normalt. "
         "Grønn ≥ 1,4× = bruddvolum (Minervini vil se høyt volum når kursen bryter ut)."),
+    "Volum ±2": st.column_config.TextColumn(
+        "Volum ±2", help="Relativt volum rundt bruddet: dag −2, −1, 0 (brudd), +1, +2 mot "
+        "50-dagers snitt. Minervini vil se volumet tørke inn før og eksplodere på bruddet. "
+        "Midterste tall = bruddagen; grønn celle = bruddet kom på høyt volum (≥ 1,4×). "
+        "«–» = dag mangler ennå, «—» = ikke brutt pivot ennå."),
     "RS": st.column_config.NumberColumn(
         "RS", help="Relativ styrke 1–99 (99 = sterkest momentum i universet)."),
     "Uke": st.column_config.TextColumn(

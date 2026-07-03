@@ -59,6 +59,10 @@ def analyser_ticker(serie: pd.DataFrame, ticker: str, preset: Preset = konfig.ST
     rel_volum = float(d["Volume"].iloc[-1] / vol_snitt50) if vol_snitt50 and vol_snitt50 > 0 else np.nan
     # Rent 50-dagers snittvolum (uten shift) – baseline for LIVE relativt volum i appen.
     snitt_vol_50 = d["Volume"].rolling(50, min_periods=10).mean().iloc[-1]
+    # Volumsignatur rundt bruddet: relativt volum dag −2 … +2 (0 = selve bruddagen).
+    # Tom liste hvis aksjen ikke har brutt pivot ennå. Minervini vil se volumet tørke
+    # inn i basen og eksplodere på bruddet – dette gjør det synlig.
+    volum_signatur = vcp.volum_signatur(d, brudd.get("bruddato"))
     # Utvikling siden aksjen gikk inn i full trend (i prosent)
     utvikling = np.nan
     if kv_dato is not None:
@@ -100,6 +104,7 @@ def analyser_ticker(serie: pd.DataFrame, ticker: str, preset: Preset = konfig.ST
         "rs_avkastning": indikatorer.rs_avkastning(d["Close"]),
         "dagsomsetning": dagsomsetning,
         "rel_volum": None if pd.isna(rel_volum) else round(rel_volum, 2),
+        "volum_signatur": volum_signatur,
         "snittvolum50": None if pd.isna(snitt_vol_50) else round(float(snitt_vol_50), 0),
         "perioder": [(pd.Timestamp(a).date().isoformat(), pd.Timestamp(b).date().isoformat()) for a, b in perioder],
     }

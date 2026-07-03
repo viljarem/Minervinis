@@ -7,7 +7,11 @@ Steg:
   3. Lag "dagens liste" og sammenlign den mot forrige kjøring.
   4. Send en e-post med endringene + en topp-10-tabell.
 
-Du kan også kjøre den selv for å teste alt:  python oppdater.py
+Du kan velge HVILKEN børs som skal oppdateres med et argument (børsens "kind"):
+    python oppdater.py oslo      # bare Oslo Børs
+    python oppdater.py sp500     # bare S&P 500
+    python oppdater.py           # alle børser (greit ved lokal testing)
+Slik kan roboten kjøre Oslo tidlig (17:00) og USA sent (23:00) hver for seg.
 E-post sendes bare hvis e-post-innstillingene (GitHub Secrets) er satt.
 """
 from __future__ import annotations
@@ -15,6 +19,7 @@ from __future__ import annotations
 import os
 import smtplib
 import ssl
+import sys
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -84,7 +89,10 @@ def _bygg_epost(resultater: list[dict]) -> tuple[str, str]:
         int(r["df"]["oppfyller"].sum()) if not r["df"].empty else 0 for r in resultater
     )
     total_brudd = sum(len(r["endringer"]["ferske_brudd"]) for r in resultater)
-    emne = f"DEMO-Screener · {dato} · {total_treff} treff · {total_brudd} ferske brudd"
+    # Nevn børsen i emnet når vi kjører bare én (Oslo 17:00 / USA 23:00 hver for
+    # seg) – da er de to daglige e-postene lette å skille i innboksen.
+    marked = resultater[0]["bors"].navn if len(resultater) == 1 else "alle børser"
+    emne = f"DEMO-Screener · {marked} · {dato} · {total_treff} treff · {total_brudd} ferske brudd"
 
     seksjoner = "<hr>".join(
         _seksjon_html(r["bors"], r["df"], r["endringer"]) for r in resultater
@@ -99,6 +107,9 @@ def _bygg_epost(resultater: list[dict]) -> tuple[str, str]:
 
 def send_epost(resultater: list[dict]) -> None:
     """Sender oppsummerings-e-posten. Hopper stille over hvis innstillinger mangler."""
+    if not resultater:
+        print("E-post hoppes over (ingen børser ble oppdatert).")
+        return
     innst = _epost_innstillinger()
     if innst is None:
         print("E-post hoppes over (mangler EPOST_AVSENDER/EPOST_PASSORD/EPOST_MOTTAKER).")
@@ -146,9 +157,27 @@ def kjor_bors(bors: "konfig.Bors") -> dict:
     return {"bors": bors, "df": df, "endringer": endringer}
 
 
-def main() -> None:
+def velg_borser(argv: list[str]) -> list["konfig.Bors"]:
+    """Velger hvilke børser som skal kjøres ut fra argumentene (børsens 'kind').
+    Uten argument kjøres ALLE børser (praktisk ved lokal testing)."""
+    onsket = {a.lower() for a in argv}
+    if not onsket:
+        return list(konfig.BORSER.values())
+    valgt = [b for b in konfig.BORSER.values() if b.kind in onsket]
+    if not valgt:
+        gyldige = ", ".join(sorted(b.kind for b in konfig.BORSER.values()))
+        print(f"Ukjent børs {sorted(onsket)}. Gyldige valg: {gyldige}. Kjører alle.")
+        return list(konfig.BORSER.values())
+    return valgt
+
+
+def main(argv: list[str] | None = None) -> None:
+    argv = sys.argv[1:] if argv is None else argv
+    borser = velg_borser(argv)
+    print(f"Skal oppdatere: {', '.join(b.navn for b in borser)}")
+
     resultater: list[dict] = []
-    for bors in konfig.BORSER.values():
+    for bors in borser:
         try:
             resultater.append(kjor_bors(bors))
         except Exception as e:  # én børs som feiler skal ikke stoppe de andre

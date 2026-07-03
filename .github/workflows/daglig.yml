@@ -6,12 +6,17 @@ name: Daglig oppdatering
 on:
   schedule:
     # GitHub kjører ALLTID etter verdenstid (UTC), som IKKE følger norsk
-    # sommer-/vintertid. For å treffe kl. 17:00 norsk HELE året legger vi inn
-    # to tidspunkt – ett for sommeren og ett for vinteren – og "vakt"-jobben
-    # under sørger for at selve oppdateringen bare kjører når klokka faktisk
-    # er 17 i Norge (litt etter børsslutt 16:30, så dagens sluttkurser er klare).
+    # sommer-/vintertid. Derfor legger vi inn to tidspunkt per børs (sommer +
+    # vinter), og "vakt"-jobben under passer på at hver børs bare kjører når
+    # klokka faktisk er riktig i Norge.
+    #
+    # Oslo Børs kl. 17:00 norsk (litt etter børsslutt 16:30):
     - cron: "0 15 * * 1-5"   # = 17:00 norsk om SOMMEREN (UTC + 2)
     - cron: "0 16 * * 1-5"   # = 17:00 norsk om VINTEREN (UTC + 1)
+    # S&P 500 kl. 23:00 norsk (etter amerikansk børsslutt 22:00 norsk),
+    # så vi henter FERDIGE sluttkurser – ikke en halvferdig dagsbar:
+    - cron: "0 21 * * 1-5"   # = 23:00 norsk om SOMMEREN (UTC + 2)
+    - cron: "0 22 * * 1-5"   # = 23:00 norsk om VINTEREN (UTC + 1)
   workflow_dispatch: {}   # gjør at du kan kjøre roboten manuelt med ett klikk
 
 # Gir roboten lov til å lagre (committe) oppdaterte datafiler tilbake til repoet.
@@ -19,29 +24,25 @@ permissions:
   contents: write
 
 jobs:
-  # Vakt: sjekker hva klokka er i Norge og bestemmer om oppdateringen skal kjøre.
-  # (Trengs fordi vi har to cron-tidspunkt – ett for sommer og ett for vinter.)
+  # Vakt: leser hva klokka er i Norge. Hver børs-jobb under sjekker selv om det
+  # er "dens" time (17 for Oslo, 23 for USA). Trengs fordi hvert tidspunkt har
+  # to cron (sommer + vinter), men bare ett av dem treffer riktig norsk time.
   vakt:
     runs-on: ubuntu-latest
     outputs:
-      kjor: ${{ steps.klokke.outputs.kjor }}
+      time: ${{ steps.klokke.outputs.time }}
     steps:
       - name: Sjekk norsk klokkeslett
         id: klokke
         run: |
           norsk_time=$(TZ="Europe/Oslo" date +%H)
           echo "Klokka i Norge er nå $norsk_time."
-          if [ "$norsk_time" = "17" ]; then
-            echo "kjor=ja" >> "$GITHUB_OUTPUT"
-          else
-            echo "kjor=nei" >> "$GITHUB_OUTPUT"
-            echo "Dette er 'ekstra'-kjøringen for den andre årstiden – hopper over."
-          fi
+          echo "time=$norsk_time" >> "$GITHUB_OUTPUT"
 
-  oppdater:
+  oslo:
     needs: vakt
-    # Kjør bare hvis vakta sier det er kl. 19 i Norge – ELLER hvis du starter manuelt.
-    if: needs.vakt.outputs.kjor == 'ja' || github.event_name == 'workflow_dispatch'
+    # Kjør Oslo bare når klokka er 17 i Norge – ELLER hvis du starter manuelt.
+    if: needs.vakt.outputs.time == '17' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Hent koden
@@ -56,19 +57,62 @@ jobs:
       - name: Installer biblioteker
         run: pip install -r requirements.txt
 
-      - name: Kjør daglig oppdatering (henting + screening + e-post)
+      - name: Oppdater Oslo Børs (henting + screening + e-post)
         env:
           EPOST_AVSENDER: ${{ secrets.EPOST_AVSENDER }}
           EPOST_PASSORD: ${{ secrets.EPOST_PASSORD }}
           EPOST_MOTTAKER: ${{ secrets.EPOST_MOTTAKER }}
           SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
-        run: python oppdater.py
+        run: python oppdater.py oslo
 
       - name: Lagre oppdaterte data tilbake til GitHub
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/
-          git commit -m "Daglig oppdatering av kursdata og liste" || echo "Ingen endringer å lagre"
-          git push
+          git commit -m "Daglig oppdatering · Oslo Børs" || echo "Ingen endringer å lagre"
+          for i in 1 2 3; do
+            git pull --rebase --autostash origin main && git push origin main && break
+            echo "Push-forsøk $i feilet – prøver igjen om 5s ..."
+            sleep 5
+          done
+
+  usa:
+    needs: vakt
+    # Kjør USA bare når klokka er 23 i Norge – ELLER hvis du starter manuelt.
+    if: needs.vakt.outputs.time == '23' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hent koden
+        uses: actions/checkout@v4
+
+      - name: Sett opp Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Installer biblioteker
+        run: pip install -r requirements.txt
+
+      - name: Oppdater S&P 500 (henting + screening + e-post)
+        env:
+          EPOST_AVSENDER: ${{ secrets.EPOST_AVSENDER }}
+          EPOST_PASSORD: ${{ secrets.EPOST_PASSORD }}
+          EPOST_MOTTAKER: ${{ secrets.EPOST_MOTTAKER }}
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+        run: python oppdater.py sp500
+
+      - name: Lagre oppdaterte data tilbake til GitHub
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git commit -m "Daglig oppdatering · S&P 500" || echo "Ingen endringer å lagre"
+          for i in 1 2 3; do
+            git pull --rebase --autostash origin main && git push origin main && break
+            echo "Push-forsøk $i feilet – prøver igjen om 5s ..."
+            sleep 5
+          done
