@@ -110,3 +110,53 @@ STANDARD = Preset("Standard (Minervini)", over_lav=0.30, under_hoy=0.25, krev_an
 TIDLIG_FASE = Preset("Tidlig fase", over_lav=0.25, under_hoy=0.30, krev_antall=6, krev_rs=False)
 
 PRESETS = {STANDARD.navn: STANDARD, TIDLIG_FASE.navn: TIDLIG_FASE}
+
+
+# ---------------------------------------------------------------------------
+# Børser (hvilke markeder appen kan skanne – én om gangen)
+# ---------------------------------------------------------------------------
+# Hver børs har SIN EGEN datafil, universliste og «sist hentet»-tid, slik at de
+# holdes helt adskilt. Da regnes RS-ratingen (relativ styrke) innenfor hver børs
+# for seg – norske aksjer måles mot norske, amerikanske mot amerikanske – som er
+# mer riktig enn å blande dem. Oslo beholder de opprinnelige filstiene, så
+# ingenting må migreres.
+@dataclass(frozen=True)
+class Bors:
+    navn: str                 # vises i nettsiden, f.eks. "Oslo Børs"
+    kind: str                 # "oslo" (Euronext) eller "sp500" (Wikipedia)
+    priser_fil: str           # parquet med kurshistorikk for denne børsen
+    univers_cache_fil: str    # lagret tickerliste (+ fallback hvis nett er nede)
+    sist_oppdatert_fil: str   # NÅR roboten sist hentet data for børsen (norsk tid)
+    siste_liste_fil: str      # forrige screening (til e-post-sammenligning)
+    valuta: str               # valutategn i visning ("kr" / "$")
+    valuta_navn: str          # ISO-navn ("NOK" / "USD")
+    bruk_manuelle: bool = False  # ta med DINE ekstra tickere fra UNIVERS_FIL?
+    benchmark: str | None = None  # hovedindeks (kun lagret som referanse)
+
+
+OSLO_BORS = Bors(
+    navn="Oslo Børs",
+    kind="oslo",
+    priser_fil=PRISER_FIL,                         # data/priser.parquet (uendret)
+    univers_cache_fil=OSLOBORS_CACHE_FIL,
+    sist_oppdatert_fil=SIST_OPPDATERT_FIL,
+    siste_liste_fil=SISTE_LISTE_FIL,
+    valuta="kr", valuta_navn="NOK",
+    bruk_manuelle=True,                            # dine egne ekstra tickere gjelder Oslo
+    benchmark=BENCHMARK,
+)
+SP500 = Bors(
+    navn="S&P 500 (USA)",
+    kind="sp500",
+    priser_fil=f"{DATA_MAPPE}/priser_sp500.parquet",
+    univers_cache_fil=f"{DATA_MAPPE}/univers_sp500.txt",
+    sist_oppdatert_fil=f"{DATA_MAPPE}/sist_oppdatert_sp500.json",
+    siste_liste_fil=f"{DATA_MAPPE}/siste_liste_sp500.json",
+    valuta="$", valuta_navn="USD",
+    bruk_manuelle=False,
+    benchmark="^GSPC",
+)
+
+# Rekkefølgen her styrer rekkefølgen i børsvelgeren (Oslo først = standard).
+BORSER = {OSLO_BORS.navn: OSLO_BORS, SP500.navn: SP500}
+

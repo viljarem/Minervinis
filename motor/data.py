@@ -26,12 +26,12 @@ KOLONNER = ["Date", "Ticker", "Open", "High", "Low", "Close", "Volume"]
 # ---------------------------------------------------------------------------
 # Univers (lista over tickere)
 # ---------------------------------------------------------------------------
-def les_univers(oppdater: bool = False) -> list[str]:
+def les_univers(bors: "konfig.Bors" = konfig.OSLO_BORS, oppdater: bool = False) -> list[str]:
     """
-    Henter hele lista over tickere (Oslo Børs + dine manuelle ekstra).
-    oppdater=True henter fersk liste fra Euronext; False bruker lagret cache.
+    Henter hele tickerlista for én børs.
+    oppdater=True henter fersk liste fra nett; False bruker lagret cache.
     """
-    return univers.hent_alle_tickere(oppdater=oppdater)
+    return univers.hent_alle_tickere(bors, oppdater=oppdater)
 
 
 # ---------------------------------------------------------------------------
@@ -206,23 +206,23 @@ def serie_for(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Hovedfunksjon roboten bruker
 # ---------------------------------------------------------------------------
-def hent_og_oppdater() -> pd.DataFrame:
+def hent_og_oppdater(bors: "konfig.Bors" = konfig.OSLO_BORS) -> pd.DataFrame:
     """
-    Henter ferske kurser og oppdaterer parquet-fila.
+    Henter ferske kurser og oppdaterer parquet-fila for én børs.
 
     Skiller mellom to grupper, slik at systemet er selvreparerende:
       - NYE tickere (som ikke finnes i fila ennå) -> full ~10 års historikk.
-        Dette gjelder både første kjøring OG når Euronext noterer nye selskaper,
+        Dette gjelder både første kjøring OG når det noteres nye selskaper,
         eller når du legger til egne tickere.
       - KJENTE tickere (som allerede har data) -> bare de siste dagene (1 mnd).
 
-    Til slutt lagres og returneres hele den oppdaterte historikken.
+    Til slutt lagres og returneres hele den oppdaterte historikken for børsen.
     """
-    tickere = les_univers(oppdater=True)
-    if konfig.BENCHMARK not in tickere:
-        tickere = tickere + [konfig.BENCHMARK]
+    tickere = les_univers(bors, oppdater=True)
+    if bors.benchmark and bors.benchmark not in tickere:
+        tickere = tickere + [bors.benchmark]
 
-    eksisterende = les_priser()
+    eksisterende = les_priser(bors.priser_fil)
     kjente = set(eksisterende["Ticker"].unique()) if not eksisterende.empty else set()
     nye_tickere = [t for t in tickere if t not in kjente]
     kjente_tickere = [t for t in tickere if t in kjente]
@@ -238,9 +238,9 @@ def hent_og_oppdater() -> pd.DataFrame:
         deler.append(rens(hent_priser(kjente_tickere, "1mo")))
 
     flettet = deler[0] if len(deler) == 1 else flett_flere(deler)
-    lagre_priser(flettet)
-    skriv_oppdateringstid()
-    print(f"Lagret {len(flettet):,} rader for {flettet['Ticker'].nunique()} tickere til {konfig.PRISER_FIL}.")
+    lagre_priser(flettet, bors.priser_fil)
+    skriv_oppdateringstid(bors.sist_oppdatert_fil)
+    print(f"Lagret {len(flettet):,} rader for {flettet['Ticker'].nunique()} tickere til {bors.priser_fil}.")
     return flettet
 
 

@@ -57,38 +57,54 @@ def _topp10_html(df: pd.DataFrame) -> str:
     return tabell.to_html(index=False, border=0, justify="center")
 
 
-def _bygg_epost(df: pd.DataFrame, endringer: dict) -> tuple[str, str]:
-    """Returnerer (emne, html-innhold) for e-posten."""
-    dato = datetime.now().strftime("%d.%m.%Y")
+def _seksjon_html(bors: "konfig.Bors", df: pd.DataFrame, endringer: dict) -> str:
+    """HTML-seksjon for én børs (overskrift, endringslister og topp 10)."""
     antall = int(df["oppfyller"].sum()) if not df.empty else 0
-    emne = f"DEMO-Screener · Oslo Børs · {dato} · {antall} treff · {len(endringer['ferske_brudd'])} ferske brudd"
 
     def liste(navn, tickere):
         if not tickere:
             return f"<p><b>{navn}:</b> ingen</p>"
         return f"<p><b>{navn}:</b> {', '.join(tickere)}</p>"
 
-    html = f"""
-    <h2>DEMO-Screener · {dato}</h2>
+    return f"""
+    <h2>{bors.navn}</h2>
     <p>{antall} aksjer oppfyller trend-kriteriene i dag.</p>
     {liste("🟢 Ferske brudd (over pivot på volum)", endringer["ferske_brudd"])}
     {liste("🆕 Nye i lista", endringer["nye"])}
     {liste("❌ Falt ut av lista", endringer["falt_ut"])}
     <h3>Topp 10</h3>
     {_topp10_html(df)}
+    """
+
+
+def _bygg_epost(resultater: list[dict]) -> tuple[str, str]:
+    """Returnerer (emne, html-innhold). Én seksjon per børs."""
+    dato = datetime.now().strftime("%d.%m.%Y")
+    total_treff = sum(
+        int(r["df"]["oppfyller"].sum()) if not r["df"].empty else 0 for r in resultater
+    )
+    total_brudd = sum(len(r["endringer"]["ferske_brudd"]) for r in resultater)
+    emne = f"DEMO-Screener · {dato} · {total_treff} treff · {total_brudd} ferske brudd"
+
+    seksjoner = "<hr>".join(
+        _seksjon_html(r["bors"], r["df"], r["endringer"]) for r in resultater
+    )
+    html = f"""
+    <h1>DEMO-Screener · {dato}</h1>
+    {seksjoner}
     <p style="color:#888;font-size:12px;">Automatisk e-post fra din egen Minervini-robot.</p>
     """
     return emne, html
 
 
-def send_epost(df: pd.DataFrame, endringer: dict) -> None:
+def send_epost(resultater: list[dict]) -> None:
     """Sender oppsummerings-e-posten. Hopper stille over hvis innstillinger mangler."""
     innst = _epost_innstillinger()
     if innst is None:
         print("E-post hoppes over (mangler EPOST_AVSENDER/EPOST_PASSORD/EPOST_MOTTAKER).")
         return
 
-    emne, html = _bygg_epost(df, endringer)
+    emne, html = _bygg_epost(resultater)
     melding = MIMEMultipart("alternative")
     melding["Subject"] = emne
     melding["From"] = innst["avsender"]
@@ -106,9 +122,12 @@ def send_epost(df: pd.DataFrame, endringer: dict) -> None:
 # ---------------------------------------------------------------------------
 # Hovedløp
 # ---------------------------------------------------------------------------
-def main() -> None:
+def kjor_bors(bors: "konfig.Bors") -> dict:
+    """Oppdaterer data, screener og sammenligner for én børs.
+    Returnerer {'bors', 'df', 'endringer'} som e-posten bygges av."""
+    print(f"\n########## {bors.navn} ##########")
     print("=== 1) Henter og oppdaterer kursdata ===")
-    priser = datamod.hent_og_oppdater()
+    priser = datamod.hent_og_oppdater(bors)
 
     print("=== 2) Kjører screening ===")
     df = screener.screen(priser, konfig.STANDARD)
@@ -116,16 +135,27 @@ def main() -> None:
     print(f"   {antall} aksjer oppfyller Standard-oppsettet (7/7).")
 
     print("=== 3) Sammenligner med forrige kjøring ===")
-    forrige = screener.les_forrige_liste()
+    forrige = screener.les_forrige_liste(bors.siste_liste_fil)
     naa = screener.til_dagens_liste(df)
     endringer = screener.sammenlign(forrige, naa)
-    screener.lagre_liste(naa)
+    screener.lagre_liste(naa, bors.siste_liste_fil)
     print(f"   Nye: {endringer['nye']}")
     print(f"   Falt ut: {endringer['falt_ut']}")
     print(f"   Ferske brudd: {endringer['ferske_brudd']}")
 
-    print("=== 4) Sender e-post ===")
-    send_epost(df, endringer)
+    return {"bors": bors, "df": df, "endringer": endringer}
+
+
+def main() -> None:
+    resultater: list[dict] = []
+    for bors in konfig.BORSER.values():
+        try:
+            resultater.append(kjor_bors(bors))
+        except Exception as e:  # én børs som feiler skal ikke stoppe de andre
+            print(f"!! Hoppet over {bors.navn} på grunn av feil: {e}")
+
+    print("\n=== Sender e-post ===")
+    send_epost(resultater)
     print("Ferdig ✅")
 
 

@@ -25,7 +25,7 @@ try:
 except Exception:
     HAR_LWC = False
 
-st.set_page_config(page_title="DEMO-Screener · Oslo Børs", layout="wide")
+st.set_page_config(page_title="DEMO-Screener", layout="wide")
 
 
 def _er_morkt() -> bool:
@@ -43,31 +43,36 @@ def _er_morkt() -> bool:
 # ---------------------------------------------------------------------------
 # Data-innlasting (bufres/caches så siden blir rask)
 # ---------------------------------------------------------------------------
-def data_versjon() -> float:
-    """Endres når datafila oppdateres – brukes til å friske opp bufferet."""
-    return os.path.getmtime(konfig.PRISER_FIL) if os.path.exists(konfig.PRISER_FIL) else 0.0
+def data_versjon(bors: "konfig.Bors" = konfig.OSLO_BORS) -> float:
+    """Endres når datafila for valgt børs oppdateres – frisker opp bufferet."""
+    sti = bors.priser_fil
+    return os.path.getmtime(sti) if os.path.exists(sti) else 0.0
 
 
 @st.cache_data(show_spinner=False)
-def last_priser(versjon: float) -> pd.DataFrame:
-    return datamod.les_priser()
+def last_priser(bors_navn: str, versjon: float) -> pd.DataFrame:
+    return datamod.les_priser(konfig.BORSER[bors_navn].priser_fil)
 
 
-@st.cache_data(show_spinner="Kjører screening for hele Oslo Børs ...")
-def kjor_screening(preset_navn: str, versjon: float) -> pd.DataFrame:
-    priser = datamod.les_priser()
+@st.cache_data(show_spinner="Kjører screening for hele børsen ...")
+def kjor_screening(bors_navn: str, preset_navn: str, versjon: float) -> pd.DataFrame:
+    priser = datamod.les_priser(konfig.BORSER[bors_navn].priser_fil)
     return screener.screen(priser, konfig.PRESETS[preset_navn])
 
 
 @st.cache_data(show_spinner=False)
-def data_status(versjon: float) -> dict:
-    """Regner ut datadekning: siste handelsdag, antall aksjer med data, universstørrelse."""
-    priser = datamod.les_priser()
+def data_status(bors_navn: str, versjon: float) -> dict:
+    """Datadekning for én børs: siste handelsdag, antall aksjer med data, universstørrelse."""
+    bors = konfig.BORSER[bors_navn]
+    priser = datamod.les_priser(bors.priser_fil)
     if priser.empty:
         return {"tom": True}
+    benchmarks = {b.benchmark for b in konfig.BORSER.values() if b.benchmark}
     i_data = set(priser["Ticker"].unique())
-    aksjer_data = len([t for t in i_data if t != konfig.BENCHMARK])
-    univ = set(univers.les_cache()) | set(univers.les_manuelle())
+    aksjer_data = len([t for t in i_data if t not in benchmarks])
+    univ = set(univers.les_cache(bors.univers_cache_fil))
+    if bors.bruk_manuelle:
+        univ |= set(univers.les_manuelle())
     aksjer_univ = len(univ) if univ else aksjer_data
     siste_dato = pd.to_datetime(priser["Date"]).max()
     naa_oslo = pd.Timestamp.now(tz="Europe/Oslo").normalize().tz_localize(None)
@@ -76,7 +81,7 @@ def data_status(versjon: float) -> dict:
     # på filas endringstid på serveren – Streamlit Cloud skriver ny fil-tid hver gang
     # den henter koden (ved utrulling), ikke når roboten faktisk kjørte. Faller tilbake
     # til fil-tida (tolket som UTC og vist i norsk tid) hvis metadata mangler.
-    sist_hentet = datamod.les_oppdateringstid()
+    sist_hentet = datamod.les_oppdateringstid(bors.sist_oppdatert_fil)
     if sist_hentet is None:
         sist_hentet = pd.Timestamp(versjon, unit="s", tz="UTC").tz_convert("Europe/Oslo")
     return {
@@ -412,8 +417,8 @@ def _posisjon_fra_state(nokkel: str) -> tuple[dict | None, str]:
     return pos, suffix
 
 
-def posisjon_verktoy(res: dict, nokkel: str) -> None:
-    """Kalkulator for long-posisjon med prosent-input og kroner som output."""
+def posisjon_verktoy(res: dict, nokkel: str, valuta: str = "kr") -> None:
+    """Kalkulator for long-posisjon med prosent-input og beløp som output."""
     _init_posisjon_state(res, nokkel)
 
     with st.expander("📐 Posisjon & risk/reward"):
@@ -428,7 +433,7 @@ def posisjon_verktoy(res: dict, nokkel: str) -> None:
         h2.caption("Standard = pivot som inngang, 5 % stop og 10 % mål.")
 
         c1, c2, c3, c4 = st.columns(4)
-        entry_v = c1.number_input("Inngang (kr)", min_value=0.0,
+        entry_v = c1.number_input(f"Inngang ({valuta})", min_value=0.0,
                                   value=float(st.session_state[f"pos_e_{nokkel}"]),
                                   step=0.1, format="%.2f", key=f"pos_e_{nokkel}")
         stop_pct_v = c2.number_input("Stop (%)", min_value=0.1,
@@ -449,20 +454,20 @@ def posisjon_verktoy(res: dict, nokkel: str) -> None:
             tap_pr_aksje = max(0.0, entry_v - stop_v)
             gev_pr_aksje = max(0.0, mal_v - entry_v)
             m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Stopkurs", f"{stop_v:.2f} kr", f"−{stop_pct_v:.1f} %")
-            m2.metric("Målkurs", f"{mal_v:.2f} kr", f"+{mal_pct_v:.1f} %")
-            m3.metric("Tap pr aksje", f"{tap_pr_aksje:.2f} kr")
-            m4.metric("Gevinst pr aksje", f"{gev_pr_aksje:.2f} kr")
+            m1.metric("Stopkurs", f"{stop_v:.2f} {valuta}", f"−{stop_pct_v:.1f} %")
+            m2.metric("Målkurs", f"{mal_v:.2f} {valuta}", f"+{mal_pct_v:.1f} %")
+            m3.metric("Tap pr aksje", f"{tap_pr_aksje:.2f} {valuta}")
+            m4.metric("Gevinst pr aksje", f"{gev_pr_aksje:.2f} {valuta}")
 
             m5, m6 = st.columns(2)
             m5.metric("Risk/reward", f"{nt['rr']:.2f} : 1" if nt["rr"] else "—")
-            m6.metric("Total innsats", f"{_kr(entry_v * antall_v)} kr" if antall_v > 0 else "—")
+            m6.metric("Total innsats", f"{_kr(entry_v * antall_v)} {valuta}" if antall_v > 0 else "—")
 
             if antall_v > 0:
                 totalt_tap = tap_pr_aksje * antall_v
                 total_gevinst = gev_pr_aksje * antall_v
-                st.caption(f"💸 Stop-tap ved **{antall_v} aksjer**: ca. **{_kr(totalt_tap)} kr** · "
-                           f"🎯 potensiell gevinst: **{_kr(total_gevinst)} kr**.")
+                st.caption(f"💸 Stop-tap ved **{antall_v} aksjer**: ca. **{_kr(totalt_tap)} {valuta}** · "
+                           f"🎯 potensiell gevinst: **{_kr(total_gevinst)} {valuta}**.")
 
             if nt["rr"] and nt["rr"] >= 2:
                 st.caption(f"✅ Risk/reward {nt['rr']:.2f} : 1 – oppsiden er {nt['rr']:.1f}× risikoen.")
@@ -878,18 +883,36 @@ TABELL_HJELP = {
 # ---------------------------------------------------------------------------
 # Selve siden
 # ---------------------------------------------------------------------------
-st.title("📈 DEMO-Screener · Oslo Børs")
+# Børs-velger + skann-knapp (sidefelt, helt øverst). Selve skanningen – som søker
+# gjennom HELE børsen – skjer bare når du trykker knappen, ikke automatisk.
+with st.sidebar:
+    st.header("Marked")
+    bors_navn = st.selectbox(
+        "Børs", list(konfig.BORSER.keys()),
+        help="Bytt børs. Hver børs har egne kursdata og sin egen RS-rating.")
+    BORS = konfig.BORSER[bors_navn]
+    VALUTA = BORS.valuta
+    if st.button(f"🔍 Skann {BORS.navn}", type="primary", width="stretch",
+                 help="Søk gjennom hele børsen etter Minervini-treff."):
+        st.session_state["skannet_bors"] = bors_navn
+    st.divider()
 
-versjon = data_versjon()
+skannet_na = st.session_state.get("skannet_bors") == bors_navn
+
+st.title("📈 DEMO-Screener")
+st.caption(f"Marked: **{BORS.navn}** · valuta {BORS.valuta_navn}")
+
+versjon = data_versjon(BORS)
 if versjon == 0:
     st.warning(
-        "Fant ingen kursdata ennå. Kjør roboten én gang (se README, «Test roboten») "
-        "så fylles data/priser.parquet, og siden viser resultater automatisk."
+        f"Fant ingen kursdata for **{BORS.navn}** ennå. Kjør roboten én gang "
+        f"(se README, «Test roboten»), så fylles {BORS.priser_fil} og lista dukker opp. "
+        f"Du kan bytte børs i menyen til venstre."
     )
     st.stop()
 
 # --- Visuell bekreftelse på datastatus (øverst, alltid synlig) ---
-_status = data_status(versjon)
+_status = data_status(bors_navn, versjon)
 if not _status["tom"]:
     _dekning = _status["aksjer_data"] / _status["aksjer_univ"] if _status["aksjer_univ"] else 0
     if _status["alder_dager"] <= 4:
@@ -906,7 +929,7 @@ if not _status["tom"]:
     _k1.metric("📅 Siste handelsdag", f"{_status['siste_dato']:%d.%m.%Y}",
                help="Dagen kursene i lista gjelder for – siste børsdag med ferdige sluttkurser.")
     _k2.metric("🏦 Aksjer med data", f"{_status['aksjer_data']} / {_status['aksjer_univ']}",
-               help="Antall Oslo Børs-aksjer vi har kurshistorikk på, av hele universet.")
+               help="Antall aksjer på denne børsen vi har kurshistorikk på, av hele universet.")
     _k3.metric("🕔 Sist hentet", f"{_status['sist_hentet']:%d.%m kl. %H:%M}",
                help="Da roboten sist lastet ned kurser fra Yahoo (norsk tid). Samme dag som siste "
                     "handelsdag på hverdager – kan være dagen før i helger/helligdager.")
@@ -922,7 +945,7 @@ with st.expander("ℹ️ Slik funker screeneren (klikk for å lese)"):
     st.markdown(
         """
 **Hva gjør denne siden?**  
-Den leter automatisk gjennom hele Oslo Børs etter aksjer som er i en sterk
+Den leter automatisk gjennom hele børsen du har valgt etter aksjer som er i en sterk
 opptrend og er i ferd med å ta **utbrudd** – altså bryte opp gjennom en motstand
 på høyt volum. Metoden bygger på **Mark Minervinis** «trend template».
 
@@ -951,7 +974,7 @@ hvor du kutter tapet hvis bruddet feiler. Begge tegnes inn på chartet.
 **De tre fanene**  
 - 📋 **Hovedliste** – alle treff, sortert med de mest handlbare øverst. **Huk av rader** for å tegne chart rett under lista.
 - 📊 **Chart** – tegn én aksje med MA-linjer, pivot, stop, volum og historikk.
-- 🔎 **Søk** – slå opp hvilken som helst ticker (også utenfor Oslo Børs, live fra Yahoo).
+- 🔎 **Søk** – slå opp hvilken som helst ticker (også utenfor børsen du har valgt, live fra Yahoo).
 
 **Live-kurser (valgfritt)**  
 Huker du av «🔴 Live-kurser» til venstre, vises dagens intradag-kurs (≈15 min forsinket)
@@ -980,10 +1003,7 @@ with st.sidebar:
     if _sh is not None:
         st.caption(f"🕔 Sist hentet: {_sh:%d.%m.%Y kl. %H:%M} (norsk tid)")
 
-resultat = kjor_screening(preset_navn, versjon)
-if resultat.empty:
-    st.info("Screeningen ga ingen treff ennå. Har roboten fått hentet nok historikk?")
-    st.stop()
+resultat = kjor_screening(bors_navn, preset_navn, versjon) if skannet_na else None
 
 fane1, fane2, fane3 = st.tabs(["📋 Hovedliste", "📊 Chart", "🔎 Søk"])
 
@@ -994,84 +1014,94 @@ TEMA = "d" if MORKT else "l"
 
 # --- Fane 1: Hovedliste ---
 with fane1:
-    # Ferske brudd (🟢) vises ALLTID – selv om de har færre enn valgt antall kriterier,
-    # så du aldri går glipp av et akkurat utløst kjøpssignal.
-    filt = resultat[(resultat["score"] >= min_krit) | (resultat["status"] == "🟢")].copy()
-    filt = filt[filt["rs"].fillna(0) >= min_rs]
-    if kun_ferske:
-        filt = filt[filt["status"] == "🟢"]
-    if krev_uke:
-        filt = filt[filt["mtf_status"] == "bullish"]
-
-    # Standardsortering: mest handlbart øverst – status (🟢→🟡→⚪ klar→🔵 forlenget),
-    # deretter nærhet til pivot. Ren, objektiv rekkefølge (ingen oppfunne vekter).
-    # getattr-fallback så appen ikke krasjer om Streamlit Cloud kjører en gammel,
-    # bufret utgave av screener-modulen (kan skje det første minuttet etter utrulling).
-    _sorter = getattr(screener, "sorter_hovedliste", None)
-    if _sorter is not None:
-        filt = _sorter(filt)
-    elif not filt.empty:
-        _har_pivot = filt["pivot"].notna()
-        filt = filt.assign(
-            _rang=filt["status"].map({"🟢": 0, "🟡": 1, "⚪": 2, "🔵": 3}).fillna(4).astype(int),
-            _naer=filt["avstand_pivot"].abs(),
-        )
-        filt.loc[~_har_pivot, "_rang"] = 5
-        filt.loc[~_har_pivot, "_naer"] = float("inf")
-        filt = (filt.sort_values(["_rang", "_naer"], kind="mergesort")
-                    .drop(columns=["_rang", "_naer"]))
-
-    # Live-kurser (valgfritt): hentes helt adskilt og påvirker ALDRI screening-dataene.
-    live_priser = {}
-    naa_oslo = pd.Timestamp.now(tz="Europe/Oslo")
-    if vis_live and not filt.empty:
-        live_priser = hent_live_priser(tuple(filt["ticker"].head(80).tolist()))
-
-    st.markdown(
-        f"**{len(filt)} aksjer** – sortert med de mest handlbare øverst: ferske brudd (🟢) "
-        f"først, så de som er nærmest et brudd. Ferske brudd vises alltid, også under {min_krit}/7."
-    )
-    _tabell = st.dataframe(
-        stil_hovedtabell(formater_tabell(filt, live_priser or None, naa_oslo)),
-        width="stretch", hide_index=True, height=560, column_config=TABELL_HJELP,
-        on_select="rerun", selection_mode="multi-row", key="hovedliste_tabell",
-    )
-    st.caption("Øverst = skjer nå / nærmest brudd. **Til pivot**: negativt = mangler så mange % "
-               "på brudd, positivt = over pivot. **Grønt** = 7/7 eller bruddvolum (≥1,4×). "
-               "💡 **Huk av én eller flere rader** (venstre kant) for å se chartene nederst.")
-
-    # Chart for radene du huker av – tegnes stablet nedover, her på hovedsiden.
-    _valgte_rader = list(getattr(_tabell.selection, "rows", []) or [])
-    _valgte = [filt.iloc[i]["ticker"] for i in _valgte_rader if i < len(filt)]
-    if _valgte:
-        st.divider()
-        _maks = 15
-        if len(_valgte) > _maks:
-            st.info(f"Viser de {_maks} første av {len(_valgte)} valgte (for fartens skyld).")
-            _valgte = _valgte[:_maks]
-        st.subheader(f"📊 Chart for {len(_valgte)} valgte")
-        _priser_alle = last_priser(versjon)
-        for _tk in _valgte:
-            _s = datamod.serie_for(_priser_alle, _tk)
-            _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[preset_navn])
-            _lp, _ = _live_verdi(live_priser.get(_tk))
-            _live_txt = f" · 🔴 live ≈ {_lp:.2f}" if _lp is not None else ""
-            if _r is None:
-                st.markdown(f"**{_tk}**")
-                st.caption("For lite historikk til å tegne chart.")
-                continue
-            st.markdown(f"**{_tk}** — {_r['status']} {_r['statustekst']}{_live_txt}")
-            if HAR_LWC:
-                _spec = lag_chart_lwc(_s, _r, PERIODER_VALG["2 år"], hoyde=460, morkt=MORKT)
-                if _spec:
-                    renderLightweightCharts(_spec, key=f"hl_{_tk}_{TEMA}")
+    if resultat is None:
+        st.info(f"Trykk **🔍 Skann {BORS.navn}** i menyen til venstre for å søke gjennom hele "
+                "børsen etter Minervini-treff. (Ingenting skannes automatisk – du velger når.)")
+    elif resultat.empty:
+        st.info("Screeningen ga ingen treff ennå. Har roboten fått hentet nok historikk?")
     else:
-        st.caption("Ingen rader valgt ennå – huk av i tabellen over for å tegne chart her.")
+        # Ferske brudd (🟢) vises ALLTID – selv om de har færre enn valgt antall kriterier,
+        # så du aldri går glipp av et akkurat utløst kjøpssignal.
+        filt = resultat[(resultat["score"] >= min_krit) | (resultat["status"] == "🟢")].copy()
+        filt = filt[filt["rs"].fillna(0) >= min_rs]
+        if kun_ferske:
+            filt = filt[filt["status"] == "🟢"]
+        if krev_uke:
+            filt = filt[filt["mtf_status"] == "bullish"]
+
+        # Standardsortering: mest handlbart øverst – status (🟢→🟡→⚪ klar→🔵 forlenget),
+        # deretter nærhet til pivot. Ren, objektiv rekkefølge (ingen oppfunne vekter).
+        # getattr-fallback så appen ikke krasjer om Streamlit Cloud kjører en gammel,
+        # bufret utgave av screener-modulen (kan skje det første minuttet etter utrulling).
+        _sorter = getattr(screener, "sorter_hovedliste", None)
+        if _sorter is not None:
+            filt = _sorter(filt)
+        elif not filt.empty:
+            _har_pivot = filt["pivot"].notna()
+            filt = filt.assign(
+                _rang=filt["status"].map({"🟢": 0, "🟡": 1, "⚪": 2, "🔵": 3}).fillna(4).astype(int),
+                _naer=filt["avstand_pivot"].abs(),
+            )
+            filt.loc[~_har_pivot, "_rang"] = 5
+            filt.loc[~_har_pivot, "_naer"] = float("inf")
+            filt = (filt.sort_values(["_rang", "_naer"], kind="mergesort")
+                        .drop(columns=["_rang", "_naer"]))
+
+        # Live-kurser (valgfritt): hentes helt adskilt og påvirker ALDRI screening-dataene.
+        live_priser = {}
+        naa_oslo = pd.Timestamp.now(tz="Europe/Oslo")
+        if vis_live and not filt.empty:
+            live_priser = hent_live_priser(tuple(filt["ticker"].head(80).tolist()))
+
+        st.markdown(
+            f"**{len(filt)} aksjer** – sortert med de mest handlbare øverst: ferske brudd (🟢) "
+            f"først, så de som er nærmest et brudd. Ferske brudd vises alltid, også under {min_krit}/7."
+        )
+        _tabell = st.dataframe(
+            stil_hovedtabell(formater_tabell(filt, live_priser or None, naa_oslo)),
+            width="stretch", hide_index=True, height=560, column_config=TABELL_HJELP,
+            on_select="rerun", selection_mode="multi-row", key="hovedliste_tabell",
+        )
+        st.caption("Øverst = skjer nå / nærmest brudd. **Til pivot**: negativt = mangler så mange % "
+                   "på brudd, positivt = over pivot. **Grønt** = 7/7 eller bruddvolum (≥1,4×). "
+                   "💡 **Huk av én eller flere rader** (venstre kant) for å se chartene nederst.")
+
+        # Chart for radene du huker av – tegnes stablet nedover, her på hovedsiden.
+        _valgte_rader = list(getattr(_tabell.selection, "rows", []) or [])
+        _valgte = [filt.iloc[i]["ticker"] for i in _valgte_rader if i < len(filt)]
+        if _valgte:
+            st.divider()
+            _maks = 15
+            if len(_valgte) > _maks:
+                st.info(f"Viser de {_maks} første av {len(_valgte)} valgte (for fartens skyld).")
+                _valgte = _valgte[:_maks]
+            st.subheader(f"📊 Chart for {len(_valgte)} valgte")
+            _priser_alle = last_priser(bors_navn, versjon)
+            for _tk in _valgte:
+                _s = datamod.serie_for(_priser_alle, _tk)
+                _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[preset_navn])
+                _lp, _ = _live_verdi(live_priser.get(_tk))
+                _live_txt = f" · 🔴 live ≈ {_lp:.2f}" if _lp is not None else ""
+                if _r is None:
+                    st.markdown(f"**{_tk}**")
+                    st.caption("For lite historikk til å tegne chart.")
+                    continue
+                st.markdown(f"**{_tk}** — {_r['status']} {_r['statustekst']}{_live_txt}")
+                if HAR_LWC:
+                    _spec = lag_chart_lwc(_s, _r, PERIODER_VALG["2 år"], hoyde=460, morkt=MORKT)
+                    if _spec:
+                        renderLightweightCharts(_spec, key=f"hl_{_tk}_{TEMA}")
+        else:
+            st.caption("Ingen rader valgt ennå – huk av i tabellen over for å tegne chart her.")
 
 # --- Fane 2: Chart ---
 with fane2:
     if not HAR_LWC:
         st.warning("Chart-komponenten er ikke lastet i dette miljøet ennå (kommer ved neste utrulling).")
+    elif resultat is None:
+        st.info(f"Trykk **🔍 Skann {BORS.navn}** i menyen til venstre for å velge blant treffene her.")
+    elif resultat.empty:
+        st.info("Ingen treff å velge mellom ennå.")
     else:
         valg = st.selectbox("Velg aksje", resultat["ticker"].tolist())
         periode = st.radio("Periode", list(PERIODER_VALG.keys()), index=3, horizontal=True,
@@ -1083,7 +1113,7 @@ with fane2:
             vis_vcp = st.checkbox("VCP-kontraksjoner (gul zigzag)", value=True, key="chart_vcp")
             vis_7av7 = st.checkbox("7/7-markører (ble/mistet)", value=True, key="chart_7av7")
             vis_hist = st.checkbox("Historiske volumbrudd", value=False, key="chart_hist")
-        serie = datamod.serie_for(last_priser(versjon), valg)
+        serie = datamod.serie_for(last_priser(bors_navn, versjon), valg)
         res = screener.analyser_ticker(serie, valg, konfig.PRESETS[preset_navn])
         if res is None:
             st.info("For lite historikk til å tegne chart for denne aksjen.")
@@ -1105,14 +1135,14 @@ with fane2:
                 vis_vcp_boks(res)
                 fundamenta_seksjon(valg, f"chart_{valg}")
                 st.divider()
-                posisjon_verktoy(res, f"chart_{valg}")
+                posisjon_verktoy(res, f"chart_{valg}", VALUTA)
 
 # --- Fane 3: Søk ---
 with fane3:
     st.markdown("Slå opp **hvilken som helst** ticker. Er den ikke i universet, hentes den live fra Yahoo.")
     sok = st.text_input("Ticker (f.eks. EQNR.OL, AAPL, NVDA)", value="").strip().upper()
     if sok:
-        priser = last_priser(versjon)
+        priser = last_priser(bors_navn, versjon)
         if sok in priser["Ticker"].values:
             serie = datamod.serie_for(priser, sok)
         else:
@@ -1150,4 +1180,4 @@ with fane3:
                 vis_vcp_boks(res)
                 fundamenta_seksjon(sok, f"sok_{sok}")
                 st.divider()
-                posisjon_verktoy(res, f"sok_{sok}")
+                posisjon_verktoy(res, f"sok_{sok}", VALUTA)

@@ -149,7 +149,11 @@ def screen(priser: pd.DataFrame, preset: Preset = konfig.STANDARD) -> pd.DataFra
     if priser is None or priser.empty:
         return pd.DataFrame()
 
-    tickere = [t for t in sorted(priser["Ticker"].unique()) if t != konfig.BENCHMARK]
+    # Hold ALLE børsers benchmark-indekser (OSEBX.OL, ^GSPC ...) utenfor selve
+    # screeningen – de er referanser, ikke aksjer man kan kjøpe.
+    benchmarks = {b.benchmark for b in konfig.BORSER.values() if b.benchmark}
+    benchmarks.add(konfig.BENCHMARK)
+    tickere = [t for t in sorted(priser["Ticker"].unique()) if t not in benchmarks]
     rader = []
     for t in tickere:
         res = analyser_ticker(datamod.serie_for(priser, t), t, preset)

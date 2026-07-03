@@ -99,39 +99,83 @@ def hent_fra_euronext() -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Henting fra Wikipedia (S&P 500)
+# ---------------------------------------------------------------------------
+def hent_sp500_fra_wikipedia() -> list[str]:
+    """Henter S&P 500-symbolene fra Wikipedia. Tom liste hvis noe feiler.
+
+    Vi leser symbolene rett ut av HTML-en med et enkelt mønster (regex) i stedet
+    for et tungt tabell-bibliotek – da slipper vi en ekstra avhengighet. Hvert
+    symbol lenker til en NYSE- eller NASDAQ-kursside, og der står tickeren.
+    Yahoo vil ha bindestrek der Wikipedia bruker punktum (BRK.B → BRK-B).
+    """
+    import re
+
+    url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+    for forsok in range(3):
+        try:
+            r = requests.get(url, headers=_NETTLESER, impersonate="chrome", timeout=30)
+            r.raise_for_status()
+            nyse = re.findall(r'quote/X[A-Z]+:([A-Z][A-Z.\-]*)"', r.text)
+            nasdaq = re.findall(r'nasdaq\.com/market-activity/stocks/([a-z][a-z.\-]*)"',
+                                r.text, re.I)
+            symboler = sorted(set(s.upper().replace(".", "-") for s in (nyse + nasdaq)))
+            if len(symboler) >= 400:          # sanity: S&P 500 skal ha ~500
+                print(f"   Wikipedia S&P 500: {len(symboler)} tickere.")
+                return symboler
+            print(f"   Wikipedia ga bare {len(symboler)} symboler – prøver igjen ...")
+        except Exception as feil:  # noqa: BLE001
+            ventetid = 3 * (forsok + 1)
+            print(f"   Wikipedia feilet ({feil}). Prøver igjen om {ventetid}s ...")
+            time.sleep(ventetid)
+    return []
+
+
+
+# ---------------------------------------------------------------------------
 # Hovedfunksjon: den komplette lista
 # ---------------------------------------------------------------------------
-def hent_alle_tickere(oppdater: bool = True) -> list[str]:
+def hent_alle_tickere(bors: "konfig.Bors" = konfig.OSLO_BORS, oppdater: bool = True) -> list[str]:
     """
-    Returnerer hele universet = (Oslo Børs) + (dine manuelle ekstra).
+    Returnerer hele universet for én børs.
 
-    oppdater=True  -> hent fersk liste fra Euronext og lagre den som cache.
+    Oslo Børs = (Euronext-lista) + (dine manuelle ekstra fra univers.txt).
+    S&P 500   = (Wikipedia-lista).  Begge lagres til børsens egen cache-fil.
+
+    oppdater=True  -> hent fersk liste fra nett og lagre den som cache.
     oppdater=False -> bruk den sist lagrede cache-lista (rask, uten nett).
     """
-    oslo: list[str] = []
+    ferske: list[str] = []
     if oppdater:
-        print("Henter fersk Oslo Børs-liste fra Euronext ...")
-        oslo = hent_fra_euronext()
+        if bors.kind == "sp500":
+            print("Henter fersk S&P 500-liste fra Wikipedia ...")
+            ferske = hent_sp500_fra_wikipedia()
+        else:
+            print("Henter fersk Oslo Børs-liste fra Euronext ...")
+            ferske = hent_fra_euronext()
 
-    if oslo:
+    if ferske:
         # Fjern kjente "problem-tickere" (konfig.UTELUKK_TICKERE) FØR vi lagrer,
         # slik at selve cache-fila alltid er ren.
-        oslo = [t for t in oslo if t not in konfig.UTELUKK_TICKERE]
+        ferske = [t for t in ferske if t not in konfig.UTELUKK_TICKERE]
         _skriv_fil(
-            konfig.OSLOBORS_CACHE_FIL, oslo,
-            "# Oslo Børs-tickere hentet AUTOMATISK fra Euronext.\n"
+            bors.univers_cache_fil, ferske,
+            f"# {bors.navn}-tickere hentet AUTOMATISK.\n"
             "# Denne fila oppdateres av roboten – rediger den ikke for hånd.\n"
             "# Vil du legge til egne aksjer? Bruk data/univers.txt i stedet.",
         )
-        print(f"   Lagret {len(oslo)} Oslo Børs-tickere til {konfig.OSLOBORS_CACHE_FIL}.")
+        print(f"   Lagret {len(ferske)} tickere til {bors.univers_cache_fil}.")
     else:
-        oslo = les_cache()  # fallback til siste kjente komplette liste
-        if oslo:
-            print(f"   Bruker lagret Oslo Børs-liste ({len(oslo)} tickere) som fallback.")
+        ferske = les_cache(bors.univers_cache_fil)   # fallback til siste kjente liste
+        if ferske:
+            print(f"   Bruker lagret {bors.navn}-liste ({len(ferske)} tickere) som fallback.")
 
-    manuelle = les_manuelle()
-    if manuelle:
-        print(f"   + {len(manuelle)} manuelle ekstra tickere fra {konfig.UNIVERS_FIL}.")
+    alle = set(ferske)
+    if bors.bruk_manuelle:
+        manuelle = les_manuelle()
+        if manuelle:
+            print(f"   + {len(manuelle)} manuelle ekstra tickere fra {konfig.UNIVERS_FIL}.")
+            alle |= set(manuelle)
 
     # Utelukk igjen på det endelige settet (dekker cache-fallback og manuelle).
-    return sorted((set(oslo) | set(manuelle)) - konfig.UTELUKK_TICKERE)
+    return sorted(alle - konfig.UTELUKK_TICKERE)
