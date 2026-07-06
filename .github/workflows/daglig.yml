@@ -1,22 +1,29 @@
 # Denne fila er "roboten". GitHub kjører den automatisk etter tidsplanen under,
 # og du kan også starte den manuelt med ett klikk (fanen "Actions" på GitHub).
+#
+# VIKTIG OM TIDER: GitHub kjører alltid etter verdenstid (UTC) OG er ofte
+# forsinket – noen ganger droppes en planlagt kjøring helt, spesielt på "hel
+# time". Derfor gjør vi to ting for å være robuste:
+#   1) Vi legger inn FLERE tidspunkt (backup) på kvelden, ikke bare ett.
+#   2) En "vakt" i hver jobb sørger for at børsen bare oppdateres ÉN gang per
+#      dag – første gang klokka i Norge har passert måltidspunktet. Da gjør det
+#      ingenting om en enkelt kjøring blir forsinket eller hoppet over: neste
+#      backup fanger den opp, og allerede-oppdaterte dager kjøres ikke på nytt.
 
 name: Daglig oppdatering
 
 on:
   schedule:
-    # GitHub kjører ALLTID etter verdenstid (UTC), som IKKE følger norsk
-    # sommer-/vintertid. Derfor legger vi inn to tidspunkt per børs (sommer +
-    # vinter), og "vakt"-jobben under passer på at hver børs bare kjører når
-    # klokka faktisk er riktig i Norge.
-    #
-    # Oslo Børs kl. 17:00 norsk (litt etter børsslutt 16:30):
-    - cron: "0 15 * * 1-5"   # = 17:00 norsk om SOMMEREN (UTC + 2)
-    - cron: "0 16 * * 1-5"   # = 17:00 norsk om VINTEREN (UTC + 1)
-    # S&P 500 kl. 23:00 norsk (etter amerikansk børsslutt 22:00 norsk),
-    # så vi henter FERDIGE sluttkurser – ikke en halvferdig dagsbar:
-    - cron: "0 21 * * 1-5"   # = 23:00 norsk om SOMMEREN (UTC + 2)
-    - cron: "0 22 * * 1-5"   # = 23:00 norsk om VINTEREN (UTC + 1)
+    # Oslo Børs – mål 17:00 norsk (etter børsslutt 16:20). Backup hver time, så
+    # en droppet kjøring fanges av neste. Vakta hindrer dobbeltkjøring.
+    - cron: "0 15 * * 1-5"   # sommer 17 / vinter 16 norsk
+    - cron: "0 16 * * 1-5"   # sommer 18 / vinter 17 norsk
+    - cron: "0 17 * * 1-5"   # sommer 19 / vinter 18 norsk
+    - cron: "0 18 * * 1-5"   # sommer 20 / vinter 19 norsk
+    # S&P 500 – mål 23:00 norsk (etter amerikansk børsslutt 22:00). Backup:
+    - cron: "0 21 * * 1-5"   # sommer 23 / vinter 22 norsk
+    - cron: "0 22 * * 1-5"   # sommer 00 / vinter 23 norsk
+    - cron: "0 23 * * 1-5"   # sommer 01 / vinter 00 norsk
   workflow_dispatch: {}   # gjør at du kan kjøre roboten manuelt med ett klikk
 
 # Gir roboten lov til å lagre (committe) oppdaterte datafiler tilbake til repoet.
@@ -24,40 +31,42 @@ permissions:
   contents: write
 
 jobs:
-  # Vakt: leser hva klokka er i Norge. Hver børs-jobb under sjekker selv om det
-  # er "dens" time (17 for Oslo, 23 for USA). Trengs fordi hvert tidspunkt har
-  # to cron (sommer + vinter), men bare ett av dem treffer riktig norsk time.
-  vakt:
-    runs-on: ubuntu-latest
-    outputs:
-      time: ${{ steps.klokke.outputs.time }}
-    steps:
-      - name: Sjekk norsk klokkeslett
-        id: klokke
-        run: |
-          norsk_time=$(TZ="Europe/Oslo" date +%H)
-          echo "Klokka i Norge er nå $norsk_time."
-          echo "time=$norsk_time" >> "$GITHUB_OUTPUT"
-
   oslo:
-    needs: vakt
-    # Kjør Oslo bare når klokka er 17 i Norge – ELLER hvis du starter manuelt.
-    if: needs.vakt.outputs.time == '17' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Hent koden
         uses: actions/checkout@v4
 
+      # Vakt: skal Oslo oppdateres NÅ? Ja hvis klokka i Norge er 17–23 OG vi
+      # ikke allerede har oppdatert i dag (markørfila under holder styr på det).
+      - name: Skal Oslo kjøre nå?
+        id: vakt
+        run: |
+          time=$(TZ="Europe/Oslo" date +%-H)
+          dag=$(TZ="Europe/Oslo" date +%F)
+          sist=$(cat data/robot_dato_oslo.txt 2>/dev/null || echo "")
+          echo "Norsk klokke $time · handelsdag $dag · robot sist kjørt $sist"
+          echo "dag=$dag" >> "$GITHUB_OUTPUT"
+          if [ "$time" -ge 17 ] && [ "$time" -le 23 ] && [ "$sist" != "$dag" ]; then
+            echo "kjor=ja" >> "$GITHUB_OUTPUT"
+          else
+            echo "kjor=nei" >> "$GITHUB_OUTPUT"
+            echo "Hopper over (utenfor vindu eller allerede oppdatert i dag)."
+          fi
+
       - name: Sett opp Python
+        if: steps.vakt.outputs.kjor == 'ja' || github.event_name == 'workflow_dispatch'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
 
       - name: Installer biblioteker
+        if: steps.vakt.outputs.kjor == 'ja' || github.event_name == 'workflow_dispatch'
         run: pip install -r requirements.txt
 
       - name: Oppdater Oslo Børs (henting + screening + e-post)
+        if: steps.vakt.outputs.kjor == 'ja' || github.event_name == 'workflow_dispatch'
         env:
           EPOST_AVSENDER: ${{ secrets.EPOST_AVSENDER }}
           EPOST_PASSORD: ${{ secrets.EPOST_PASSORD }}
@@ -66,7 +75,14 @@ jobs:
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
         run: python oppdater.py oslo
 
+      # Markér at dagens Oslo-oppdatering er gjort (kun ved planlagt kjøring, så
+      # en manuell testkjøring ikke blokkerer kveldens ordinære kjøring).
+      - name: Markér Oslo som oppdatert i dag
+        if: steps.vakt.outputs.kjor == 'ja'
+        run: echo "${{ steps.vakt.outputs.dag }}" > data/robot_dato_oslo.txt
+
       - name: Lagre oppdaterte data tilbake til GitHub
+        if: steps.vakt.outputs.kjor == 'ja' || github.event_name == 'workflow_dispatch'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -79,24 +95,46 @@ jobs:
           done
 
   usa:
-    needs: vakt
-    # Kjør USA bare når klokka er 23 i Norge – ELLER hvis du starter manuelt.
-    if: needs.vakt.outputs.time == '23' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Hent koden
         uses: actions/checkout@v4
 
+      # Vakt: skal S&P 500 oppdateres NÅ? Ja hvis klokka i Norge er 23 eller
+      # like etter midnatt (00–02, i tilfelle forsinkelse) OG ikke gjort ennå.
+      # Passerer vi midnatt hører kjøringen til GÅRSDAGENS handelsdag.
+      - name: Skal USA kjøre nå?
+        id: vakt
+        run: |
+          time=$(TZ="Europe/Oslo" date +%-H)
+          if [ "$time" -le 2 ]; then
+            dag=$(TZ="Europe/Oslo" date -d 'yesterday' +%F)
+          else
+            dag=$(TZ="Europe/Oslo" date +%F)
+          fi
+          sist=$(cat data/robot_dato_sp500.txt 2>/dev/null || echo "")
+          echo "Norsk klokke $time · handelsdag $dag · robot sist kjørt $sist"
+          echo "dag=$dag" >> "$GITHUB_OUTPUT"
+          if { [ "$time" -ge 23 ] || [ "$time" -le 2 ]; } && [ "$sist" != "$dag" ]; then
+            echo "kjor=ja" >> "$GITHUB_OUTPUT"
+          else
+            echo "kjor=nei" >> "$GITHUB_OUTPUT"
+            echo "Hopper over (utenfor vindu eller allerede oppdatert i dag)."
+          fi
+
       - name: Sett opp Python
+        if: steps.vakt.outputs.kjor == 'ja' || github.event_name == 'workflow_dispatch'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
 
       - name: Installer biblioteker
+        if: steps.vakt.outputs.kjor == 'ja' || github.event_name == 'workflow_dispatch'
         run: pip install -r requirements.txt
 
       - name: Oppdater S&P 500 (henting + screening + e-post)
+        if: steps.vakt.outputs.kjor == 'ja' || github.event_name == 'workflow_dispatch'
         env:
           EPOST_AVSENDER: ${{ secrets.EPOST_AVSENDER }}
           EPOST_PASSORD: ${{ secrets.EPOST_PASSORD }}
@@ -105,7 +143,12 @@ jobs:
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
         run: python oppdater.py sp500
 
+      - name: Markér USA som oppdatert i dag
+        if: steps.vakt.outputs.kjor == 'ja'
+        run: echo "${{ steps.vakt.outputs.dag }}" > data/robot_dato_sp500.txt
+
       - name: Lagre oppdaterte data tilbake til GitHub
+        if: steps.vakt.outputs.kjor == 'ja' || github.event_name == 'workflow_dispatch'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
