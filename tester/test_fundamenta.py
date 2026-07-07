@@ -135,3 +135,60 @@ def test_bygg_struktur_tom():
 def test_hent_fundamenta_tom_ticker():
     d = fu.hent_fundamenta("")
     assert d["tilgjengelig"] is False
+
+
+# --- fund_score() ---------------------------------------------------------
+def _fake_fund(kv_salg=None, kv_eps=None, margin_e=None, aar_salg=None, aar_eps=None):
+    """Bygger en minimal fund-dict uten nettverkskall."""
+    return {
+        "tilgjengelig": True,
+        "kvartal": {"omsetning_vekst": kv_salg, "resultat_vekst": kv_eps,
+                    "drift_margin_endring": margin_e},
+        "aar": {"omsetning_vekst": aar_salg, "resultat_vekst": aar_eps},
+    }
+
+
+def test_fund_score_full_minervini():
+    """Alle 5 kriterier oppfylt → 🟢 5/5."""
+    s = fu.fund_score(_fake_fund(kv_salg=30, kv_eps=28, margin_e=2.0, aar_salg=20, aar_eps=18))
+    assert s["poeng"] == 5
+    assert s["merke"] == "🟢"
+    assert s["tilgjengelig"] is True
+
+
+def test_fund_score_nesten_ingen():
+    """Alle kriterier under terskel → 🔴 0/5."""
+    s = fu.fund_score(_fake_fund(kv_salg=5, kv_eps=5, margin_e=-1.0, aar_salg=3, aar_eps=2))
+    assert s["poeng"] == 0
+    assert s["merke"] == "🔴"
+
+
+def test_fund_score_midt():
+    """3/5 kriterier → 🟡."""
+    s = fu.fund_score(_fake_fund(kv_salg=30, kv_eps=30, margin_e=1.0,
+                                  aar_salg=5, aar_eps=5))
+    assert s["poeng"] == 3
+    assert s["merke"] == "🟡"
+
+
+def test_fund_score_ikke_tilgjengelig():
+    """Ingen Yahoo-data → poeng=None, merke='·'."""
+    s = fu.fund_score({"tilgjengelig": False})
+    assert s["poeng"] is None
+    assert s["merke"] == "·"
+    assert s["tilgjengelig"] is False
+
+
+def test_fund_score_manglende_tall_gir_null_poeng_ikke_krasj():
+    """None-verdier skal gi 0 poeng på det kriteriet, ikke krasje."""
+    s = fu.fund_score(_fake_fund())  # alle None
+    assert s["poeng"] == 0
+    assert len(s["detaljer"]) == 5   # én detalj per kriterium
+
+
+def test_fund_score_detaljer_inneholder_alle_fem_kriterier():
+    s = fu.fund_score(_fake_fund(kv_salg=30, kv_eps=10, margin_e=None,
+                                  aar_salg=20, aar_eps=5))
+    assert len(s["detaljer"]) == 5
+    # Kun Q-salg og Å-salg oppfyller terskelen
+    assert s["poeng"] == 2

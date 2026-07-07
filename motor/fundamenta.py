@@ -191,6 +191,66 @@ def bygg_struktur(info: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Fundamental Minervini-score (rent regnestykke, ingen nettverk)
+# ---------------------------------------------------------------------------
+def fund_score(fund: dict) -> dict:
+    """Fundamental Minervini-score 0–5 basert på vekst og marginer.
+
+    Hvert punkt er ett poeng:
+      1. Kvartalsvis salg  ≥ 25 % YoY   (sterk topp-linje)
+      2. Kvartalsvis EPS   ≥ 25 % YoY   (sterk bunnlinje)
+      3. Marginer ekspanderer (drift→netto som fallback, positivt pp)
+      4. Årsvis salg       ≥ 15 % YoY   (varig trend)
+      5. Årsvis EPS        ≥ 15 % YoY   (varig inntjening)
+
+    Returnerer {"poeng", "merke", "tilgjengelig", "detaljer"}.
+    merke: 🟢 = 4–5 poeng, 🟡 = 2–3, 🔴 = 0–1.
+    """
+    if not fund.get("tilgjengelig"):
+        return {"poeng": None, "merke": "·", "tilgjengelig": False, "detaljer": []}
+
+    kv = fund.get("kvartal") or {}
+    aar = fund.get("aar") or {}
+    poeng = 0
+    detaljer: list[str] = []
+
+    def _ledd(verdi, terskel: float, label: str) -> None:
+        nonlocal poeng
+        if verdi is None:
+            detaljer.append(f"{label} —")
+        elif verdi >= terskel:
+            poeng += 1
+            detaljer.append(f"{label} +{verdi:.0f}% ✅")
+        elif verdi >= 0:
+            detaljer.append(f"{label} +{verdi:.0f}% —")
+        else:
+            detaljer.append(f"{label} {verdi:.0f}% ❌")
+
+    _ledd(kv.get("omsetning_vekst"), 25.0, "Q-salg")
+    _ledd(kv.get("resultat_vekst"),  25.0, "Q-EPS")
+
+    # Margin-ekspansjon: drift foretrekkes, netto som fallback
+    me = kv.get("drift_margin_endring")
+    if me is None:
+        me = kv.get("netto_margin_endring")
+    if me is None:
+        detaljer.append("Margin —")
+    elif me > 0:
+        poeng += 1
+        detaljer.append(f"Margin +{me:.1f}pp ✅")
+    elif me < 0:
+        detaljer.append(f"Margin {me:+.1f}pp —")
+    else:
+        detaljer.append("Margin 0pp —")
+
+    _ledd(aar.get("omsetning_vekst"), 15.0, "Å-salg")
+    _ledd(aar.get("resultat_vekst"),  15.0, "Å-EPS")
+
+    merke = "🟢" if poeng >= 4 else "🟡" if poeng >= 2 else "🔴"
+    return {"poeng": poeng, "merke": merke, "tilgjengelig": True, "detaljer": detaljer}
+
+
+# ---------------------------------------------------------------------------
 # Hovedfunksjon (henter fra nettet – alt pakket i try/except)
 # ---------------------------------------------------------------------------
 def hent_fundamenta(ticker: str) -> dict:

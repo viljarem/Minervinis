@@ -386,14 +386,30 @@ def _tegn_fundamenta(fund: dict) -> None:
                "ikke gratis automatisk.")
 
 
+def _vis_fund_merke(score: dict, ticker: str) -> None:
+    """Viser fundamental Minervini-score som én kompakt linje under chartet."""
+    if not score.get("tilgjengelig"):
+        st.caption(f"📊 Fundamental: ingen Yahoo-data for **{ticker}** (vanlig for mindre aksjer)")
+        return
+    p, m = score["poeng"], score["merke"]
+    detaljer = " · ".join(score["detaljer"])
+    label = "Sterk ✅" if p >= 4 else "Godkjent" if p >= 2 else "Svak"
+    st.caption(f"📊 **Fundamental Minervini-score:** {m} **{p}/5** ({label}) — {detaljer}")
+
+
 def fundamenta_seksjon(ticker: str, nokkel: str) -> None:
-    """Toggle + henting + visning. Holder chartet raskt (henter kun når du vil)."""
-    vis = st.toggle("📊 Vis fundamentale tall (vekst, marginer, aksjer)",
+    """Henter alltid fundamental score (cached, rask etter første gang) og viser merke.
+    Scoren lagres i session_state så tabellen kan vise Fund-kolonnen gradvis.
+    Detaljert tabell bak toggle for de som vil dykke dypere.
+    """
+    fund = hent_fundamenta_cached(ticker)
+    score = fundamenta.fund_score(fund)
+    st.session_state.setdefault("fund_scores", {})[ticker] = score
+    _vis_fund_merke(score, ticker)
+    vis = st.toggle("📊 Vis detaljerte fundamentale tall (vekst, marginer, aksjestruktur)",
                     value=False, key=f"fund_{nokkel}")
     if not vis:
         return
-    with st.spinner(f"Henter fundamentaltall for {ticker} ..."):
-        fund = hent_fundamenta_cached(ticker)
     if not fund.get("tilgjengelig"):
         st.info(f"Yahoo har ingen fundamentaldata for {ticker}. Det er vanlig for mindre "
                 "aksjer på Euronext Growth/Expand.")
@@ -838,6 +854,14 @@ def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None) -
     vis["Volum ±2"] = (df["volum_signatur"].map(_signatur_kort)
                        if "volum_signatur" in df.columns else "—")
     vis["RS"] = df["rs"]
+    scores = st.session_state.get("fund_scores", {})
+    vis["Fund"] = df["ticker"].map(
+        lambda t: (
+            f"{scores[t]['merke']} {scores[t]['poeng']}/5"
+            if t in scores and scores[t].get("tilgjengelig")
+            else ("·" if t in scores else "")
+        )
+    )
     vis["Uke"] = df["mtf_emoji"] if "mtf_emoji" in df else "⚠️"
     return vis
 
@@ -903,6 +927,17 @@ def stil_hovedtabell(vis: pd.DataFrame):
             return lys
         return ""
 
+    def _fund_style(v):
+        if not isinstance(v, str) or not v or v == "·":
+            return ""
+        if v.startswith("🟢"):
+            return lys
+        if v.startswith("🟡"):
+            return "background-color:#fef9c3"
+        if v.startswith("🔴"):
+            return "background-color:#fee2e2"
+        return ""
+
     styler = vis.style
     if "Kriterie 1-7" in vis.columns:
         styler = styler.map(_krit, subset=["Kriterie 1-7"])
@@ -910,6 +945,8 @@ def stil_hovedtabell(vis: pd.DataFrame):
         styler = styler.map(_rvol, subset=["RVol"])
     if "Volum ±2" in vis.columns:
         styler = styler.map(_volsig, subset=["Volum ±2"])
+    if "Fund" in vis.columns:
+        styler = styler.map(_fund_style, subset=["Fund"])
     if "Til pivot (live)" in vis.columns:
         styler = styler.map(_live, subset=["Til pivot (live)"])
     if "RVol (live)" in vis.columns:
@@ -952,6 +989,12 @@ TABELL_HJELP = {
         "«–» = dag mangler ennå, «—» = ikke brutt pivot ennå."),
     "RS": st.column_config.NumberColumn(
         "RS", help="Relativ styrke 1–99 (99 = sterkest momentum i universet)."),
+    "Fund": st.column_config.TextColumn(
+        "Fund",
+        help="Fundamental Minervini-score 0–5: 🟢 4–5 = sterk vekst ✅, 🟡 2–3 = godkjent, "
+             "🔴 0–1 = svak. Kriterier: kvartalsvis salg ≥25 % + EPS ≥25 % + marginer opp + "
+             "årsvis salg ≥15 % + EPS ≥15 %. Hentes når du åpner et chart (caches i 12 t). "
+             "Tom = ikke sjekket ennå · '·' = ingen Yahoo-data (vanlig for små Oslo-aksjer)."),
     "Uke": st.column_config.TextColumn(
         "Uke", help="Ukentlig (høyere tidsramme) trend: ✅ bekreftet opp, ⚠️ blandet, ❌ nedtrend."),
 }
