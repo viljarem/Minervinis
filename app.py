@@ -60,6 +60,29 @@ def kjor_screening(bors_navn: str, preset_navn: str, versjon: float) -> pd.DataF
     return screener.screen(priser, konfig.PRESETS[preset_navn])
 
 
+def kjor_screening_retrospektiv(bors_navn: str, preset_navn: str, dato: pd.Timestamp, versjon: float) -> pd.DataFrame:
+    """Kjør screening på data slik det var på en historisk dato (uten look-ahead bias).
+    
+    Slicer opp priser til og med valgt dato, kjører screening, returnerer resultater.
+    """
+    priser = datamod.les_priser(konfig.BORSER[bors_navn].priser_fil)
+    if priser.empty:
+        return pd.DataFrame()
+    
+    # Konverter dato til timestamp hvis det ikke er det allerede
+    if isinstance(dato, pd.Timestamp):
+        dato_ts = dato
+    else:
+        dato_ts = pd.Timestamp(dato)
+    
+    # Filtrer priser til og med valgt dato
+    priser_op_til_dato = priser[pd.to_datetime(priser["Date"]) <= dato_ts].copy()
+    if priser_op_til_dato.empty:
+        return pd.DataFrame()
+    
+    return screener.screen(priser_op_til_dato, konfig.PRESETS[preset_navn])
+
+
 @st.cache_data(show_spinner=False)
 def data_status(bors_navn: str, versjon: float) -> dict:
     """Datadekning for én børs: siste handelsdag, antall aksjer med data, universstørrelse."""
@@ -230,6 +253,42 @@ def get_shares_and_mcap(ticker: str) -> tuple[float | None, float | None]:
         return shares, None
     except Exception:
         return None, None
+
+
+def beregn_kursutvikling_siden_dato(priser_df: pd.DataFrame, ticker: str, dato: pd.Timestamp, 
+                                     pris_pa_dato: float) -> dict:
+    """Beregn kursutvikling siden en historisk dato.
+    
+    Returnerer:
+      - pct_change: % endring fra pris_pa_dato til siste pris
+      - peak_high_pct: høyeste pris som % over pris_pa_dato
+      - peak_low_pct: laveste pris som % under pris_pa_dato
+      - siste_pris: siste sluttkurs
+    """
+    try:
+        serie = datamod.serie_for(priser_df, ticker)
+        if serie is None or serie.empty:
+            return {"pct_change": None, "peak_high_pct": None, "peak_low_pct": None, "siste_pris": None}
+        
+        # Filtrer data fra og med dagen etter (for å unngå same-day bias)
+        fra_dato = pd.Timestamp(dato) + pd.Timedelta(days=1)
+        framover = serie[serie.index > fra_dato].copy()
+        
+        if framover.empty:
+            return {"pct_change": None, "peak_high_pct": None, "peak_low_pct": None, "siste_pris": None}
+        
+        siste = framover.iloc[-1]
+        hoeyeste = framover.max()
+        laveste = framover.min()
+        
+        return {
+            "pct_change": ((siste - pris_pa_dato) / pris_pa_dato * 100) if pris_pa_dato else None,
+            "peak_high_pct": ((hoeyeste - pris_pa_dato) / pris_pa_dato * 100) if pris_pa_dato else None,
+            "peak_low_pct": ((laveste - pris_pa_dato) / pris_pa_dato * 100) if pris_pa_dato else None,
+            "siste_pris": siste,
+        }
+    except Exception:
+        return {"pct_change": None, "peak_high_pct": None, "peak_low_pct": None, "siste_pris": None}
 
 
 def _stor_tall(x) -> str:
@@ -865,7 +924,7 @@ def _signatur_kort(sig) -> str:
     return " ".join(biter)
 
 
-def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None) -> pd.DataFrame:
+def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None, retrospektiv_dato: pd.Timestamp | None = None) -> pd.DataFrame:
     vis = pd.DataFrame()
     vis["Ticker"] = df["ticker"]
     vis["Pris"] = df["pris"]
@@ -927,6 +986,25 @@ def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None) -
     st.session_state["share_data"] = share_cache
     vis["Shares"] = shares_liste
     vis["MCAP"] = mcap_liste
+    
+    # Hvis bruker velger retrospektiv dato: legg til kursutvikling siden den dato
+    if retrospektiv_dato is not None:
+        priser_alle = last_priser(st.session_state.get("bors_navn", "Oslo Børs"), data_versjon(konfig.BORSER[st.session_state.get("bors_navn", "Oslo Børs")]))
+        endre_liste = []
+        peak_high_liste = []
+        peak_low_liste = []
+        for ticker, pris_pa_dato in zip(df["ticker"], df["pris"]):
+            res = beregn_kursutvikling_siden_dato(priser_alle, ticker, retrospektiv_dato, pris_pa_dato)
+            pct = res.get("pct_change")
+            endre_liste.append(f"{pct:+.1f}%" if pct is not None else "—")
+            ph = res.get("peak_high_pct")
+            peak_high_liste.append(f"{ph:+.1f}%" if ph is not None else "—")
+            pl = res.get("peak_low_pct")
+            peak_low_liste.append(f"{pl:+.1f}%" if pl is not None else "—")
+        
+        vis["Endring %"] = endre_liste
+        vis["Peak High %"] = peak_high_liste
+        vis["Peak Low %"] = peak_low_liste
     
     vis["Uke"] = df["mtf_emoji"] if "mtf_emoji" in df else "⚠️"
     return vis
@@ -1067,6 +1145,12 @@ TABELL_HJELP = {
         "MCAP", help="Estimert markedsverdi (native valuta). Beregnet som shares × siste sluttkurs."),
     "Uke": st.column_config.TextColumn(
         "Uke", help="Ukentlig (høyere tidsramme) trend: ✅ bekreftet opp, ⚠️ blandet, ❌ nedtrend."),
+    "Endring %": st.column_config.TextColumn(
+        "Endring %", help="Kursendring % siden analyseringsdatoen (kun ved retrospektiv analyse)."),
+    "Peak High %": st.column_config.TextColumn(
+        "Peak High %", help="Høyeste pris % over analyseringsdatoen siden da (kun ved retrospektiv analyse)."),
+    "Peak Low %": st.column_config.TextColumn(
+        "Peak Low %", help="Laveste pris % under analyseringsdatoen siden da (kun ved retrospektiv analyse)."),
 }
 
 
@@ -1088,6 +1172,7 @@ with st.sidebar:
     st.divider()
 
 skannet_na = st.session_state.get("skannet_bors") == bors_navn
+st.session_state["bors_navn"] = bors_navn
 
 st.title("📈 DEMO-Screener")
 st.caption(f"Marked: **{BORS.navn}** · valuta {BORS.valuta_navn}")
@@ -1179,6 +1264,16 @@ visning og rører **aldri** kursdataene screeningen bygger på.
 with st.sidebar:
     st.header("Filtre")
     preset_navn = st.selectbox("Oppsett (preset)", list(konfig.PRESETS.keys()))
+    
+    # Datovelger for retrospektiv screening (valgfritt)
+    bruker_dato = st.date_input(
+        "📅 Analyser en historisk dato",
+        value=None,
+        help="La stå tom for nåværende data. Velg en dato for å se hva screeningen fant "
+             "den dagen, med kursutvikling siden da.",
+        max_value=pd.Timestamp.now()
+    )
+    
     min_krit = st.slider("Minimum antall kriterier", 0, 7, konfig.PRESETS[preset_navn].krev_antall)
     min_rs = st.slider("Minimum RS-rating", 0, 99, 0)
     kun_ferske = st.checkbox("Vis kun ferske brudd (🟢)", value=False)
@@ -1193,7 +1288,11 @@ with st.sidebar:
     if _sh is not None:
         st.caption(f"🕔 Sist hentet: {_sh:%d.%m.%Y kl. %H:%M} (norsk tid)")
 
-resultat = kjor_screening(bors_navn, preset_navn, versjon) if skannet_na else None
+# Bruk retrospektiv screening hvis bruker har valgt en dato
+if bruker_dato:
+    resultat = kjor_screening_retrospektiv(bors_navn, preset_navn, pd.Timestamp(bruker_dato), versjon)
+else:
+    resultat = kjor_screening(bors_navn, preset_navn, versjon) if skannet_na else None
 
 fane1, fane2, fane3 = st.tabs(["📋 Hovedliste", "📊 Chart", "🔎 Søk"])
 
@@ -1252,7 +1351,7 @@ with fane1:
             f"først, så de som er nærmest et brudd. Ferske brudd vises alltid, også under {min_krit}/7."
         )
         _tabell = st.dataframe(
-            stil_hovedtabell(formater_tabell(filt, live_priser or None, naa_oslo)),
+            stil_hovedtabell(formater_tabell(filt, live_priser or None, naa_oslo, retrospektiv_dato=pd.Timestamp(bruker_dato) if bruker_dato else None)),
             width="stretch", hide_index=True, height=560, column_config=TABELL_HJELP,
             on_select="rerun", selection_mode="multi-row", key="hovedliste_tabell",
         )
