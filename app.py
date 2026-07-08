@@ -267,24 +267,32 @@ def beregn_kursutvikling_siden_dato(priser_df: pd.DataFrame, ticker: str, dato: 
     """
     try:
         serie = datamod.serie_for(priser_df, ticker)
-        if serie is None or serie.empty:
+        if serie is None or serie.empty or "Close" not in serie.columns:
             return {"pct_change": None, "peak_high_pct": None, "peak_low_pct": None, "siste_pris": None}
-        
-        # Filtrer data fra og med dagen etter (for å unngå same-day bias)
-        fra_dato = pd.Timestamp(dato) + pd.Timedelta(days=1)
-        framover = serie[serie.index > fra_dato].copy()
-        
+
+        # Vi må regne på sluttkurs-serien (én verdi per dag), ikke hele OHLC-tabellen.
+        close = pd.to_numeric(serie["Close"], errors="coerce").dropna()
+        if close.empty:
+            return {"pct_change": None, "peak_high_pct": None, "peak_low_pct": None, "siste_pris": None}
+
+        # Etter valgt dato (uten look-ahead i selve screeningen).
+        fra_dato = pd.Timestamp(dato)
+        framover = close[close.index > fra_dato]
         if framover.empty:
             return {"pct_change": None, "peak_high_pct": None, "peak_low_pct": None, "siste_pris": None}
-        
-        siste = framover.iloc[-1]
-        hoeyeste = framover.max()
-        laveste = framover.min()
-        
+
+        basis = pd.to_numeric(pd.Series([pris_pa_dato]), errors="coerce").iloc[0]
+        if pd.isna(basis) or basis <= 0:
+            return {"pct_change": None, "peak_high_pct": None, "peak_low_pct": None, "siste_pris": None}
+
+        siste = float(framover.iloc[-1])
+        hoeyeste = float(framover.max())
+        laveste = float(framover.min())
+
         return {
-            "pct_change": ((siste - pris_pa_dato) / pris_pa_dato * 100) if pris_pa_dato else None,
-            "peak_high_pct": ((hoeyeste - pris_pa_dato) / pris_pa_dato * 100) if pris_pa_dato else None,
-            "peak_low_pct": ((laveste - pris_pa_dato) / pris_pa_dato * 100) if pris_pa_dato else None,
+            "pct_change": (siste - basis) / basis * 100,
+            "peak_high_pct": (hoeyeste - basis) / basis * 100,
+            "peak_low_pct": (laveste - basis) / basis * 100,
             "siste_pris": siste,
         }
     except Exception:
