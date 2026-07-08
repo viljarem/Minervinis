@@ -996,11 +996,11 @@ def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None, r
         for ticker, pris_pa_dato in zip(df["ticker"], df["pris"]):
             res = beregn_kursutvikling_siden_dato(priser_alle, ticker, retrospektiv_dato, pris_pa_dato)
             pct = res.get("pct_change")
-            endre_liste.append(f"{pct:+.1f}%" if pct is not None else "—")
+            endre_liste.append(f"{pct:+.1f}%" if (pct is not None and not pd.isna(pct)) else "—")
             ph = res.get("peak_high_pct")
-            peak_high_liste.append(f"{ph:+.1f}%" if ph is not None else "—")
+            peak_high_liste.append(f"{ph:+.1f}%" if (ph is not None and not pd.isna(ph)) else "—")
             pl = res.get("peak_low_pct")
-            peak_low_liste.append(f"{pl:+.1f}%" if pl is not None else "—")
+            peak_low_liste.append(f"{pl:+.1f}%" if (pl is not None and not pd.isna(pl)) else "—")
         
         vis["Endring %"] = endre_liste
         vis["Peak High %"] = peak_high_liste
