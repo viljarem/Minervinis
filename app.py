@@ -192,6 +192,30 @@ def hent_fundamenta_cached(ticker: str) -> dict:
     return fundamenta.hent_fundamenta(ticker)
 
 
+def prefetch_fund_scores(tickers: list[str]) -> None:
+    """Pre-henter fundamental scores for alle tickers og lagrer i session_state.
+    
+    Gjør det mulig å vise Fund-kolonnen i tabellen immediately. Kjøres asynkront
+    så tabellen vises før alle scores er hentet.
+    """
+    if not tickers:
+        return
+    
+    scores = st.session_state.get("fund_scores", {})
+    
+    # Hent scores for alle tickers som ikke allerede er cached
+    for ticker in tickers:
+        if ticker not in scores:
+            try:
+                fund = hent_fundamenta_cached(ticker)
+                score = fundamenta.fund_score(fund)
+                scores[ticker] = score
+                st.session_state["fund_scores"] = scores
+            except Exception:
+                # Hvis henting feiler, skip denne aksjen – formater_tabell håndterer det
+                pass
+
+
 def _stor_tall(x) -> str:
     """Store tall pent på norsk: 2489187863 → '2,49 mrd', 272700000 → '272,7 mill'."""
     try:
@@ -1167,6 +1191,10 @@ with fane1:
             filt = (filt.sort_values(["_rang", "_naer"], kind="mergesort")
                         .drop(columns=["_rang", "_naer"]))
 
+        # Pre-hent fundamental scores for alle tickers i resultatet,
+        # så Fund-kolonnen kan vises immediately i tabellen.
+        prefetch_fund_scores(filt["ticker"].tolist())
+        
         # Live-kurser (valgfritt): hentes helt adskilt og påvirker ALDRI screening-dataene.
         live_priser = {}
         naa_oslo = pd.Timestamp.now(tz="Europe/Oslo")
