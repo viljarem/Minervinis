@@ -996,11 +996,23 @@ def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None, r
         for ticker, pris_pa_dato in zip(df["ticker"], df["pris"]):
             res = beregn_kursutvikling_siden_dato(priser_alle, ticker, retrospektiv_dato, pris_pa_dato)
             pct = res.get("pct_change")
-            endre_liste.append(f"{pct:+.1f}%" if (pct is not None and not pd.isna(pct)) else "—")
+            # Sjekk om det er et tall (float/int) som kan formateres
+            try:
+                endre_liste.append(f"{float(pct):+.1f}%" if isinstance(pct, (int, float)) and pct is not None else "—")
+            except (TypeError, ValueError):
+                endre_liste.append("—")
+            
             ph = res.get("peak_high_pct")
-            peak_high_liste.append(f"{ph:+.1f}%" if (ph is not None and not pd.isna(ph)) else "—")
+            try:
+                peak_high_liste.append(f"{float(ph):+.1f}%" if isinstance(ph, (int, float)) and ph is not None else "—")
+            except (TypeError, ValueError):
+                peak_high_liste.append("—")
+            
             pl = res.get("peak_low_pct")
-            peak_low_liste.append(f"{pl:+.1f}%" if (pl is not None and not pd.isna(pl)) else "—")
+            try:
+                peak_low_liste.append(f"{float(pl):+.1f}%" if isinstance(pl, (int, float)) and pl is not None else "—")
+            except (TypeError, ValueError):
+                peak_low_liste.append("—")
         
         vis["Endring %"] = endre_liste
         vis["Peak High %"] = peak_high_liste
