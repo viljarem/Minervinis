@@ -216,6 +216,22 @@ def prefetch_fund_scores(tickers: list[str]) -> None:
                 pass
 
 
+def get_shares_and_mcap(ticker: str) -> tuple[float | None, float | None]:
+    """Returnerer (shares_outstanding, market_cap_in_native_currency) for ticker.
+    
+    Market cap beregnes som shares × pris (nåværende pris fra screening-data).
+    """
+    try:
+        fund = hent_fundamenta_cached(ticker)
+        struktur = fund.get("struktur", {})
+        shares = struktur.get("utestaende")
+        # Market cap = shares × current price (motta pris som parameter ville vært bedre,
+        # men vi har det ikke lett tilgjengelig her). Returnerer bare shares for nå.
+        return shares, None
+    except Exception:
+        return None, None
+
+
 def _stor_tall(x) -> str:
     """Store tall pent på norsk: 2489187863 → '2,49 mrd', 272700000 → '272,7 mill'."""
     try:
@@ -886,6 +902,32 @@ def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None) -
             else ("·" if t in scores else "")
         )
     )
+    
+    # Shares og MCAP: pre-henter som list comprehension for å unngå N+1 callbacks
+    shares_liste = []
+    mcap_liste = []
+    share_cache = st.session_state.get("share_data", {})
+    for t, pris in zip(df["ticker"], df["pris"]):
+        if t not in share_cache:
+            try:
+                fund = hent_fundamenta_cached(t)
+                struktur = fund.get("struktur", {})
+                sh = struktur.get("utestaende")
+                share_cache[t] = sh
+            except Exception:
+                share_cache[t] = None
+        sh = share_cache.get(t)
+        shares_liste.append(_stor_tall(sh) if sh else "—")
+        # MCAP = shares × pris (i native valuta)
+        if sh and pris and sh > 0:
+            mcap_liste.append(_stor_tall(sh * pris))
+        else:
+            mcap_liste.append("—")
+    
+    st.session_state["share_data"] = share_cache
+    vis["Shares"] = shares_liste
+    vis["MCAP"] = mcap_liste
+    
     vis["Uke"] = df["mtf_emoji"] if "mtf_emoji" in df else "⚠️"
     return vis
 
@@ -1019,6 +1061,10 @@ TABELL_HJELP = {
              "🔴 0–1 = svak. Kriterier: kvartalsvis salg ≥25 % + EPS ≥25 % + marginer opp + "
              "årsvis salg ≥15 % + EPS ≥15 %. Hentes når du åpner et chart (caches i 12 t). "
              "Tom = ikke sjekket ennå · '·' = ingen Yahoo-data (vanlig for små Oslo-aksjer)."),
+    "Shares": st.column_config.TextColumn(
+        "Shares", help="Antall aksjer utestående (millioner). Yahoo-data."),
+    "MCAP": st.column_config.TextColumn(
+        "MCAP", help="Estimert markedsverdi (native valuta). Beregnet som shares × siste sluttkurs."),
     "Uke": st.column_config.TextColumn(
         "Uke", help="Ukentlig (høyere tidsramme) trend: ✅ bekreftet opp, ⚠️ blandet, ❌ nedtrend."),
 }
