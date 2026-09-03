@@ -3,7 +3,7 @@
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 150.81,
+    "pris": 148.87,
     "rs": 99,
     "pivot": NaN
   },
@@ -11,23 +11,23 @@
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 956.08,
+    "pris": 958.16,
     "rs": 99,
     "pivot": 1036.13
   },
   "DELL": {
     "score": 7,
     "oppfyller": true,
-    "status": "⚪",
-    "pris": 492.2,
+    "status": "🟢",
+    "pris": 516.39,
     "rs": 98,
-    "pivot": NaN
+    "pivot": 514.0
   },
   "LITE": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 870.58,
+    "pris": 847.37,
     "rs": 98,
     "pivot": NaN
   },
@@ -35,7 +35,7 @@
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 51.83,
+    "pris": 54.44,
     "rs": 97,
     "pivot": NaN
   },
@@ -43,7 +43,7 @@
     "score": 7,
     "oppfyller": true,
     "status": "🟡",
-    "pris": 387.0,
+    "pris": 387.71,
     "rs": 97,
     "pivot": 367.6
   },
@@ -51,7 +51,7 @@
     "score": 7,
     "oppfyller": true,
     "status": "🔵",
-    "pris": 366.09,
+    "pris": 370.69,
     "rs": 97,
     "pivot": 315.0
   },
@@ -59,39 +59,47 @@
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 291.76,
+    "pris": 293.35,
     "rs": 96,
     "pivot": NaN
-  },
-  "PSX": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "🟡",
-    "pris": 256.09,
-    "rs": 96,
-    "pivot": 246.95
-  },
-  "CNC": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 67.34,
-    "rs": 95,
-    "pivot": 68.38
   },
   "CRWD": {
     "score": 7,
     "oppfyller": true,
     "status": "🟢",
-    "pris": 203.42,
-    "rs": 95,
+    "pris": 214.97,
+    "rs": 96,
     "pivot": 227.5
+  },
+  "PSX": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "🟡",
+    "pris": 254.66,
+    "rs": 96,
+    "pivot": 246.95
+  },
+  "APA": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 44.18,
+    "rs": 95,
+    "pivot": 45.05
+  },
+  "CNC": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 68.02,
+    "rs": 95,
+    "pivot": 68.38
   },
   "HUM": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 400.97,
+    "pris": 406.52,
     "rs": 95,
     "pivot": NaN
   },
@@ -99,23 +107,15 @@
     "score": 7,
     "oppfyller": true,
     "status": "🔵",
-    "pris": 163.36,
+    "pris": 164.01,
     "rs": 95,
     "pivot": 143.3
   },
-  "APA": {
+  "ABNB": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 44.69,
-    "rs": 94,
-    "pivot": 45.05
-  },
-  "CF": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 139.27,
+    "pris": 185.25,
     "rs": 94,
     "pivot": NaN
   },
@@ -123,7 +123,7 @@
     "score": 7,
     "oppfyller": true,
     "status": "🔵",
-    "pris": 151.64,
+    "pris": 152.34,
     "rs": 94,
     "pivot": 135.05
   },
@@ -131,15 +131,15 @@
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 190.04,
+    "pris": 193.94,
     "rs": 94,
     "pivot": 195.18
   },
-  "ABNB": {
+  "CF": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 183.26,
+    "pris": 137.81,
     "rs": 93,
     "pivot": NaN
   },
@@ -147,7 +147,7 @@
     "score": 7,
     "oppfyller": true,
     "status": "🔵",
-    "pris": 180.77,
+    "pris": 185.38,
     "rs": 93,
     "pivot": 176.97
   },
@@ -155,31 +155,31 @@
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 263.97,
+    "pris": 262.47,
     "rs": 93,
     "pivot": 280.11
-  },
-  "TRGP": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 293.46,
-    "rs": 92,
-    "pivot": 307.94
   },
   "ZBRA": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 351.11,
-    "rs": 92,
+    "pris": 357.5,
+    "rs": 93,
     "pivot": 386.23
+  },
+  "TRGP": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 293.54,
+    "rs": 92,
+    "pivot": 307.94
   },
   "AMGN": {
     "score": 7,
     "oppfyller": true,
     "status": "🔵",
-    "pris": 442.84,
+    "pris": 444.12,
     "rs": 91,
     "pivot": 375.25
   },
@@ -187,31 +187,31 @@
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 162.04,
+    "pris": 164.33,
     "rs": 91,
     "pivot": 165.69
+  },
+  "ANET": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 191.44,
+    "rs": 90,
+    "pivot": NaN
   },
   "HPQ": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 31.99,
-    "rs": 91,
-    "pivot": NaN
-  },
-  "FCX": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "🔵",
-    "pris": 73.93,
+    "pris": 31.93,
     "rs": 90,
-    "pivot": 71.22
+    "pivot": NaN
   },
   "INCY": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 128.83,
+    "pris": 128.0,
     "rs": 90,
     "pivot": NaN
   },
@@ -219,199 +219,215 @@
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 17.09,
+    "pris": 16.94,
     "rs": 90,
-    "pivot": NaN
-  },
-  "BAX": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 25.7,
-    "rs": 89,
-    "pivot": NaN
-  },
-  "BMY": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 67.66,
-    "rs": 89,
-    "pivot": 68.1
-  },
-  "JNJ": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "🟡",
-    "pris": 275.21,
-    "rs": 89,
-    "pivot": 273.55
-  },
-  "SWK": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 96.89,
-    "rs": 89,
-    "pivot": 104.68
-  },
-  "CAH": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 245.49,
-    "rs": 88,
-    "pivot": NaN
-  },
-  "COP": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "🔵",
-    "pris": 137.2,
-    "rs": 88,
-    "pivot": 121.57
-  },
-  "DE": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "🔵",
-    "pris": 698.37,
-    "rs": 88,
-    "pivot": 627.88
-  },
-  "STLD": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 247.64,
-    "rs": 88,
-    "pivot": NaN
-  },
-  "EXPD": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 186.16,
-    "rs": 87,
     "pivot": NaN
   },
   "IVZ": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 31.72,
-    "rs": 87,
+    "pris": 32.71,
+    "rs": 89,
     "pivot": 32.8
   },
-  "VRTX": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "🔵",
-    "pris": 556.75,
-    "rs": 87,
-    "pivot": 493.61
-  },
-  "ANET": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 186.1,
-    "rs": 86,
-    "pivot": NaN
-  },
-  "CPAY": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "🔵",
-    "pris": 416.4,
-    "rs": 86,
-    "pivot": 374.09
-  },
-  "DGX": {
+  "JNJ": {
     "score": 7,
     "oppfyller": true,
     "status": "🟡",
-    "pris": 240.8,
-    "rs": 86,
-    "pivot": 240.13
+    "pris": 278.43,
+    "rs": 89,
+    "pivot": 275.11
   },
-  "NTRS": {
+  "PFG": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "🟢",
+    "pris": 118.51,
+    "rs": 89,
+    "pivot": 116.61
+  },
+  "BMY": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 183.98,
-    "rs": 86,
-    "pivot": 195.78
+    "pris": 68.09,
+    "rs": 88,
+    "pivot": 68.1
+  },
+  "CAH": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 248.61,
+    "rs": 88,
+    "pivot": NaN
+  },
+  "DE": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "🔵",
+    "pris": 694.41,
+    "rs": 88,
+    "pivot": 627.88
+  },
+  "FCX": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "🔵",
+    "pris": 72.56,
+    "rs": 88,
+    "pivot": 71.22
+  },
+  "EXPD": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 187.13,
+    "rs": 87,
+    "pivot": NaN
+  },
+  "STLD": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 246.03,
+    "rs": 87,
+    "pivot": NaN
+  },
+  "SWK": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 96.5,
+    "rs": 87,
+    "pivot": 104.68
   },
   "TRV": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 366.18,
-    "rs": 86,
+    "pris": 374.34,
+    "rs": 87,
     "pivot": NaN
   },
-  "DXCM": {
+  "BAX": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 89.69,
-    "rs": 85,
-    "pivot": 92.59
+    "pris": 25.57,
+    "rs": 86,
+    "pivot": NaN
   },
-  "SJM": {
+  "COP": {
     "score": 7,
     "oppfyller": true,
-    "status": "🟢",
-    "pris": 131.44,
+    "status": "⚪",
+    "pris": 135.72,
+    "rs": 86,
+    "pivot": 135.88
+  },
+  "NTRS": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 187.45,
+    "rs": 86,
+    "pivot": 195.78
+  },
+  "VRTX": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "🔵",
+    "pris": 557.96,
+    "rs": 86,
+    "pivot": 493.61
+  },
+  "CPAY": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "🔵",
+    "pris": 419.68,
     "rs": 85,
-    "pivot": 126.46
+    "pivot": 374.09
+  },
+  "FDX": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 324.31,
+    "rs": 85,
+    "pivot": 341.69
+  },
+  "IBKR": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 92.95,
+    "rs": 85,
+    "pivot": 97.77
   },
   "ALL": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 259.34,
+    "pris": 263.11,
     "rs": 84,
     "pivot": 265.47
-  },
-  "BDX": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "🔵",
-    "pris": 187.52,
-    "rs": 84,
-    "pivot": 159.49
-  },
-  "BIIB": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "🟡",
-    "pris": 222.67,
-    "rs": 84,
-    "pivot": 218.59
-  },
-  "LH": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 331.66,
-    "rs": 83,
-    "pivot": NaN
   },
   "MET": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 96.42,
-    "rs": 83,
+    "pris": 99.23,
+    "rs": 84,
     "pivot": NaN
   },
   "BBY": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 87.0,
+    "pris": 87.49,
+    "rs": 83,
+    "pivot": NaN
+  },
+  "BIIB": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "🟡",
+    "pris": 224.51,
+    "rs": 83,
+    "pivot": 218.59
+  },
+  "DGX": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 239.4,
+    "rs": 83,
+    "pivot": 240.13
+  },
+  "AIZ": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 287.71,
+    "rs": 82,
+    "pivot": NaN
+  },
+  "DXCM": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 89.71,
+    "rs": 82,
+    "pivot": 92.59
+  },
+  "LH": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 331.5,
     "rs": 82,
     "pivot": NaN
   },
@@ -419,568 +435,576 @@
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 238.59,
-    "rs": 81,
+    "pris": 241.12,
+    "rs": 82,
     "pivot": NaN
   },
-  "ADM": {
+  "BDX": {
     "score": 7,
     "oppfyller": true,
-    "status": "🟡",
-    "pris": 85.38,
-    "rs": 80,
-    "pivot": 83.84
+    "status": "🔵",
+    "pris": 187.62,
+    "rs": 81,
+    "pivot": 159.49
   },
-  "AIZ": {
+  "SJM": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "🔵",
+    "pris": 128.51,
+    "rs": 81,
+    "pivot": 126.46
+  },
+  "USB": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 284.07,
-    "rs": 80,
+    "pris": 63.53,
+    "rs": 81,
     "pivot": NaN
   },
   "CVX": {
     "score": 7,
     "oppfyller": true,
-    "status": "🔵",
-    "pris": 211.78,
-    "rs": 80,
-    "pivot": 195.98
-  },
-  "XOM": {
-    "score": 7,
-    "oppfyller": true,
     "status": "🟡",
-    "pris": 164.15,
+    "pris": 211.32,
     "rs": 80,
-    "pivot": 158.05
-  },
-  "BAC": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "🔵",
-    "pris": 62.6,
-    "rs": 79,
-    "pivot": 59.2
+    "pivot": 208.98
   },
   "IFF": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 86.94,
-    "rs": 79,
+    "pris": 86.46,
+    "rs": 80,
     "pivot": 89.32
   },
   "NDSN": {
     "score": 7,
     "oppfyller": true,
     "status": "🟡",
-    "pris": 316.63,
-    "rs": 79,
+    "pris": 317.49,
+    "rs": 80,
     "pivot": 315.68
   },
-  "GRMN": {
+  "C": {
     "score": 7,
     "oppfyller": true,
-    "status": "🔵",
-    "pris": 276.04,
-    "rs": 78,
-    "pivot": 253.49
+    "status": "⚪",
+    "pris": 138.14,
+    "rs": 79,
+    "pivot": 140.88
   },
   "HSIC": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 90.39,
-    "rs": 78,
+    "pris": 90.86,
+    "rs": 79,
     "pivot": 92.18
   },
-  "CTVA": {
+  "XOM": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "🟡",
+    "pris": 162.21,
+    "rs": 79,
+    "pivot": 158.05
+  },
+  "ADM": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "🟡",
+    "pris": 84.38,
+    "rs": 78,
+    "pivot": 83.84
+  },
+  "BAC": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 89.97,
-    "rs": 77,
+    "pris": 63.04,
+    "rs": 78,
     "pivot": NaN
+  },
+  "MS": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 217.15,
+    "rs": 78,
+    "pivot": 222.0
   },
   "ELV": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 405.84,
+    "pris": 414.78,
     "rs": 77,
     "pivot": NaN
+  },
+  "GRMN": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "🔵",
+    "pris": 277.18,
+    "rs": 77,
+    "pivot": 253.49
+  },
+  "KO": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 88.81,
+    "rs": 77,
+    "pivot": 90.92
+  },
+  "XYZ": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 83.37,
+    "rs": 77,
+    "pivot": 86.75
+  },
+  "AMP": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 565.08,
+    "rs": 76,
+    "pivot": 572.56
+  },
+  "CTVA": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 88.62,
+    "rs": 76,
+    "pivot": NaN
+  },
+  "OXY": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 60.61,
+    "rs": 75,
+    "pivot": 62.15
+  },
+  "GM": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 87.22,
+    "rs": 73,
+    "pivot": NaN
+  },
+  "JPM": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 362.06,
+    "rs": 73,
+    "pivot": 366.5
   },
   "OKE": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 96.01,
-    "rs": 77,
+    "pris": 95.75,
+    "rs": 73,
     "pivot": 97.9
   },
-  "APH": {
+  "BALL": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 160.08,
-    "rs": 76,
+    "pris": 62.93,
+    "rs": 72,
+    "pivot": NaN
+  },
+  "NVDA": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "🟡",
+    "pris": 228.45,
+    "rs": 71,
+    "pivot": 227.92
+  },
+  "AAPL": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 328.21,
+    "rs": 70,
     "pivot": NaN
   },
   "ABBV": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 261.72,
-    "rs": 75,
+    "pris": 260.21,
+    "rs": 70,
     "pivot": NaN
   },
-  "AMP": {
+  "FANG": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 551.85,
-    "rs": 75,
-    "pivot": 572.56
-  },
-  "XYZ": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 82.46,
-    "rs": 75,
-    "pivot": 86.75
-  },
-  "KO": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 88.24,
-    "rs": 74,
-    "pivot": 90.92
-  },
-  "OXY": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 60.91,
-    "rs": 74,
-    "pivot": 62.15
-  },
-  "BALL": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 63.3,
-    "rs": 73,
-    "pivot": NaN
-  },
-  "AAPL": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 324.96,
-    "rs": 72,
-    "pivot": NaN
+    "pris": 202.94,
+    "rs": 70,
+    "pivot": 216.9
   },
   "NWSA": {
     "score": 7,
     "oppfyller": true,
     "status": "🔵",
-    "pris": 30.65,
-    "rs": 72,
-    "pivot": 28.98
-  },
-  "NVDA": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 224.41,
-    "rs": 71,
-    "pivot": 227.92
-  },
-  "EOG": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 148.96,
+    "pris": 30.94,
     "rs": 70,
-    "pivot": NaN
+    "pivot": 28.98
   },
   "NWS": {
     "score": 7,
     "oppfyller": true,
     "status": "🔵",
-    "pris": 34.41,
-    "rs": 69,
+    "pris": 34.72,
+    "rs": 67,
     "pivot": 32.91
   },
   "SBUX": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 106.72,
-    "rs": 68,
+    "pris": 105.82,
+    "rs": 67,
     "pivot": 109.88
   },
-  "FANG": {
+  "EOG": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 203.42,
-    "rs": 67,
-    "pivot": 216.9
-  },
-  "GM": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 84.87,
-    "rs": 67,
-    "pivot": NaN
-  },
-  "AMCR": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 46.68,
+    "pris": 145.96,
     "rs": 66,
-    "pivot": 48.0
-  },
-  "WMB": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 75.16,
-    "rs": 64,
-    "pivot": 75.88
-  },
-  "DRI": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 220.03,
-    "rs": 63,
-    "pivot": NaN
-  },
-  "APD": {
-    "score": 7,
-    "oppfyller": true,
-    "status": "⚪",
-    "pris": 309.45,
-    "rs": 62,
-    "pivot": 311.51
+    "pivot": 153.67
   },
   "KDP": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 32.59,
-    "rs": 62,
+    "pris": 32.88,
+    "rs": 65,
     "pivot": 33.14
+  },
+  "CB": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 348.25,
+    "rs": 64,
+    "pivot": 365.91
+  },
+  "DRI": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 218.04,
+    "rs": 62,
+    "pivot": 229.76
+  },
+  "WMB": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 74.05,
+    "rs": 62,
+    "pivot": 75.88
+  },
+  "OMC": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 84.73,
+    "rs": 61,
+    "pivot": NaN
   },
   "MSI": {
     "score": 7,
     "oppfyller": true,
     "status": "🔵",
-    "pris": 478.92,
-    "rs": 62,
+    "pris": 472.23,
+    "rs": 60,
     "pivot": 432.0
   },
-  "PM": {
+  "APD": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 187.94,
-    "rs": 61,
-    "pivot": NaN
+    "pris": 304.22,
+    "rs": 59,
+    "pivot": 311.51
   },
   "EA": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
     "pris": 209.7,
-    "rs": 57,
+    "rs": 56,
+    "pivot": NaN
+  },
+  "DLR": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 187.79,
+    "rs": 55,
+    "pivot": NaN
+  },
+  "F": {
+    "score": 7,
+    "oppfyller": true,
+    "status": "⚪",
+    "pris": 14.41,
+    "rs": 55,
     "pivot": NaN
   },
   "AMZN": {
     "score": 7,
     "oppfyller": true,
-    "status": "⚪",
-    "pris": 254.98,
-    "rs": 55,
+    "status": "🟡",
+    "pris": 258.9,
+    "rs": 54,
     "pivot": 258.08
   },
-  "KVUE": {
+  "TFC": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 19.13,
+    "pris": 51.61,
     "rs": 54,
-    "pivot": 19.83
+    "pivot": 52.62
   },
   "VRSN": {
     "score": 7,
     "oppfyller": true,
     "status": "⚪",
-    "pris": 289.96,
-    "rs": 52,
+    "pris": 293.35,
+    "rs": 54,
     "pivot": 302.11
   },
   "AMD": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 457.06,
+    "pris": 456.16,
     "rs": 97,
     "pivot": 517.35
-  },
-  "FTNT": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 154.54,
-    "rs": 96,
-    "pivot": 172.09
   },
   "PANW": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 328.48,
+    "pris": 331.94,
     "rs": 96,
     "pivot": NaN
+  },
+  "FTNT": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 156.36,
+    "rs": 95,
+    "pivot": 172.09
+  },
+  "NEM": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "🔵",
+    "pris": 130.43,
+    "rs": 91,
+    "pivot": 96.94
   },
   "WBD": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 28.39,
+    "pris": 28.37,
     "rs": 91,
-    "pivot": NaN
-  },
-  "SLB": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 58.13,
-    "rs": 89,
     "pivot": NaN
   },
   "KEYS": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 321.58,
-    "rs": 88,
+    "pris": 322.62,
+    "rs": 89,
+    "pivot": NaN
+  },
+  "SLB": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 57.41,
+    "rs": 87,
     "pivot": NaN
   },
   "BEN": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 33.01,
-    "rs": 87,
+    "pris": 33.55,
+    "rs": 84,
     "pivot": 36.28
-  },
-  "NEM": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "🔵",
-    "pris": 125.16,
-    "rs": 87,
-    "pivot": 96.94
   },
   "JBHT": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 260.22,
+    "pris": 266.28,
     "rs": 84,
     "pivot": 287.93
-  },
-  "FDX": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 316.54,
-    "rs": 83,
-    "pivot": 341.69
-  },
-  "FFIV": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 391.08,
-    "rs": 82,
-    "pivot": 425.61
-  },
-  "PFG": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 111.31,
-    "rs": 82,
-    "pivot": 116.61
-  },
-  "USB": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 62.77,
-    "rs": 82,
-    "pivot": NaN
-  },
-  "WST": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 342.63,
-    "rs": 82,
-    "pivot": 358.67
-  },
-  "CSCO": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 109.46,
-    "rs": 81,
-    "pivot": 124.71
   },
   "CSX": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 48.65,
-    "rs": 81,
+    "pris": 48.99,
+    "rs": 82,
     "pivot": NaN
   },
-  "IBKR": {
+  "FFIV": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 89.12,
-    "rs": 80,
-    "pivot": 97.77
+    "pris": 392.15,
+    "rs": 81,
+    "pivot": 425.61
+  },
+  "WST": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 342.73,
+    "rs": 81,
+    "pivot": 358.67
   },
   "CFG": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 69.78,
+    "pris": 70.83,
     "rs": 79,
     "pivot": NaN
-  },
-  "UNH": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 399.66,
-    "rs": 79,
-    "pivot": NaN
-  },
-  "HAL": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "🟡",
-    "pris": 37.63,
-    "rs": 78,
-    "pivot": 36.08
-  },
-  "C": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 134.34,
-    "rs": 77,
-    "pivot": 140.88
   },
   "GL": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 173.34,
-    "rs": 77,
+    "pris": 176.52,
+    "rs": 79,
     "pivot": 188.5
   },
-  "LLY": {
+  "CSCO": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 1160.08,
-    "rs": 76,
-    "pivot": 1230.24
-  },
-  "MS": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 211.82,
-    "rs": 76,
-    "pivot": 222.0
+    "pris": 108.61,
+    "rs": 78,
+    "pivot": 124.71
   },
   "WAB": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 279.81,
-    "rs": 76,
+    "pris": 280.83,
+    "rs": 77,
     "pivot": 304.05
   },
-  "DVN": {
+  "HAL": {
     "score": 6,
     "oppfyller": false,
-    "status": "⚪",
-    "pris": 49.03,
-    "rs": 75,
-    "pivot": 49.72
+    "status": "🟡",
+    "pris": 37.29,
+    "rs": 76,
+    "pivot": 35.91
   },
-  "VTR": {
+  "UNH": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 92.06,
-    "rs": 75,
+    "pris": 400.94,
+    "rs": 76,
     "pivot": NaN
   },
   "GILD": {
     "score": 6,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 149.61,
-    "rs": 74,
+    "pris": 151.22,
+    "rs": 75,
     "pivot": 140.61
   },
-  "CVS": {
+  "DVN": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 97.23,
-    "rs": 73,
-    "pivot": 97.51
+    "pris": 48.79,
+    "rs": 74,
+    "pivot": 49.72
   },
-  "JPM": {
+  "VTR": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 356.22,
+    "pris": 92.11,
+    "rs": 74,
+    "pivot": NaN
+  },
+  "EG": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 386.25,
     "rs": 73,
-    "pivot": 366.5
+    "pivot": NaN
+  },
+  "HWM": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 260.49,
+    "rs": 72,
+    "pivot": NaN
   },
   "ROST": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 230.85,
+    "pris": 231.67,
     "rs": 72,
     "pivot": 257.0
+  },
+  "CVS": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 97.2,
+    "rs": 71,
+    "pivot": 97.51
+  },
+  "LLY": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 1159.6,
+    "rs": 71,
+    "pivot": 1230.24
   },
   "UNP": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 289.73,
-    "rs": 71,
+    "pris": 289.15,
+    "rs": 70,
     "pivot": NaN
   },
   "DOC": {
@@ -988,366 +1012,414 @@
     "oppfyller": false,
     "status": "⚪",
     "pris": 21.03,
-    "rs": 70,
-    "pivot": NaN
-  },
-  "EG": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 378.28,
-    "rs": 70,
-    "pivot": NaN
-  },
-  "IEX": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 224.61,
-    "rs": 70,
-    "pivot": 231.7
-  },
-  "MCK": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "🟡",
-    "pris": 924.78,
-    "rs": 70,
-    "pivot": 911.53
-  },
-  "PNC": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 242.46,
-    "rs": 70,
-    "pivot": 254.46
-  },
-  "FITB": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 54.4,
     "rs": 69,
-    "pivot": 58.63
-  },
-  "HST": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 22.11,
-    "rs": 69,
-    "pivot": NaN
-  },
-  "BKR": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "🔵",
-    "pris": 64.63,
-    "rs": 68,
-    "pivot": 58.91
-  },
-  "LYV": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 179.59,
-    "rs": 67,
-    "pivot": 189.25
-  },
-  "RTX": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 200.78,
-    "rs": 67,
-    "pivot": 203.94
-  },
-  "BG": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "🟡",
-    "pris": 122.86,
-    "rs": 66,
-    "pivot": 118.74
-  },
-  "GWW": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 1284.85,
-    "rs": 65,
-    "pivot": NaN
-  },
-  "MTB": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 235.48,
-    "rs": 65,
-    "pivot": 253.58
-  },
-  "DAL": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 78.14,
-    "rs": 64,
     "pivot": NaN
   },
   "GS": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 1004.42,
-    "rs": 64,
+    "pris": 1037.93,
+    "rs": 69,
     "pivot": 1071.96
   },
-  "LYB": {
+  "MCK": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "🟡",
+    "pris": 921.38,
+    "rs": 69,
+    "pivot": 911.53
+  },
+  "GWW": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 66.57,
-    "rs": 64,
+    "pris": 1312.84,
+    "rs": 68,
     "pivot": NaN
+  },
+  "IEX": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 223.1,
+    "rs": 68,
+    "pivot": 231.7
+  },
+  "PNC": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 245.18,
+    "rs": 68,
+    "pivot": 254.46
   },
   "EQIX": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 1019.24,
-    "rs": 63,
+    "pris": 1040.83,
+    "rs": 67,
     "pivot": NaN
   },
-  "WSM": {
+  "FITB": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 221.72,
-    "rs": 62,
-    "pivot": 233.74
+    "pris": 54.97,
+    "rs": 67,
+    "pivot": 58.63
   },
-  "EBAY": {
+  "LYV": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 106.7,
-    "rs": 61,
+    "pris": 177.49,
+    "rs": 66,
+    "pivot": 189.25
+  },
+  "MTB": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 240.06,
+    "rs": 66,
+    "pivot": 253.58
+  },
+  "AMCR": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 45.89,
+    "rs": 65,
+    "pivot": 48.0
+  },
+  "DAL": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 78.75,
+    "rs": 65,
     "pivot": NaN
   },
-  "RF": {
+  "HST": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 29.93,
-    "rs": 61,
+    "pris": 21.99,
+    "rs": 65,
     "pivot": NaN
   },
   "VZ": {
     "score": 6,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 50.22,
-    "rs": 61,
+    "pris": 50.59,
+    "rs": 65,
     "pivot": 49.01
   },
-  "KHC": {
+  "RTX": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 26.26,
-    "rs": 60,
+    "pris": 202.13,
+    "rs": 64,
+    "pivot": 203.94
+  },
+  "WSM": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 222.76,
+    "rs": 64,
+    "pivot": 233.74
+  },
+  "BG": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "🟡",
+    "pris": 120.12,
+    "rs": 63,
+    "pivot": 118.74
+  },
+  "BKR": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 63.64,
+    "rs": 63,
+    "pivot": 65.44
+  },
+  "PCAR": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 124.51,
+    "rs": 62,
     "pivot": NaN
   },
   "PH": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 949.38,
-    "rs": 60,
+    "pris": 964.52,
+    "rs": 62,
     "pivot": 1000.72
   },
-  "FRT": {
+  "PM": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 117.94,
-    "rs": 59,
-    "pivot": 119.97
-  },
-  "PCAR": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 122.13,
-    "rs": 59,
+    "pris": 186.17,
+    "rs": 62,
     "pivot": NaN
   },
-  "HAS": {
+  "RF": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 93.5,
-    "rs": 58,
-    "pivot": 97.34
+    "pris": 30.44,
+    "rs": 61,
+    "pivot": NaN
+  },
+  "LYB": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 64.76,
+    "rs": 60,
+    "pivot": NaN
+  },
+  "JCI": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 142.23,
+    "rs": 59,
+    "pivot": 147.25
   },
   "KEY": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 21.8,
-    "rs": 58,
+    "pris": 22.12,
+    "rs": 59,
+    "pivot": NaN
+  },
+  "TROW": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 110.88,
+    "rs": 59,
     "pivot": NaN
   },
   "AME": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 233.19,
-    "rs": 57,
+    "pris": 234.2,
+    "rs": 58,
     "pivot": NaN
   },
-  "SW": {
+  "EBAY": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 45.36,
-    "rs": 55,
-    "pivot": 51.52
+    "pris": 105.86,
+    "rs": 58,
+    "pivot": 107.04
+  },
+  "GOOGL": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 342.48,
+    "rs": 58,
+    "pivot": NaN
+  },
+  "HAS": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 93.0,
+    "rs": 57,
+    "pivot": 97.34
   },
   "EMR": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 148.98,
-    "rs": 54,
+    "pris": 150.21,
+    "rs": 56,
     "pivot": 165.79
+  },
+  "FRT": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 117.16,
+    "rs": 56,
+    "pivot": 119.97
+  },
+  "SW": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 45.26,
+    "rs": 55,
+    "pivot": 51.52
+  },
+  "AWK": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "🟡",
+    "pris": 140.89,
+    "rs": 54,
+    "pivot": 140.32
+  },
+  "KHC": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 25.42,
+    "rs": 53,
+    "pivot": NaN
+  },
+  "KVUE": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 18.95,
+    "rs": 52,
+    "pivot": 19.83
   },
   "MO": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 69.56,
+    "pris": 69.49,
     "rs": 52,
+    "pivot": NaN
+  },
+  "FAST": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 49.23,
+    "rs": 50,
+    "pivot": NaN
+  },
+  "ROK": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 428.28,
+    "rs": 50,
     "pivot": NaN
   },
   "ZBH": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 99.5,
-    "rs": 52,
+    "pris": 98.92,
+    "rs": 49,
     "pivot": 101.8
   },
-  "AWK": {
+  "HIG": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 139.49,
-    "rs": 50,
-    "pivot": 140.32
+    "pris": 140.0,
+    "rs": 46,
+    "pivot": 146.07
   },
-  "CHD": {
+  "URI": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 99.32,
-    "rs": 49,
+    "pris": 993.87,
+    "rs": 46,
+    "pivot": 1175.64
+  },
+  "AES": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 14.78,
+    "rs": 45,
     "pivot": NaN
   },
   "EW": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 90.82,
-    "rs": 49,
-    "pivot": 93.91
-  },
-  "MDLZ": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 62.45,
-    "rs": 47,
-    "pivot": NaN
-  },
-  "AES": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 14.8,
-    "rs": 45,
-    "pivot": NaN
-  },
-  "F": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 14.14,
+    "pris": 89.78,
     "rs": 44,
-    "pivot": NaN
-  },
-  "URI": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 979.82,
-    "rs": 43,
-    "pivot": 1175.64
+    "pivot": 93.91
   },
   "ECL": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 279.9,
-    "rs": 40,
+    "pris": 278.97,
+    "rs": 41,
     "pivot": 288.45
-  },
-  "SWKS": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "🟡",
-    "pris": 71.67,
-    "rs": 39,
-    "pivot": 70.75
   },
   "RSG": {
     "score": 6,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 222.52,
-    "rs": 38,
-    "pivot": NaN
-  },
-  "MGM": {
-    "score": 6,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 41.44,
-    "rs": 33,
+    "pris": 225.12,
+    "rs": 40,
     "pivot": NaN
   },
   "T": {
     "score": 6,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 25.95,
-    "rs": 31,
+    "pris": 26.19,
+    "rs": 40,
     "pivot": 25.32
+  },
+  "SWKS": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "🟡",
+    "pris": 71.5,
+    "rs": 35,
+    "pivot": 70.75
+  },
+  "CI": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "🟡",
+    "pris": 286.26,
+    "rs": 33,
+    "pivot": 285.74
+  },
+  "MGM": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 41.13,
+    "rs": 31,
+    "pivot": NaN
   },
   "SNDK": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 1553.4,
+    "pris": 1554.99,
     "rs": 99,
     "pivot": NaN
   },
-  "INTC": {
+  "MRVL": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 90.05,
+    "pris": 208.83,
     "rs": 98,
     "pivot": NaN
   },
@@ -1355,7 +1427,7 @@
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 808.54,
+    "pris": 798.61,
     "rs": 98,
     "pivot": NaN
   },
@@ -1363,15 +1435,15 @@
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 448.9,
+    "pris": 441.57,
     "rs": 98,
     "pivot": NaN
   },
-  "MRVL": {
+  "INTC": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 206.48,
+    "pris": 91.67,
     "rs": 97,
     "pivot": NaN
   },
@@ -1379,23 +1451,23 @@
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 288.32,
+    "pris": 292.66,
     "rs": 96,
     "pivot": NaN
   },
   "IQV": {
     "score": 5,
     "oppfyller": false,
-    "status": "⚪",
-    "pris": 263.84,
+    "status": "🟢",
+    "pris": 271.62,
     "rs": 93,
-    "pivot": NaN
+    "pivot": 266.1
   },
-  "EXPE": {
+  "FIX": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 308.06,
+    "pris": 1580.19,
     "rs": 92,
     "pivot": NaN
   },
@@ -1403,7 +1475,7 @@
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 105.95,
+    "pris": 107.89,
     "rs": 92,
     "pivot": NaN
   },
@@ -1411,513 +1483,513 @@
     "score": 5,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 130.94,
+    "pris": 130.63,
     "rs": 91,
     "pivot": 117.37
-  },
-  "FIX": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 1560.13,
-    "rs": 90,
-    "pivot": NaN
   },
   "TECH": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 72.3,
-    "rs": 90,
+    "pris": 72.45,
+    "rs": 89,
+    "pivot": NaN
+  },
+  "DDOG": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 214.76,
+    "rs": 88,
+    "pivot": NaN
+  },
+  "EXPE": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 303.14,
+    "rs": 87,
     "pivot": NaN
   },
   "REGN": {
     "score": 5,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 852.03,
-    "rs": 87,
-    "pivot": 691.13
-  },
-  "DDOG": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 209.23,
+    "pris": 843.47,
     "rs": 85,
-    "pivot": NaN
-  },
-  "GPN": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "🟡",
-    "pris": 92.81,
-    "rs": 84,
-    "pivot": 90.85
+    "pivot": 691.13
   },
   "GEV": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 921.94,
+    "pris": 941.84,
     "rs": 83,
     "pivot": NaN
   },
   "GPC": {
     "score": 5,
     "oppfyller": false,
-    "status": "⚪",
-    "pris": 137.15,
-    "rs": 81,
+    "status": "🟡",
+    "pris": 137.62,
+    "rs": 80,
     "pivot": 137.16
+  },
+  "GPN": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "🟡",
+    "pris": 91.77,
+    "rs": 79,
+    "pivot": 90.85
   },
   "TMO": {
     "score": 5,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 608.54,
+    "pris": 618.43,
     "rs": 78,
     "pivot": 498.5
-  },
-  "SOLV": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 91.9,
-    "rs": 76,
-    "pivot": NaN
   },
   "GEN": {
     "score": 5,
     "oppfyller": false,
     "status": "🟡",
-    "pris": 30.65,
-    "rs": 73,
+    "pris": 31.33,
+    "rs": 75,
     "pivot": 29.74
+  },
+  "SCHW": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 110.38,
+    "rs": 75,
+    "pivot": NaN
+  },
+  "CASY": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 758.42,
+    "rs": 74,
+    "pivot": 884.83
+  },
+  "DLTR": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 131.04,
+    "rs": 74,
+    "pivot": 137.07
+  },
+  "PRU": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 123.2,
+    "rs": 74,
+    "pivot": NaN
+  },
+  "WAT": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "🔵",
+    "pris": 413.56,
+    "rs": 73,
+    "pivot": 383.52
+  },
+  "DVA": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 181.66,
+    "rs": 72,
+    "pivot": NaN
   },
   "WTW": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 337.73,
-    "rs": 73,
+    "pris": 342.06,
+    "rs": 72,
     "pivot": 345.52
   },
   "PAYX": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 124.0,
-    "rs": 72,
+    "pris": 125.08,
+    "rs": 71,
     "pivot": 125.9
   },
-  "PRU": {
+  "SOLV": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 119.84,
-    "rs": 72,
+    "pris": 92.44,
+    "rs": 71,
     "pivot": NaN
   },
   "ADP": {
     "score": 5,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 281.16,
-    "rs": 71,
-    "pivot": 280.59
-  },
-  "CASY": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 753.59,
-    "rs": 71,
-    "pivot": 884.83
-  },
-  "WAT": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "🔵",
-    "pris": 412.2,
-    "rs": 71,
-    "pivot": 383.52
-  },
-  "DLTR": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 131.91,
+    "pris": 283.53,
     "rs": 69,
-    "pivot": NaN
-  },
-  "PFE": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 29.02,
-    "rs": 68,
-    "pivot": NaN
-  },
-  "DG": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 130.89,
-    "rs": 66,
-    "pivot": 131.25
+    "pivot": 280.59
   },
   "PWR": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 610.78,
-    "rs": 66,
+    "pris": 620.06,
+    "rs": 69,
     "pivot": NaN
   },
-  "HWM": {
+  "DG": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "🟡",
+    "pris": 131.26,
+    "rs": 68,
+    "pivot": 131.25
+  },
+  "RJF": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 252.96,
-    "rs": 65,
+    "pris": 181.1,
+    "rs": 68,
+    "pivot": NaN
+  },
+  "FDS": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "🔵",
+    "pris": 312.96,
+    "rs": 67,
+    "pivot": 269.79
+  },
+  "PFE": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 28.81,
+    "rs": 64,
     "pivot": NaN
   },
   "TXN": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 254.8,
-    "rs": 65,
-    "pivot": 289.62
-  },
-  "FDS": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "🔵",
-    "pris": 306.07,
+    "pris": 253.83,
     "rs": 64,
-    "pivot": 269.79
+    "pivot": 289.62
   },
   "A": {
     "score": 5,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 151.39,
-    "rs": 63,
+    "pris": 149.98,
+    "rs": 62,
     "pivot": 142.42
   },
-  "GOOGL": {
+  "EL": {
     "score": 5,
     "oppfyller": false,
-    "status": "⚪",
-    "pris": 337.12,
-    "rs": 62,
-    "pivot": NaN
-  },
-  "CB": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 339.42,
-    "rs": 60,
-    "pivot": 365.91
-  },
-  "GOOG": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 333.78,
-    "rs": 60,
-    "pivot": NaN
-  },
-  "NSC": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 330.06,
-    "rs": 59,
-    "pivot": NaN
-  },
-  "TROW": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 109.38,
-    "rs": 59,
-    "pivot": NaN
-  },
-  "BKNG": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 199.6,
-    "rs": 58,
-    "pivot": 215.69
-  },
-  "SPG": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 210.2,
-    "rs": 58,
-    "pivot": NaN
+    "status": "🔵",
+    "pris": 100.86,
+    "rs": 61,
+    "pivot": 88.57
   },
   "JKHY": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 167.03,
-    "rs": 57,
+    "pris": 168.37,
+    "rs": 61,
     "pivot": NaN
-  },
-  "CVNA": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 74.16,
-    "rs": 56,
-    "pivot": 76.07
   },
   "IRM": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 111.84,
-    "rs": 56,
+    "pris": 114.98,
+    "rs": 60,
     "pivot": 132.87
   },
-  "OMC": {
+  "SPG": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 81.76,
-    "rs": 56,
+    "pris": 211.52,
+    "rs": 59,
     "pivot": NaN
   },
   "ADI": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 355.71,
-    "rs": 55,
+    "pris": 356.5,
+    "rs": 57,
     "pivot": 400.69
   },
-  "JCI": {
+  "NSC": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 139.25,
-    "rs": 55,
-    "pivot": 147.25
+    "pris": 327.83,
+    "rs": 57,
+    "pivot": NaN
   },
-  "KIM": {
+  "PKG": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 24.08,
-    "rs": 55,
+    "pris": 234.57,
+    "rs": 57,
+    "pivot": NaN
+  },
+  "GOOG": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 339.08,
+    "rs": 56,
     "pivot": NaN
   },
   "CINF": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 171.69,
-    "rs": 54,
+    "pris": 174.72,
+    "rs": 55,
     "pivot": 186.33
+  },
+  "ACGL": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 99.83,
+    "rs": 53,
+    "pivot": NaN
   },
   "GD": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 364.07,
-    "rs": 54,
-    "pivot": NaN
-  },
-  "TFC": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 50.81,
-    "rs": 54,
-    "pivot": 52.62
-  },
-  "GE": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 329.5,
+    "pris": 365.87,
     "rs": 53,
-    "pivot": NaN
-  },
-  "MTD": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 1367.74,
-    "rs": 52,
-    "pivot": 1474.19
-  },
-  "FOXA": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "🔵",
-    "pris": 67.52,
-    "rs": 51,
-    "pivot": 58.92
-  },
-  "PKG": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 233.54,
-    "rs": 51,
     "pivot": NaN
   },
   "D": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 66.05,
-    "rs": 50,
+    "pris": 66.79,
+    "rs": 52,
     "pivot": NaN
   },
-  "ACGL": {
+  "GE": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 98.21,
-    "rs": 49,
+    "pris": 333.48,
+    "rs": 52,
     "pivot": NaN
+  },
+  "ETN": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 397.12,
+    "rs": 51,
+    "pivot": NaN
+  },
+  "KIM": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 23.92,
+    "rs": 51,
+    "pivot": NaN
+  },
+  "SNA": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 384.19,
+    "rs": 51,
+    "pivot": NaN
+  },
+  "FOXA": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "🔵",
+    "pris": 67.71,
+    "rs": 50,
+    "pivot": 58.92
   },
   "APO": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 132.29,
-    "rs": 48,
+    "pris": 134.49,
+    "rs": 49,
     "pivot": NaN
-  },
-  "FOX": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 60.27,
-    "rs": 48,
-    "pivot": NaN
-  },
-  "KMB": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 109.29,
-    "rs": 48,
-    "pivot": 115.47
-  },
-  "ESS": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 277.29,
-    "rs": 47,
-    "pivot": 290.77
   },
   "AFL": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 117.24,
-    "rs": 46,
+    "pris": 118.36,
+    "rs": 48,
+    "pivot": NaN
+  },
+  "CHD": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 98.59,
+    "rs": 48,
     "pivot": NaN
   },
   "CL": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 90.1,
-    "rs": 46,
+    "pris": 90.09,
+    "rs": 48,
     "pivot": 94.15
+  },
+  "ICE": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "🟡",
+    "pris": 164.59,
+    "rs": 48,
+    "pivot": 158.55
+  },
+  "FOX": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 60.47,
+    "rs": 47,
+    "pivot": NaN
+  },
+  "ITW": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 271.65,
+    "rs": 47,
+    "pivot": 275.6
   },
   "ES": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 70.44,
-    "rs": 45,
+    "pris": 71.47,
+    "rs": 46,
     "pivot": NaN
   },
-  "FAST": {
+  "KMB": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 47.93,
+    "pris": 107.95,
     "rs": 45,
-    "pivot": NaN
+    "pivot": 115.47
+  },
+  "CVNA": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 73.43,
+    "rs": 44,
+    "pivot": 76.07
   },
   "SYY": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 81.76,
-    "rs": 45,
+    "pris": 81.08,
+    "rs": 44,
     "pivot": 85.4
+  },
+  "ESS": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 278.65,
+    "rs": 43,
+    "pivot": 290.77
   },
   "UAL": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 108.35,
+    "pris": 108.66,
     "rs": 43,
     "pivot": NaN
-  },
-  "HIG": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 137.21,
-    "rs": 42,
-    "pivot": 146.07
   },
   "UPS": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 103.01,
-    "rs": 42,
+    "pris": 103.5,
+    "rs": 43,
     "pivot": 107.7
+  },
+  "CME": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "🔵",
+    "pris": 282.05,
+    "rs": 42,
+    "pivot": 270.0
+  },
+  "MDLZ": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 61.45,
+    "rs": 42,
+    "pivot": NaN
+  },
+  "PSA": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 305.73,
+    "rs": 42,
+    "pivot": 330.77
+  },
+  "BKNG": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 195.13,
+    "rs": 41,
+    "pivot": 215.69
+  },
+  "MAS": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 71.42,
+    "rs": 41,
+    "pivot": 77.51
   },
   "EQR": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
     "pris": 63.66,
-    "rs": 39,
-    "pivot": 71.5
-  },
-  "MAS": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 70.94,
-    "rs": 39,
-    "pivot": 77.51
-  },
-  "VMRK": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 64.91,
-    "rs": 39,
-    "pivot": NaN
-  },
-  "INVH": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 28.84,
     "rs": 38,
-    "pivot": 30.89
+    "pivot": 71.5
   },
   "AVB": {
     "score": 5,
@@ -1931,39 +2003,55 @@
     "score": 5,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 26.81,
-    "rs": 37,
+    "pris": 26.65,
+    "rs": 36,
     "pivot": 24.68
   },
   "MAR": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 333.14,
-    "rs": 36,
+    "pris": 336.07,
+    "rs": 35,
     "pivot": NaN
   },
-  "CI": {
+  "VMRK": {
     "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 282.84,
-    "rs": 35,
-    "pivot": 285.74
+    "pris": 64.96,
+    "rs": 34,
+    "pivot": NaN
   },
-  "TER": {
-    "score": 4,
+  "INVH": {
+    "score": 5,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 341.62,
-    "rs": 95,
-    "pivot": NaN
+    "pris": 28.45,
+    "rs": 32,
+    "pivot": 30.89
+  },
+  "MSCI": {
+    "score": 5,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 574.65,
+    "rs": 29,
+    "pivot": 587.89
   },
   "AMAT": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 438.46,
+    "pris": 435.91,
+    "rs": 95,
+    "pivot": NaN
+  },
+  "TER": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 338.59,
     "rs": 94,
     "pivot": NaN
   },
@@ -1971,535 +2059,447 @@
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 268.64,
-    "rs": 93,
+    "pris": 264.41,
+    "rs": 92,
     "pivot": NaN
   },
   "VEEV": {
     "score": 4,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 280.72,
+    "pris": 284.38,
     "rs": 92,
     "pivot": 200.33
+  },
+  "HOOD": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "🟢",
+    "pris": 124.72,
+    "rs": 90,
+    "pivot": 119.4
   },
   "GLW": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 144.13,
-    "rs": 85,
+    "pris": 146.0,
+    "rs": 86,
     "pivot": NaN
   },
   "KLAC": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 172.26,
-    "rs": 85,
-    "pivot": NaN
-  },
-  "DASH": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 226.24,
-    "rs": 83,
+    "pris": 172.94,
+    "rs": 84,
     "pivot": NaN
   },
   "CRM": {
     "score": 4,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 256.93,
-    "rs": 81,
+    "pris": 264.43,
+    "rs": 83,
     "pivot": 175.43
   },
   "CAT": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 792.28,
-    "rs": 79,
+    "pris": 800.14,
+    "rs": 80,
     "pivot": 935.0
-  },
-  "VRT": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 256.7,
-    "rs": 78,
-    "pivot": NaN
-  },
-  "SCHW": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 108.24,
-    "rs": 74,
-    "pivot": NaN
   },
   "WDAY": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 200.87,
-    "rs": 74,
+    "pris": 206.92,
+    "rs": 76,
+    "pivot": NaN
+  },
+  "PLTR": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 182.53,
+    "rs": 75,
+    "pivot": NaN
+  },
+  "DASH": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 222.0,
+    "rs": 70,
+    "pivot": NaN
+  },
+  "JBL": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 305.92,
+    "rs": 66,
     "pivot": NaN
   },
   "V": {
     "score": 4,
     "oppfyller": false,
     "status": "🟡",
-    "pris": 378.4,
-    "rs": 69,
+    "pris": 378.75,
+    "rs": 66,
     "pivot": 373.28
   },
-  "DVA": {
+  "AJG": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 179.39,
-    "rs": 68,
+    "pris": 266.66,
+    "rs": 63,
     "pivot": NaN
   },
   "CMG": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 38.52,
-    "rs": 67,
-    "pivot": NaN
-  },
-  "AJG": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 264.46,
-    "rs": 66,
-    "pivot": NaN
-  },
-  "RJF": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 175.95,
-    "rs": 65,
-    "pivot": NaN
-  },
-  "EL": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "🔵",
-    "pris": 101.15,
+    "pris": 37.57,
     "rs": 63,
-    "pivot": 88.57
-  },
-  "MA": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "🟡",
-    "pris": 588.14,
-    "rs": 63,
-    "pivot": 583.71
-  },
-  "JBL": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 299.39,
-    "rs": 62,
-    "pivot": NaN
-  },
-  "J": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 147.08,
-    "rs": 61,
-    "pivot": 151.61
-  },
-  "PLTR": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 169.46,
-    "rs": 60,
     "pivot": NaN
   },
   "MSFT": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 496.82,
-    "rs": 59,
+    "pris": 510.12,
+    "rs": 63,
     "pivot": 512.76
+  },
+  "MA": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "🟡",
+    "pris": 585.71,
+    "rs": 61,
+    "pivot": 583.71
+  },
+  "J": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 147.54,
+    "rs": 60,
+    "pivot": 151.61
   },
   "COR": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 336.36,
+    "pris": 337.22,
     "rs": 58,
     "pivot": NaN
+  },
+  "NDAQ": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "🟡",
+    "pris": 98.71,
+    "rs": 58,
+    "pivot": 96.87
   },
   "COF": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 216.6,
+    "pris": 220.5,
     "rs": 57,
     "pivot": 227.34
-  },
-  "WFC": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 89.27,
-    "rs": 57,
-    "pivot": 89.66
   },
   "SYF": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 78.39,
+    "pris": 79.85,
     "rs": 56,
-    "pivot": NaN
-  },
-  "BLK": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 1107.08,
-    "rs": 53,
-    "pivot": 1186.74
-  },
-  "DOW": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 31.28,
-    "rs": 53,
-    "pivot": 33.02
-  },
-  "KMI": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 31.97,
-    "rs": 53,
-    "pivot": 33.06
-  },
-  "NDAQ": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 95.72,
-    "rs": 53,
-    "pivot": 96.87
-  },
-  "ROP": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "🔵",
-    "pris": 415.79,
-    "rs": 52,
-    "pivot": 410.26
-  },
-  "DLR": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 183.76,
-    "rs": 51,
-    "pivot": NaN
-  },
-  "DHR": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "🟡",
-    "pris": 209.91,
-    "rs": 50,
-    "pivot": 209.9
-  },
-  "MRSH": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 187.84,
-    "rs": 50,
-    "pivot": NaN
-  },
-  "ETR": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 106.75,
-    "rs": 49,
-    "pivot": 110.29
-  },
-  "SNA": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 380.59,
-    "rs": 49,
     "pivot": NaN
   },
   "CDW": {
     "score": 4,
     "oppfyller": false,
     "status": "🟡",
-    "pris": 148.67,
-    "rs": 48,
+    "pris": 153.92,
+    "rs": 55,
     "pivot": 142.29
   },
-  "PGR": {
+  "BLK": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 1126.15,
+    "rs": 54,
+    "pivot": 1186.74
+  },
+  "ROP": {
     "score": 4,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 221.38,
-    "rs": 48,
-    "pivot": 215.99
+    "pris": 422.35,
+    "rs": 54,
+    "pivot": 410.26
   },
-  "CTAS": {
+  "ETR": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 198.09,
-    "rs": 47,
-    "pivot": 206.38
+    "pris": 107.78,
+    "rs": 53,
+    "pivot": 110.29
   },
-  "DD": {
+  "WFC": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 132.93,
-    "rs": 47,
-    "pivot": 141.99
-  },
-  "ROK": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 425.36,
-    "rs": 47,
-    "pivot": NaN
-  },
-  "ALB": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 137.75,
-    "rs": 46,
-    "pivot": 144.06
-  },
-  "ED": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 107.67,
-    "rs": 46,
-    "pivot": 109.79
-  },
-  "PLD": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 136.59,
-    "rs": 45,
-    "pivot": 153.35
-  },
-  "BRO": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 72.04,
-    "rs": 44,
-    "pivot": 75.46
-  },
-  "ETN": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 390.85,
-    "rs": 44,
-    "pivot": NaN
-  },
-  "ITW": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 269.09,
-    "rs": 44,
-    "pivot": 275.6
-  },
-  "ABT": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 110.47,
-    "rs": 43,
-    "pivot": NaN
-  },
-  "AVY": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "🔵",
-    "pris": 174.42,
-    "rs": 43,
-    "pivot": 165.67
-  },
-  "PSA": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 301.33,
-    "rs": 43,
-    "pivot": 330.77
+    "pris": 89.19,
+    "rs": 53,
+    "pivot": 89.66
   },
   "MCO": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 490.0,
-    "rs": 42,
+    "pris": 504.3,
+    "rs": 51,
     "pivot": NaN
   },
-  "O": {
+  "ED": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 61.5,
-    "rs": 42,
-    "pivot": NaN
+    "pris": 108.75,
+    "rs": 49,
+    "pivot": 109.79
   },
-  "CME": {
+  "PGR": {
     "score": 4,
     "oppfyller": false,
-    "status": "🔵",
-    "pris": 277.77,
-    "rs": 41,
-    "pivot": 270.0
+    "status": "⚪",
+    "pris": 223.87,
+    "rs": 49,
+    "pivot": 224.73
+  },
+  "PLD": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 138.35,
+    "rs": 48,
+    "pivot": 153.35
+  },
+  "MRSH": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 188.46,
+    "rs": 47,
+    "pivot": NaN
+  },
+  "ULTA": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 557.11,
+    "rs": 47,
+    "pivot": NaN
+  },
+  "DHR": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "🟡",
+    "pris": 211.03,
+    "rs": 46,
+    "pivot": 209.9
+  },
+  "CTAS": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 201.05,
+    "rs": 45,
+    "pivot": 206.38
   },
   "EVRG": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 80.77,
-    "rs": 41,
+    "pris": 81.93,
+    "rs": 45,
     "pivot": 84.05
+  },
+  "DD": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 131.13,
+    "rs": 44,
+    "pivot": 141.99
+  },
+  "AVY": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "🔵",
+    "pris": 173.03,
+    "rs": 43,
+    "pivot": 165.67
+  },
+  "DOW": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 30.36,
+    "rs": 42,
+    "pivot": 33.02
   },
   "L": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 108.94,
-    "rs": 41,
+    "pris": 110.04,
+    "rs": 42,
     "pivot": 119.1
+  },
+  "O": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 61.74,
+    "rs": 41,
+    "pivot": NaN
   },
   "BF-B": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 27.38,
+    "pris": 27.51,
     "rs": 40,
     "pivot": 29.69
+  },
+  "BRO": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 72.56,
+    "rs": 40,
+    "pivot": 75.46
   },
   "TDY": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 606.36,
+    "pris": 607.87,
     "rs": 40,
-    "pivot": NaN
-  },
-  "ARES": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 138.06,
-    "rs": 38,
-    "pivot": 149.87
-  },
-  "BRK-B": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 505.24,
-    "rs": 38,
-    "pivot": NaN
-  },
-  "ICE": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 157.85,
-    "rs": 38,
-    "pivot": 158.55
-  },
-  "REG": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 75.81,
-    "rs": 38,
-    "pivot": NaN
-  },
-  "LIN": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 487.45,
-    "rs": 37,
-    "pivot": NaN
-  },
-  "PNW": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 97.38,
-    "rs": 37,
     "pivot": NaN
   },
   "EME": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 734.26,
-    "rs": 36,
+    "pris": 741.32,
+    "rs": 39,
     "pivot": NaN
   },
-  "HLT": {
+  "ARES": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 311.51,
-    "rs": 36,
-    "pivot": NaN
+    "pris": 141.52,
+    "rs": 38,
+    "pivot": 149.87
   },
   "FTV": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 56.6,
-    "rs": 35,
+    "pris": 57.57,
+    "rs": 38,
     "pivot": 62.62
   },
-  "PPG": {
+  "PNW": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 111.31,
-    "rs": 35,
-    "pivot": 119.25
+    "pris": 98.0,
+    "rs": 38,
+    "pivot": NaN
+  },
+  "REG": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 75.92,
+    "rs": 38,
+    "pivot": NaN
+  },
+  "BRK-B": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 508.13,
+    "rs": 37,
+    "pivot": NaN
+  },
+  "CTSH": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "🔵",
+    "pris": 64.64,
+    "rs": 37,
+    "pivot": 45.49
+  },
+  "HLT": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 314.35,
+    "rs": 36,
+    "pivot": NaN
   },
   "AEE": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 105.89,
+    "pris": 106.41,
+    "rs": 35,
+    "pivot": NaN
+  },
+  "PPG": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 110.75,
+    "rs": 35,
+    "pivot": 119.25
+  },
+  "TT": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 445.19,
+    "rs": 35,
+    "pivot": NaN
+  },
+  "ALB": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 132.16,
+    "rs": 34,
+    "pivot": 144.06
+  },
+  "LIN": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 482.19,
     "rs": 34,
     "pivot": NaN
   },
@@ -2507,567 +2507,551 @@
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 550.9,
-    "rs": 34,
+    "pris": 545.5,
+    "rs": 33,
     "pivot": 671.33
-  },
-  "AEP": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 123.57,
-    "rs": 33,
-    "pivot": 128.62
-  },
-  "ALGN": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 159.15,
-    "rs": 33,
-    "pivot": NaN
   },
   "LUV": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 38.61,
-    "rs": 32,
+    "pris": 38.73,
+    "rs": 33,
     "pivot": 50.13
   },
-  "ODFL": {
+  "ABT": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 187.61,
+    "pris": 108.79,
     "rs": 32,
-    "pivot": 238.51
+    "pivot": NaN
+  },
+  "ALGN": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 159.85,
+    "rs": 31,
+    "pivot": NaN
   },
   "EXR": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 139.93,
+    "pris": 140.98,
     "rs": 31,
-    "pivot": NaN
-  },
-  "TT": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 439.02,
-    "rs": 30,
-    "pivot": NaN
-  },
-  "CPT": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 105.54,
-    "rs": 29,
     "pivot": NaN
   },
   "PHM": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 123.7,
-    "rs": 29,
+    "pris": 124.31,
+    "rs": 30,
     "pivot": 136.22
   },
-  "LNT": {
+  "WM": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 67.74,
-    "rs": 28,
-    "pivot": NaN
-  },
-  "UDR": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 36.59,
-    "rs": 28,
+    "pris": 221.72,
+    "rs": 29,
     "pivot": NaN
   },
   "DTE": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 136.05,
+    "pris": 137.07,
+    "rs": 28,
+    "pivot": NaN
+  },
+  "LNT": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 68.0,
+    "rs": 28,
+    "pivot": NaN
+  },
+  "ODFL": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 185.75,
     "rs": 27,
-    "pivot": NaN
-  },
-  "WM": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 219.04,
-    "rs": 27,
-    "pivot": NaN
-  },
-  "AKAM": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 105.09,
-    "rs": 26,
-    "pivot": NaN
-  },
-  "ADBE": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "🔵",
-    "pris": 279.79,
-    "rs": 25,
-    "pivot": 266.28
-  },
-  "MSCI": {
-    "score": 4,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 560.63,
-    "rs": 24,
-    "pivot": 587.89
+    "pivot": 238.51
   },
   "RL": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 336.5,
-    "rs": 24,
+    "pris": 344.2,
+    "rs": 27,
     "pivot": 411.19
+  },
+  "ADBE": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "🔵",
+    "pris": 285.75,
+    "rs": 26,
+    "pivot": 266.28
+  },
+  "CPT": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 105.6,
+    "rs": 26,
+    "pivot": NaN
   },
   "HON": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 206.07,
-    "rs": 22,
+    "pris": 207.63,
+    "rs": 25,
     "pivot": 251.25
   },
-  "HRL": {
+  "UDR": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 22.05,
-    "rs": 18,
+    "pris": 36.37,
+    "rs": 23,
+    "pivot": NaN
+  },
+  "AMT": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 177.75,
+    "rs": 21,
     "pivot": NaN
   },
   "CARR": {
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 57.58,
-    "rs": 16,
+    "pris": 59.08,
+    "rs": 20,
+    "pivot": NaN
+  },
+  "HRL": {
+    "score": 4,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 21.68,
+    "rs": 15,
     "pivot": NaN
   },
   "CIEN": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 354.16,
-    "rs": 95,
+    "pris": 317.46,
+    "rs": 94,
     "pivot": NaN
   },
-  "HOOD": {
+  "VRT": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 106.99,
-    "rs": 68,
+    "pris": 268.83,
+    "rs": 85,
     "pivot": NaN
-  },
-  "BX": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 136.82,
-    "rs": 56,
-    "pivot": 150.24
   },
   "PYPL": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 54.67,
-    "rs": 54,
+    "pris": 56.82,
+    "rs": 60,
     "pivot": 57.67
   },
   "BXP": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 67.1,
-    "rs": 51,
+    "pris": 68.23,
+    "rs": 52,
     "pivot": NaN
   },
   "MMM": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 168.75,
+    "pris": 168.31,
     "rs": 51,
     "pivot": NaN
+  },
+  "KMI": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 31.6,
+    "rs": 50,
+    "pivot": 33.06
+  },
+  "MTD": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 1356.23,
+    "rs": 50,
+    "pivot": 1474.19
   },
   "MPWR": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 1219.36,
-    "rs": 50,
+    "pris": 1213.65,
+    "rs": 49,
     "pivot": 1419.92
   },
-  "LMT": {
+  "BX": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 531.55,
-    "rs": 46,
-    "pivot": 547.47
-  },
-  "MDT": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 92.18,
-    "rs": 46,
-    "pivot": NaN
+    "pris": 137.68,
+    "rs": 47,
+    "pivot": 150.24
   },
   "ALLE": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 155.07,
-    "rs": 44,
+    "pris": 155.56,
+    "rs": 46,
     "pivot": 170.87
-  },
-  "VLTO": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 97.21,
-    "rs": 42,
-    "pivot": 102.25
-  },
-  "GIS": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "🔵",
-    "pris": 40.58,
-    "rs": 41,
-    "pivot": 38.52
-  },
-  "ULTA": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 551.74,
-    "rs": 41,
-    "pivot": NaN
-  },
-  "HBAN": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 16.88,
-    "rs": 40,
-    "pivot": NaN
-  },
-  "DIS": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "🔵",
-    "pris": 107.98,
-    "rs": 39,
-    "pivot": 99.85
-  },
-  "RMD": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 230.87,
-    "rs": 37,
-    "pivot": NaN
-  },
-  "ON": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 72.34,
-    "rs": 36,
-    "pivot": NaN
-  },
-  "ERIE": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 258.41,
-    "rs": 35,
-    "pivot": NaN
-  },
-  "MCHP": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 72.76,
-    "rs": 34,
-    "pivot": NaN
   },
   "NOW": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 136.72,
-    "rs": 34,
+    "pris": 145.59,
+    "rs": 46,
     "pivot": NaN
   },
-  "GDDY": {
+  "LMT": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 101.87,
-    "rs": 33,
-    "pivot": 101.99
+    "pris": 532.95,
+    "rs": 45,
+    "pivot": 547.47
   },
-  "MOS": {
+  "ON": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 25.78,
-    "rs": 33,
+    "pris": 73.65,
+    "rs": 44,
     "pivot": NaN
   },
-  "CTSH": {
+  "MDT": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 93.1,
+    "rs": 43,
+    "pivot": NaN
+  },
+  "VLTO": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 97.88,
+    "rs": 41,
+    "pivot": 102.25
+  },
+  "CBRE": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 148.74,
+    "rs": 39,
+    "pivot": 153.08
+  },
+  "DIS": {
     "score": 3,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 63.4,
-    "rs": 32,
-    "pivot": 45.49
+    "pris": 107.16,
+    "rs": 39,
+    "pivot": 99.85
   },
-  "YUM": {
+  "HBAN": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 151.27,
-    "rs": 32,
-    "pivot": 166.16
-  },
-  "FE": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 46.29,
-    "rs": 31,
+    "pris": 17.06,
+    "rs": 39,
     "pivot": NaN
-  },
-  "NEE": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 83.1,
-    "rs": 31,
-    "pivot": 90.99
-  },
-  "PG": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 147.64,
-    "rs": 30,
-    "pivot": 148.5
   },
   "SPGI": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 431.71,
-    "rs": 30,
+    "pris": 450.58,
+    "rs": 39,
     "pivot": NaN
   },
-  "TPL": {
+  "FE": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 367.32,
-    "rs": 29,
+    "pris": 47.04,
+    "rs": 38,
+    "pivot": NaN
+  },
+  "IT": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "🟡",
+    "pris": 195.46,
+    "rs": 37,
+    "pivot": 194.53
+  },
+  "KKR": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "🔵",
+    "pris": 109.76,
+    "rs": 37,
+    "pivot": 103.97
+  },
+  "YUM": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 152.54,
+    "rs": 36,
+    "pivot": 166.16
+  },
+  "AEP": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 124.71,
+    "rs": 34,
+    "pivot": 128.62
+  },
+  "NEE": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 84.06,
+    "rs": 33,
+    "pivot": 90.99
+  },
+  "GDDY": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "🟡",
+    "pris": 103.63,
+    "rs": 32,
+    "pivot": 101.99
+  },
+  "MCHP": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 73.11,
+    "rs": 32,
+    "pivot": NaN
+  },
+  "AIG": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 76.86,
+    "rs": 31,
+    "pivot": 81.04
+  },
+  "ERIE": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 258.37,
+    "rs": 30,
+    "pivot": 271.47
+  },
+  "HUBB": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 460.15,
+    "rs": 30,
+    "pivot": 499.89
+  },
+  "PG": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 146.92,
+    "rs": 30,
+    "pivot": 148.5
+  },
+  "RMD": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 229.19,
+    "rs": 30,
     "pivot": NaN
   },
   "TYL": {
     "score": 3,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 374.88,
-    "rs": 29,
+    "pris": 379.27,
+    "rs": 30,
     "pivot": 348.62
   },
-  "EQT": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "🟡",
-    "pris": 55.75,
-    "rs": 28,
-    "pivot": 55.15
-  },
-  "IT": {
+  "AKAM": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 186.75,
-    "rs": 28,
-    "pivot": 194.53
-  },
-  "AVGO": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 367.24,
-    "rs": 26,
+    "pris": 106.5,
+    "rs": 29,
     "pivot": NaN
   },
-  "BA": {
+  "TPL": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 208.87,
-    "rs": 26,
+    "pris": 366.5,
+    "rs": 29,
     "pivot": NaN
-  },
-  "HUBB": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 450.08,
-    "rs": 26,
-    "pivot": 499.89
   },
   "CNP": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 39.51,
-    "rs": 25,
+    "pris": 39.98,
+    "rs": 27,
     "pivot": 41.28
   },
-  "COST": {
+  "EQT": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "🟡",
+    "pris": 55.61,
+    "rs": 27,
+    "pivot": 55.15
+  },
+  "AVGO": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 928.48,
+    "pris": 357.16,
     "rs": 25,
-    "pivot": 978.7
+    "pivot": NaN
+  },
+  "SMCI": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 37.87,
+    "rs": 25,
+    "pivot": NaN
   },
   "TPR": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 123.14,
+    "pris": 122.6,
     "rs": 25,
     "pivot": NaN
+  },
+  "ECHO": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 89.79,
+    "rs": 24,
+    "pivot": 94.95
   },
   "WY": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 23.19,
-    "rs": 25,
+    "pris": 23.04,
+    "rs": 24,
     "pivot": NaN
-  },
-  "TSN": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 55.81,
-    "rs": 23,
-    "pivot": NaN
-  },
-  "ARE": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 52.72,
-    "rs": 22,
-    "pivot": NaN
-  },
-  "BR": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "🔵",
-    "pris": 178.06,
-    "rs": 22,
-    "pivot": 155.13
-  },
-  "PEP": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 140.52,
-    "rs": 22,
-    "pivot": 145.43
   },
   "SBAC": {
     "score": 3,
     "oppfyller": false,
     "status": "🟡",
-    "pris": 186.42,
-    "rs": 21,
+    "pris": 191.52,
+    "rs": 23,
     "pivot": 186.34
   },
-  "AMT": {
+  "BR": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "🔵",
+    "pris": 178.91,
+    "rs": 22,
+    "pivot": 155.13
+  },
+  "COST": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 172.92,
-    "rs": 20,
+    "pris": 925.41,
+    "rs": 22,
+    "pivot": 978.7
+  },
+  "PEP": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 140.02,
+    "rs": 22,
+    "pivot": 145.43
+  },
+  "BA": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 210.51,
+    "rs": 21,
     "pivot": NaN
   },
   "DOV": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 188.9,
-    "rs": 20,
+    "pris": 191.07,
+    "rs": 21,
     "pivot": 214.0
-  },
-  "ECHO": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 86.69,
-    "rs": 19,
-    "pivot": 94.95
-  },
-  "SMCI": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 37.0,
-    "rs": 18,
-    "pivot": NaN
   },
   "WMT": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 106.09,
-    "rs": 18,
+    "pris": 108.42,
+    "rs": 20,
     "pivot": NaN
   },
-  "NXPI": {
+  "ARE": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 228.5,
-    "rs": 17,
-    "pivot": 242.49
+    "pris": 52.69,
+    "rs": 19,
+    "pivot": NaN
   },
   "PTC": {
     "score": 3,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 149.13,
+    "pris": 150.08,
     "rs": 15,
     "pivot": 128.02
   },
@@ -3075,31 +3059,47 @@
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 129.35,
+    "pris": 129.09,
     "rs": 15,
     "pivot": 139.26
+  },
+  "NXPI": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 224.99,
+    "rs": 13,
+    "pivot": 242.49
   },
   "RCL": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 265.6,
-    "rs": 14,
+    "pris": 265.55,
+    "rs": 13,
     "pivot": 299.75
-  },
-  "KR": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 58.22,
-    "rs": 12,
-    "pivot": 60.31
   },
   "TXT": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 79.24,
+    "pris": 79.37,
+    "rs": 13,
+    "pivot": NaN
+  },
+  "PSKY": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 11.04,
+    "rs": 12,
+    "pivot": NaN
+  },
+  "TSN": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 51.76,
     "rs": 12,
     "pivot": NaN
   },
@@ -3107,327 +3107,375 @@
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 55.19,
-    "rs": 9,
+    "pris": 56.3,
+    "rs": 11,
+    "pivot": NaN
+  },
+  "KR": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 58.51,
+    "rs": 11,
+    "pivot": 60.31
+  },
+  "GNRC": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 183.02,
+    "rs": 10,
     "pivot": NaN
   },
   "TJX": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 131.31,
+    "pris": 132.19,
     "rs": 9,
-    "pivot": NaN
-  },
-  "GNRC": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 180.76,
-    "rs": 8,
     "pivot": NaN
   },
   "PCG": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 13.33,
-    "rs": 6,
+    "pris": 13.96,
+    "rs": 8,
     "pivot": NaN
   },
   "Q": {
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 117.69,
+    "pris": 118.47,
     "rs": null,
     "pivot": NaN
-  },
-  "KKR": {
-    "score": 2,
-    "oppfyller": false,
-    "status": "🔵",
-    "pris": 106.43,
-    "rs": 36,
-    "pivot": 103.97
   },
   "COO": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 69.73,
-    "rs": 35,
+    "pris": 70.64,
+    "rs": 36,
     "pivot": 73.95
   },
   "SHW": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 331.25,
+    "pris": 332.26,
     "rs": 34,
     "pivot": 371.3
   },
-  "AIG": {
+  "MOS": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 76.13,
-    "rs": 32,
-    "pivot": 81.04
+    "pris": 25.49,
+    "rs": 33,
+    "pivot": NaN
   },
-  "GEHC": {
+  "WRB": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 69.5,
+    "rs": 32,
+    "pivot": NaN
+  },
+  "GIS": {
     "score": 2,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 70.56,
+    "pris": 39.26,
     "rs": 31,
-    "pivot": 66.25
+    "pivot": 38.52
   },
-  "STE": {
+  "XEL": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 230.35,
-    "rs": 30,
-    "pivot": 241.39
-  },
-  "EXE": {
-    "score": 2,
-    "oppfyller": false,
-    "status": "🟡",
-    "pris": 99.32,
+    "pris": 76.34,
     "rs": 29,
-    "pivot": 98.29
-  },
-  "DUK": {
-    "score": 2,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 120.56,
-    "rs": 28,
-    "pivot": NaN
-  },
-  "AON": {
-    "score": 2,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 330.88,
-    "rs": 27,
     "pivot": NaN
   },
   "ATO": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 167.68,
-    "rs": 27,
+    "pris": 169.12,
+    "rs": 28,
     "pivot": 172.09
   },
-  "XEL": {
+  "DUK": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 75.51,
-    "rs": 27,
+    "pris": 121.4,
+    "rs": 28,
     "pivot": NaN
   },
   "EXC": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 43.97,
-    "rs": 26,
+    "pris": 44.53,
+    "rs": 28,
     "pivot": NaN
-  },
-  "IR": {
-    "score": 2,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 75.0,
-    "rs": 24,
-    "pivot": 85.08
   },
   "PPL": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 34.54,
-    "rs": 24,
+    "pris": 35.11,
+    "rs": 27,
     "pivot": NaN
+  },
+  "EXE": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "🟡",
+    "pris": 99.05,
+    "rs": 26,
+    "pivot": 98.29
+  },
+  "GEHC": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "🔵",
+    "pris": 69.72,
+    "rs": 26,
+    "pivot": 66.25
+  },
+  "STE": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 226.83,
+    "rs": 26,
+    "pivot": 241.39
   },
   "SO": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 88.31,
+    "pris": 88.77,
     "rs": 24,
-    "pivot": NaN
-  },
-  "TKO": {
-    "score": 2,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 189.79,
-    "rs": 23,
     "pivot": NaN
   },
   "WEC": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 105.73,
+    "pris": 106.7,
+    "rs": 24,
+    "pivot": NaN
+  },
+  "EFX": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 189.09,
+    "rs": 23,
+    "pivot": 190.15
+  },
+  "IR": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 75.4,
+    "rs": 23,
+    "pivot": 85.08
+  },
+  "TEL": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 209.41,
     "rs": 23,
     "pivot": NaN
   },
-  "MAA": {
+  "AON": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 128.61,
+    "pris": 327.0,
     "rs": 22,
-    "pivot": 137.82
-  },
-  "CMS": {
-    "score": 2,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 68.06,
-    "rs": 20,
-    "pivot": 75.78
+    "pivot": NaN
   },
   "SRE": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 83.79,
-    "rs": 20,
+    "pris": 84.57,
+    "rs": 21,
     "pivot": 88.14
   },
-  "DPZ": {
+  "TKO": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 346.68,
-    "rs": 19,
+    "pris": 189.42,
+    "rs": 21,
     "pivot": NaN
-  },
-  "FERG": {
-    "score": 2,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 221.23,
-    "rs": 19,
-    "pivot": 237.1
-  },
-  "QCOM": {
-    "score": 2,
-    "oppfyller": false,
-    "status": "🟡",
-    "pris": 169.96,
-    "rs": 19,
-    "pivot": 168.87
-  },
-  "HSY": {
-    "score": 2,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 177.43,
-    "rs": 17,
-    "pivot": 186.9
   },
   "AXON": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 506.98,
-    "rs": 16,
+    "pris": 538.15,
+    "rs": 20,
+    "pivot": NaN
+  },
+  "CMS": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 68.59,
+    "rs": 20,
+    "pivot": 75.78
+  },
+  "FERG": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 223.23,
+    "rs": 19,
+    "pivot": 237.1
+  },
+  "MAA": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 128.56,
+    "rs": 19,
+    "pivot": 137.82
+  },
+  "DPZ": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 347.03,
+    "rs": 18,
     "pivot": NaN
   },
   "NI": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 41.15,
-    "rs": 16,
+    "pris": 41.66,
+    "rs": 18,
+    "pivot": NaN
+  },
+  "QCOM": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 168.57,
+    "rs": 18,
+    "pivot": 168.87
+  },
+  "TSLA": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 376.36,
+    "rs": 18,
     "pivot": NaN
   },
   "PEG": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 73.32,
-    "rs": 16,
+    "pris": 73.81,
+    "rs": 17,
     "pivot": 76.62
   },
-  "ADSK": {
+  "COIN": {
     "score": 2,
     "oppfyller": false,
-    "status": "⚪",
-    "pris": 241.73,
-    "rs": 15,
-    "pivot": 260.74
+    "status": "🔵",
+    "pris": 192.7,
+    "rs": 16,
+    "pivot": 155.4
   },
-  "CHTR": {
+  "HSY": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 158.97,
+    "pris": 175.06,
+    "rs": 16,
+    "pivot": 186.9
+  },
+  "META": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 610.68,
+    "rs": 16,
+    "pivot": 612.43
+  },
+  "ACN": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 193.12,
     "rs": 14,
-    "pivot": NaN
-  },
-  "PSKY": {
-    "score": 2,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 10.97,
-    "rs": 13,
     "pivot": NaN
   },
   "VICI": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 25.61,
-    "rs": 13,
+    "pris": 25.65,
+    "rs": 14,
     "pivot": 27.65
-  },
-  "ACN": {
-    "score": 2,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 187.68,
-    "rs": 12,
-    "pivot": NaN
-  },
-  "CDNS": {
-    "score": 2,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 306.67,
-    "rs": 11,
-    "pivot": 355.59
   },
   "CHRW": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 145.2,
-    "rs": 11,
+    "pris": 146.68,
+    "rs": 12,
     "pivot": NaN
   },
   "LDOS": {
     "score": 2,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 133.78,
+    "pris": 132.36,
     "rs": 10,
     "pivot": 111.0
+  },
+  "CDNS": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 304.88,
+    "rs": 9,
+    "pivot": 355.59
+  },
+  "CHTR": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 151.38,
+    "rs": 9,
+    "pivot": NaN
+  },
+  "CCI": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 77.26,
+    "rs": 8,
+    "pivot": NaN
   },
   "INTU": {
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 342.94,
+    "pris": 344.3,
     "rs": 6,
     "pivot": 372.98
   },
@@ -3435,119 +3483,79 @@
     "score": 2,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 83.76,
+    "pris": 84.5,
     "rs": 5,
     "pivot": NaN
+  },
+  "ORCL": {
+    "score": 2,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 154.04,
+    "rs": 4,
+    "pivot": 159.26
   },
   "AXP": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 329.98,
-    "rs": 40,
+    "pris": 329.82,
+    "rs": 36,
     "pivot": 352.49
-  },
-  "CBRE": {
-    "score": 1,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 142.06,
-    "rs": 30,
-    "pivot": 153.08
-  },
-  "WRB": {
-    "score": 1,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 68.12,
-    "rs": 30,
-    "pivot": NaN
-  },
-  "CEG": {
-    "score": 1,
-    "oppfyller": false,
-    "status": "🟡",
-    "pris": 290.04,
-    "rs": 23,
-    "pivot": 286.56
-  },
-  "UBER": {
-    "score": 1,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 76.45,
-    "rs": 23,
-    "pivot": 78.99
-  },
-  "EFX": {
-    "score": 1,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 185.48,
-    "rs": 21,
-    "pivot": 190.15
-  },
-  "MKC": {
-    "score": 1,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 53.8,
-    "rs": 21,
-    "pivot": 54.1
-  },
-  "TTWO": {
-    "score": 1,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 216.14,
-    "rs": 21,
-    "pivot": 250.93
   },
   "UHS": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 167.49,
-    "rs": 20,
+    "pris": 169.21,
+    "rs": 25,
     "pivot": 175.82
   },
-  "TEL": {
+  "HCA": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 202.21,
-    "rs": 19,
-    "pivot": NaN
+    "pris": 409.2,
+    "rs": 24,
+    "pivot": 421.31
   },
-  "HII": {
+  "UBER": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 288.72,
-    "rs": 18,
-    "pivot": NaN
+    "pris": 75.96,
+    "rs": 21,
+    "pivot": 78.99
   },
   "TAP": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 40.54,
-    "rs": 18,
+    "pris": 40.57,
+    "rs": 19,
     "pivot": NaN
   },
-  "CLX": {
+  "TTWO": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 94.27,
-    "rs": 17,
-    "pivot": 99.3
+    "pris": 214.13,
+    "rs": 19,
+    "pivot": 250.93
+  },
+  "CEG": {
+    "score": 1,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 285.05,
+    "rs": 18,
+    "pivot": 286.56
   },
   "DHI": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 142.26,
+    "pris": 144.41,
     "rs": 17,
     "pivot": 152.29
   },
@@ -3555,63 +3563,87 @@
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 318.51,
-    "rs": 16,
+    "pris": 318.07,
+    "rs": 17,
     "pivot": 358.36
+  },
+  "HII": {
+    "score": 1,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 290.73,
+    "rs": 17,
+    "pivot": NaN
+  },
+  "CLX": {
+    "score": 1,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 94.29,
+    "rs": 16,
+    "pivot": 99.3
+  },
+  "TMUS": {
+    "score": 1,
+    "oppfyller": false,
+    "status": "🟡",
+    "pris": 188.02,
+    "rs": 16,
+    "pivot": 186.4
+  },
+  "CPRT": {
+    "score": 1,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 33.58,
+    "rs": 15,
+    "pivot": NaN
   },
   "ORLY": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 86.97,
+    "pris": 87.38,
     "rs": 15,
     "pivot": 94.12
-  },
-  "SYK": {
-    "score": 1,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 312.19,
-    "rs": 15,
-    "pivot": 352.49
-  },
-  "TMUS": {
-    "score": 1,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 187.3,
-    "rs": 14,
-    "pivot": 198.86
   },
   "VMC": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 263.93,
+    "pris": 260.23,
     "rs": 14,
     "pivot": 300.07
   },
-  "META": {
+  "VRSK": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 592.85,
-    "rs": 13,
-    "pivot": 612.43
+    "pris": 190.6,
+    "rs": 14,
+    "pivot": NaN
   },
   "NOC": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 523.82,
+    "pris": 528.24,
     "rs": 13,
     "pivot": 565.42
+  },
+  "SYK": {
+    "score": 1,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 307.99,
+    "rs": 13,
+    "pivot": 352.49
   },
   "TDG": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 1153.75,
+    "pris": 1157.83,
     "rs": 13,
     "pivot": 1359.27
   },
@@ -3619,55 +3651,47 @@
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 70.83,
+    "pris": 71.48,
     "rs": 12,
     "pivot": 74.87
-  },
-  "CPRT": {
-    "score": 1,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 32.16,
-    "rs": 11,
-    "pivot": NaN
-  },
-  "MCD": {
-    "score": 1,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 260.95,
-    "rs": 11,
-    "pivot": 276.41
   },
   "TRMB": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 59.11,
-    "rs": 11,
+    "pris": 60.1,
+    "rs": 12,
     "pivot": NaN
+  },
+  "ADSK": {
+    "score": 1,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 237.52,
+    "rs": 11,
+    "pivot": 260.74
+  },
+  "MCD": {
+    "score": 1,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 259.63,
+    "rs": 11,
+    "pivot": 276.41
   },
   "LHX": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 261.31,
+    "pris": 262.14,
     "rs": 10,
     "pivot": 294.14
-  },
-  "RDDT": {
-    "score": 1,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 158.1,
-    "rs": 10,
-    "pivot": NaN
   },
   "NFLX": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 82.73,
+    "pris": 82.67,
     "rs": 9,
     "pivot": NaN
   },
@@ -3675,95 +3699,79 @@
     "score": 1,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 34.86,
+    "pris": 34.6,
     "rs": 9,
     "pivot": 31.91
-  },
-  "CCI": {
-    "score": 1,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 75.38,
-    "rs": 8,
-    "pivot": NaN
   },
   "SNPS": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 415.97,
+    "pris": 416.31,
     "rs": 8,
     "pivot": 425.78
-  },
-  "COIN": {
-    "score": 1,
-    "oppfyller": false,
-    "status": "🔵",
-    "pris": 174.96,
-    "rs": 7,
-    "pivot": 155.4
   },
   "FIS": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 41.87,
+    "pris": 42.28,
     "rs": 7,
     "pivot": 44.39
+  },
+  "RDDT": {
+    "score": 1,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 155.99,
+    "rs": 6,
+    "pivot": NaN
   },
   "FISV": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 51.98,
+    "pris": 52.73,
     "rs": 5,
     "pivot": 55.98
-  },
-  "BSX": {
-    "score": 1,
-    "oppfyller": false,
-    "status": "🔵",
-    "pris": 48.37,
-    "rs": 4,
-    "pivot": 46.37
   },
   "LULU": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 120.07,
-    "rs": 4,
+    "pris": 121.77,
+    "rs": 5,
     "pivot": 128.86
-  },
-  "ZTS": {
-    "score": 1,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 76.17,
-    "rs": 4,
-    "pivot": NaN
   },
   "LII": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 374.0,
-    "rs": 3,
+    "pris": 386.08,
+    "rs": 4,
     "pivot": NaN
   },
-  "ORCL": {
+  "ZTS": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 145.75,
+    "pris": 76.29,
+    "rs": 4,
+    "pivot": NaN
+  },
+  "BSX": {
+    "score": 1,
+    "oppfyller": false,
+    "status": "🔵",
+    "pris": 46.95,
     "rs": 3,
-    "pivot": 159.26
+    "pivot": 46.37
   },
   "CSGP": {
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 31.26,
+    "pris": 31.68,
     "rs": 2,
     "pivot": NaN
   },
@@ -3771,63 +3779,55 @@
     "score": 1,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 44.42,
+    "pris": 44.08,
     "rs": 1,
     "pivot": NaN
-  },
-  "HCA": {
-    "score": 0,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 402.06,
-    "rs": 21,
-    "pivot": 421.31
   },
   "IP": {
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 36.3,
-    "rs": 21,
+    "pris": 36.44,
+    "rs": 22,
     "pivot": 44.32
   },
   "AOS": {
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 59.26,
-    "rs": 17,
+    "pris": 60.53,
+    "rs": 20,
     "pivot": 64.38
+  },
+  "MKC": {
+    "score": 0,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 52.58,
+    "rs": 17,
+    "pivot": 54.1
   },
   "NVR": {
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 6326.95,
+    "pris": 6373.95,
     "rs": 14,
     "pivot": 6483.93
   },
-  "VRSK": {
+  "XYL": {
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 188.16,
-    "rs": 13,
-    "pivot": NaN
+    "pris": 107.89,
+    "rs": 11,
+    "pivot": 127.16
   },
-  "TSLA": {
+  "LOW": {
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 357.01,
-    "rs": 12,
-    "pivot": NaN
-  },
-  "IDXX": {
-    "score": 0,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 538.99,
+    "pris": 201.9,
     "rs": 10,
     "pivot": NaN
   },
@@ -3835,71 +3835,71 @@
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 143.46,
+    "pris": 144.22,
     "rs": 10,
     "pivot": 150.18
-  },
-  "XYL": {
-    "score": 0,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 106.74,
-    "rs": 9,
-    "pivot": 127.16
-  },
-  "CCL": {
-    "score": 0,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 23.74,
-    "rs": 8,
-    "pivot": NaN
-  },
-  "LOW": {
-    "score": 0,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 199.84,
-    "rs": 8,
-    "pivot": NaN
-  },
-  "CRH": {
-    "score": 0,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 92.67,
-    "rs": 7,
-    "pivot": 101.87
   },
   "IBM": {
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 231.7,
-    "rs": 7,
+    "pris": 234.71,
+    "rs": 8,
     "pivot": 241.8
   },
-  "MLM": {
+  "IDXX": {
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 517.07,
-    "rs": 7,
-    "pivot": 588.0
+    "pris": 529.29,
+    "rs": 8,
+    "pivot": NaN
   },
   "AZO": {
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 2934.52,
-    "rs": 6,
+    "pris": 2968.04,
+    "rs": 7,
     "pivot": 3160.0
+  },
+  "CCL": {
+    "score": 0,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 23.48,
+    "rs": 7,
+    "pivot": NaN
   },
   "FSLR": {
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 202.6,
+    "pris": 207.42,
+    "rs": 7,
+    "pivot": NaN
+  },
+  "MLM": {
+    "score": 0,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 508.94,
+    "rs": 7,
+    "pivot": 588.0
+  },
+  "CRH": {
+    "score": 0,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 92.04,
+    "rs": 6,
+    "pivot": 101.87
+  },
+  "FICO": {
+    "score": 0,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 1118.93,
     "rs": 6,
     "pivot": NaN
   },
@@ -3907,23 +3907,15 @@
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 91.52,
+    "pris": 91.56,
     "rs": 6,
     "pivot": 100.59
-  },
-  "FICO": {
-    "score": 0,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 1099.45,
-    "rs": 5,
-    "pivot": NaN
   },
   "ISRG": {
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 371.88,
+    "pris": 369.83,
     "rs": 5,
     "pivot": NaN
   },
@@ -3931,7 +3923,7 @@
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 83.58,
+    "pris": 84.45,
     "rs": 5,
     "pivot": 88.36
   },
@@ -3939,7 +3931,7 @@
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 44.54,
+    "pris": 44.51,
     "rs": 5,
     "pivot": 49.76
   },
@@ -3947,7 +3939,7 @@
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 15.57,
+    "pris": 15.59,
     "rs": 4,
     "pivot": NaN
   },
@@ -3955,23 +3947,31 @@
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 111.09,
+    "pris": 111.84,
     "rs": 4,
     "pivot": NaN
+  },
+  "BLDR": {
+    "score": 0,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 64.18,
+    "rs": 3,
+    "pivot": 76.8
   },
   "NKE": {
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 38.24,
+    "pris": 38.77,
     "rs": 3,
-    "pivot": NaN
+    "pivot": 40.91
   },
   "PNR": {
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 59.84,
+    "pris": 60.02,
     "rs": 3,
     "pivot": NaN
   },
@@ -3979,15 +3979,23 @@
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 148.14,
+    "pris": 150.58,
     "rs": 3,
+    "pivot": 155.17
+  },
+  "APH": {
+    "score": 0,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 82.07,
+    "rs": 2,
     "pivot": NaN
   },
   "APP": {
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 319.05,
+    "pris": 313.58,
     "rs": 2,
     "pivot": NaN
   },
@@ -3995,17 +4003,9 @@
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 45.03,
+    "pris": 46.53,
     "rs": 2,
     "pivot": NaN
-  },
-  "BLDR": {
-    "score": 0,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 63.09,
-    "rs": 2,
-    "pivot": 76.8
   },
   "ROL": {
     "score": 0,
@@ -4019,7 +4019,7 @@
     "score": 0,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 14.55,
+    "pris": 15.09,
     "rs": 1,
     "pivot": NaN
   }
