@@ -325,7 +325,7 @@
     "status": "⚪",
     "pris": 186.63,
     "rs": 86,
-    "pivot": 195.78
+    "pivot": 194.86
   },
   "STLD": {
     "score": 7,
@@ -899,7 +899,7 @@
     "score": 6,
     "oppfyller": false,
     "status": "🔵",
-    "pris": 150.99,
+    "pris": 151.0,
     "rs": 76,
     "pivot": 140.61
   },
@@ -1158,6 +1158,14 @@
     "pris": 237.72,
     "rs": 63,
     "pivot": NaN
+  },
+  "AMCR": {
+    "score": 6,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 45.15,
+    "rs": 62,
+    "pivot": 47.32
   },
   "EMR": {
     "score": 6,
@@ -1525,7 +1533,7 @@
     "status": "🟡",
     "pris": 138.08,
     "rs": 80,
-    "pivot": 137.16
+    "pivot": 136.1
   },
   "TMO": {
     "score": 5,
@@ -1670,14 +1678,6 @@
     "pris": 121.71,
     "rs": 63,
     "pivot": 125.9
-  },
-  "AMCR": {
-    "score": 5,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 45.15,
-    "rs": 62,
-    "pivot": 48.0
   },
   "FDS": {
     "score": 5,
@@ -2389,7 +2389,7 @@
     "status": "⚪",
     "pris": 56.94,
     "rs": 38,
-    "pivot": 62.62
+    "pivot": 62.55
   },
   "PGR": {
     "score": 4,
@@ -2467,7 +2467,7 @@
     "score": 4,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 158.63,
+    "pris": 158.64,
     "rs": 31,
     "pivot": NaN
   },
@@ -2590,6 +2590,14 @@
     "pris": 1223.86,
     "rs": 60,
     "pivot": 1419.92
+  },
+  "PYPL": {
+    "score": 3,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 54.96,
+    "rs": 59,
+    "pivot": 57.67
   },
   "BXP": {
     "score": 3,
@@ -2795,7 +2803,7 @@
     "score": 3,
     "oppfyller": false,
     "status": "⚪",
-    "pris": 357.89,
+    "pris": 357.9,
     "rs": 34,
     "pivot": NaN
   },
@@ -3087,14 +3095,6 @@
     "rs": 9,
     "pivot": NaN
   },
-  "APH": {
-    "score": 3,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 82.78,
-    "rs": 2,
-    "pivot": NaN
-  },
   "Q": {
     "score": 3,
     "oppfyller": false,
@@ -3102,14 +3102,6 @@
     "pris": 120.47,
     "rs": null,
     "pivot": NaN
-  },
-  "PYPL": {
-    "score": 2,
-    "oppfyller": false,
-    "status": "⚪",
-    "pris": 54.96,
-    "rs": 59,
-    "pivot": 57.67
   },
   "BF-B": {
     "score": 2,
@@ -3477,7 +3469,7 @@
     "status": "⚪",
     "pris": 224.59,
     "rs": 26,
-    "pivot": 241.39
+    "pivot": 240.66
   },
   "UHS": {
     "score": 1,
@@ -3653,7 +3645,7 @@
     "status": "⚪",
     "pris": 256.45,
     "rs": 8,
-    "pivot": 294.14
+    "pivot": 292.74
   },
   "MCD": {
     "score": 1,
@@ -3990,6 +3982,14 @@
     "pris": 147.48,
     "rs": 3,
     "pivot": 155.17
+  },
+  "APH": {
+    "score": 0,
+    "oppfyller": false,
+    "status": "⚪",
+    "pris": 82.78,
+    "rs": 2,
+    "pivot": NaN
   },
   "APP": {
     "score": 0,
