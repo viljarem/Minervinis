@@ -669,7 +669,8 @@ def posisjon_verktoy(res: dict, nokkel: str, valuta: str = "kr") -> None:
 def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                   vis_ma: bool = True, vis_52u: bool = True, vis_vcp: bool = True,
                   vis_7av7: bool = True, vis_hist: bool = False, vis_golden: bool = False,
-                  vis_rs: bool = False, indeks: pd.DataFrame | None = None,
+                  vis_rs: bool = False, vis_indeks: bool = False,
+                  indeks: pd.DataFrame | None = None,
                   indeks_navn: str = "indeks",
                   ukentlig: bool = False, hoyde: int = 620, pos: dict | None = None,
                   morkt: bool = False) -> list | None:
@@ -838,6 +839,29 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
         if vis_52u:
             serier += [linje("High_52w", "#9e9e9e", 1, stil=1),
                        linje("Low_52w", "#9e9e9e", 1, stil=1)]
+
+        # Indeks-overlay: indekslinjen (OSEBX.OL / ^GSPC) lagt OPPÅ hovedchartet,
+        # skalert slik at den starter på SAMME pris som aksjen i venstre kant.
+        # Da ser du direkte om aksjen holdt seg når indeksen dyppet: faller den grå
+        # indekslinjen mens candlene står støtt, har aksjen vært sterkere.
+        if vis_indeks and indeks is not None and not indeks.empty:
+            try:
+                idx_kilde = indikatorer.til_ukedata(indeks) if ukentlig else indeks
+                idx_align = idx_kilde["Close"].reindex(d.index).ffill().bfill()
+                gyldige = idx_align.dropna()
+                if not gyldige.empty and float(gyldige.iloc[0]) > 0:
+                    basis = float(gyldige.iloc[0])
+                    startpris = float(d["Close"].iloc[0])
+                    rebas = idx_align / basis * startpris
+                    idx_data = [{"time": ti, "value": round(float(v), 4)}
+                                for ti, v in zip(t, rebas) if pd.notna(v)]
+                    serier.append({"type": "Line", "data": idx_data,
+                                   "options": {"color": "#607d8b", "lineWidth": 2,
+                                               "lineStyle": 0, "priceLineVisible": False,
+                                               "lastValueVisible": False,
+                                               "title": f"{indeks_navn}"}})
+            except Exception:
+                pass
 
         # VCP-kontraksjoner (gul stiplet zigzag topp→bunn→topp mot pivot)
         if vis_vcp and res:
@@ -1724,27 +1748,45 @@ with fane2:
             vis_7av7 = st.checkbox("7/7-markører (ble/mistet)", value=True, key="chart_7av7")
             vis_hist = st.checkbox("Historiske volumbrudd", value=False, key="chart_hist")
             vis_golden = st.checkbox("Golden cross (SMA50×SMA200)", value=False, key="chart_golden")
-            vis_rs = st.checkbox(f"RS-linje mot {BORS.benchmark} (egen delgraf)", value=False,
+            st.caption(f"— Sammenligning mot {BORS.benchmark} —")
+            vis_indeks = st.checkbox(f"📉 Indeks-overlay ({BORS.benchmark})", value=False,
+                                     key="chart_indeks",
+                                     help="Legger indeksen OPPÅ chartet, skalert til å starte likt "
+                                          "med aksjen. Faller indekslinjen mens candlene står støtt, "
+                                          "holdt aksjen seg sterkere enn markedet.")
+            vis_rs = st.checkbox(f"📈 RS-linje: meravkastning vs {BORS.benchmark}", value=False,
                                  key="chart_rs",
-                                 help="Aksjen delt på indeksen, satt til 100 ved start. "
-                                      "Grønt over 100 = slår indeksen, rødt under = henger etter.")
+                                 help="Egen rute under chartet. Aksjen delt på indeksen, satt til "
+                                      "100 ved start. Over 100 = slo indeksen. Kurven STIGER når "
+                                      "indeksen faller men aksjen holder.")
         serie = datamod.serie_for(last_priser(bors_navn, versjon), valg)
         res = screener.analyser_ticker(serie, valg, konfig.PRESETS[aktiv_preset_navn])
         if res is None:
             st.info("For lite historikk til å tegne chart for denne aksjen.")
         else:
+            # RS-rating (1–99) fra skanningen for nettopp denne aksjen.
+            _rs_rad = resultat[resultat["ticker"] == valg]
+            if not _rs_rad.empty and pd.notna(_rs_rad.iloc[0].get("rs")):
+                _rsv = int(_rs_rad.iloc[0]["rs"])
+                _cR, _ = st.columns([1, 3])
+                _cR.metric("RS-rating", f"{_rsv}/99",
+                           help="Relativ styrke mot ALLE aksjer i universet (persentil). "
+                                "70+ = sterkere enn 70 % av aksjene. Dette er skanne-tallet – "
+                                "ikke det samme som RS-linjen/overlayet (som måler mot indeksen).")
             _init_posisjon_state(res, f"chart_{valg}")
             pos, pos_suffix = _posisjon_fra_state(f"chart_{valg}")
-            _indeks = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark) if vis_rs else None
+            _trenger_idx = vis_rs or vis_indeks
+            _indeks = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark) if _trenger_idx else None
             spec = lag_chart_lwc(serie, res, PERIODER_VALG[periode],
                                  vis_ma=vis_ma, vis_52u=vis_52u, vis_vcp=vis_vcp,
                                  vis_7av7=vis_7av7, vis_hist=vis_hist, vis_golden=vis_golden,
-                                 vis_rs=vis_rs, indeks=_indeks, indeks_navn=BORS.benchmark,
+                                 vis_rs=vis_rs, vis_indeks=vis_indeks,
+                                 indeks=_indeks, indeks_navn=BORS.benchmark,
                                  ukentlig=ukentlig, pos=pos, morkt=MORKT)
             if spec is None:
                 st.info("Klarte ikke bygge chartet for denne aksjen.")
             else:
-                noekkel = f"chart_{valg}_{periode}_{tidsramme}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{vis_golden}{vis_rs}{pos_suffix}_{TEMA}"
+                noekkel = f"chart_{valg}_{periode}_{tidsramme}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{vis_golden}{vis_rs}{vis_indeks}{pos_suffix}_{TEMA}"
                 renderLightweightCharts(spec, key=noekkel)
                 st.caption("💡 Dra sidelengs, rull musehjulet for å zoome, dra loddrett på "
                            "prisaksen for å strekke høyden. 🟡 **Kraftig gull = aktiv pivot** · "
@@ -1790,25 +1832,32 @@ with fane3:
                     vis_7av7_3 = st.checkbox("7/7-markører (ble/mistet)", value=True, key="sok_7av7")
                     vis_hist3 = st.checkbox("Historiske volumbrudd", value=False, key="sok_hist")
                     vis_golden3 = st.checkbox("Golden cross (SMA50×SMA200)", value=False, key="sok_golden")
-                    vis_rs3 = st.checkbox(f"RS-linje mot {BORS.benchmark} (egen delgraf)", value=False,
+                    st.caption(f"— Sammenligning mot {BORS.benchmark} —")
+                    vis_indeks3 = st.checkbox(f"📉 Indeks-overlay ({BORS.benchmark})", value=False,
+                                              key="sok_indeks",
+                                              help="Legger indeksen oppå chartet, skalert til å starte "
+                                                   "likt. Ser du om aksjen holdt seg når indeksen falt.")
+                    vis_rs3 = st.checkbox(f"📈 RS-linje: meravkastning vs {BORS.benchmark}", value=False,
                                           key="sok_rs",
-                                          help="Aksjen delt på indeksen, satt til 100 ved start. "
-                                               "Grønt over 100 = slår indeksen, rødt under = henger etter.")
+                                          help="Egen rute under. Aksjen delt på indeksen, satt til 100 "
+                                               "ved start. Stiger når indeksen faller men aksjen holder.")
                 if not HAR_LWC:
                     st.warning("Chart-komponenten er ikke lastet i dette miljøet ennå.")
                 else:
                     _init_posisjon_state(res, f"sok_{sok}")
                     pos3, pos_suffix3 = _posisjon_fra_state(f"sok_{sok}")
-                    _indeks3 = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark) if vis_rs3 else None
+                    _trenger_idx3 = vis_rs3 or vis_indeks3
+                    _indeks3 = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark) if _trenger_idx3 else None
                     spec3 = lag_chart_lwc(serie, res, PERIODER_VALG[periode3],
                                           vis_ma=vis_ma3, vis_52u=vis_52u3, vis_vcp=vis_vcp3,
                                           vis_7av7=vis_7av7_3, vis_hist=vis_hist3, vis_golden=vis_golden3,
-                                          vis_rs=vis_rs3, indeks=_indeks3, indeks_navn=BORS.benchmark,
+                                          vis_rs=vis_rs3, vis_indeks=vis_indeks3,
+                                          indeks=_indeks3, indeks_navn=BORS.benchmark,
                                           ukentlig=ukentlig3, pos=pos3, morkt=MORKT)
                     if spec3 is not None:
                         renderLightweightCharts(
                             spec3,
-                            key=f"sok_{sok}_{periode3}_{tidsramme3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{vis_rs3}{pos_suffix3}_{TEMA}")
+                            key=f"sok_{sok}_{periode3}_{tidsramme3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{vis_rs3}{vis_indeks3}{pos_suffix3}_{TEMA}")
                 vis_vcp_boks(res)
                 fundamenta_seksjon(sok, f"sok_{sok}")
                 st.divider()
