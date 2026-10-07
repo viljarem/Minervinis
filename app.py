@@ -25,7 +25,7 @@ try:
 except Exception:
     HAR_LWC = False
 
-st.set_page_config(page_title="DEMO-Screener", layout="wide")
+st.set_page_config(page_title="Screener", layout="wide")
 
 
 def _er_morkt() -> bool:
@@ -128,11 +128,15 @@ def data_status(bors_navn: str, versjon: float) -> dict:
         return {"tom": True}
     benchmarks = {b.benchmark for b in konfig.BORSER.values() if b.benchmark}
     i_data = set(priser["Ticker"].unique())
-    aksjer_data = len([t for t in i_data if t not in benchmarks])
     univ = set(univers.les_cache(bors.univers_cache_fil))
     if bors.bruk_manuelle:
         univ |= set(univers.les_manuelle())
-    aksjer_univ = len(univ) if univ else aksjer_data
+    univ = {t for t in univ if t not in benchmarks}
+    # Dekning = hvor mange av DAGENS univers vi faktisk har kurshistorikk på.
+    # (Prisfila kan også inneholde avnoterte tickere som ikke lenger er i universet;
+    # de skal ikke blåse opp tallet, derfor snitter vi mot universet.)
+    aksjer_univ = len(univ) if univ else len([t for t in i_data if t not in benchmarks])
+    aksjer_data = len(univ & i_data) if univ else aksjer_univ
     siste_dato = pd.to_datetime(priser["Date"]).max()
     naa_oslo = pd.Timestamp.now(tz="Europe/Oslo").normalize().tz_localize(None)
     alder = (naa_oslo - siste_dato.normalize()).days
@@ -1422,7 +1426,7 @@ with st.sidebar:
 skannet_na = st.session_state.get("skannet_bors") == bors_navn
 st.session_state["bors_navn"] = bors_navn
 
-st.title("📈 DEMO-Screener")
+st.title("📈 Screener")
 st.caption(f"Marked: **{BORS.navn}** · valuta {BORS.valuta_navn}")
 
 versjon = data_versjon(BORS)
@@ -1555,7 +1559,7 @@ with st.sidebar:
         kun_ferske = st.checkbox("Vis kun ferske brudd (🟢)", value=False)
         krev_uke = st.checkbox("Krev ukentlig bekreftelse (✅)", value=False,
                                help="Vis kun aksjer der også den ukentlige trenden peker opp.")
-        del_opp = st.checkbox("📑 Del opp i tabeller per setup", value=False,
+        del_opp = st.checkbox("📑 Del opp i tabeller per setup", value=True,
                               help="Vis fire separate tabeller – én for hver setup-status "
                                    "(🟢 bekreftet brudd · 🟡 brudd uten volum · ⚪ klar/venter · "
                                    "🔵 forlenget) – i stedet for én samlet liste.")
