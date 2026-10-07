@@ -1187,28 +1187,27 @@ def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None, r
         )
     )
     
-    # Shares og MCAP: pre-henter som list comprehension for å unngå N+1 callbacks
+    # Shares og MCAP: leses fra samme fundamenta-buffer som Fund-kolonnen (allerede
+    # varmet av prefetch_fund_scores). hent_fundamenta_cached er @st.cache_data, så
+    # dette er ett bufret oppslag per ticker – ingen nye nettkall her. Vi cacher IKKE
+    # None i session_state (det låste tidligere kolonnene til «—» for hele økta selv
+    # etter at Yahoo-dataene kom på plass).
     shares_liste = []
     mcap_liste = []
-    share_cache = st.session_state.get("share_data", {})
     for t, pris in zip(df["ticker"], df["pris"]):
-        if t not in share_cache:
-            try:
-                fund = hent_fundamenta_cached(t)
-                struktur = fund.get("struktur", {})
-                sh = struktur.get("utestaende")
-                share_cache[t] = sh
-            except Exception:
-                share_cache[t] = None
-        sh = share_cache.get(t)
+        sh = None
+        try:
+            fund = hent_fundamenta_cached(t)
+            sh = (fund.get("struktur") or {}).get("utestaende")
+        except Exception:
+            sh = None
         shares_liste.append(_stor_tall(sh) if sh else "—")
         # MCAP = shares × pris (i native valuta)
         if sh and pris and sh > 0:
             mcap_liste.append(_stor_tall(sh * pris))
         else:
             mcap_liste.append("—")
-    
-    st.session_state["share_data"] = share_cache
+
     vis["Shares"] = shares_liste
     vis["MCAP"] = mcap_liste
     
