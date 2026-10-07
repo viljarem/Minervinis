@@ -148,30 +148,6 @@ def til_ukedata(df: pd.DataFrame) -> pd.DataFrame:
     return uke
 
 
-def rs_linje(aksje_close: pd.Series, indeks_close: pd.Series) -> pd.Series:
-    """Relativ styrke-linje (Mansfield/IBD): aksjen delt på indeksen.
-
-    Begge serier justeres til felles handelsdager (inner join), så regnes
-    forholdet aksje/indeks og reindekseres til 100 ved starten av vinduet.
-      - Stigende linje  = aksjen slår indeksen (relativ styrke)
-      - Flat linje (100) = følger indeksen nøyaktig
-      - Fallende linje   = aksjen henger etter indeksen
-    Returnerer tom serie hvis det er for lite overlapp eller ugyldige verdier.
-    """
-    if aksje_close is None or indeks_close is None:
-        return pd.Series(dtype=float)
-    a, i = aksje_close.align(indeks_close, join="inner")
-    gyldig = (i > 0) & a.notna() & i.notna()
-    a, i = a[gyldig], i[gyldig]
-    if len(a) < 2:
-        return pd.Series(dtype=float)
-    forhold = a / i
-    forste = forhold.iloc[0]
-    if forste == 0 or pd.isna(forste):
-        return pd.Series(dtype=float)
-    return forhold / forste * 100.0
-
-
 def rs_avkastning(close: pd.Series) -> float:
     """
     Vektet avkastning brukt i RS-ratingen (IBD-metoden):

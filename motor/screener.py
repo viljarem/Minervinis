@@ -173,6 +173,38 @@ def _persentil(serie: pd.Series) -> pd.Series:
     return (rang * 98 + 1).round()
 
 
+def rs_rating_historikk(priser: pd.DataFrame) -> pd.DataFrame:
+    """Beregner RS-ratingen (1–99) for HVER dag bakover for hele universet.
+
+    Samme IBD-formel som ved skanning (0.40×3mnd + 0.20×6/9/12mnd), men
+    vektorisert over alle aksjer og alle dager samtidig, og rangert på tvers
+    av universet PER DAG. Returnerer en bred tabell: datoer (rad) × ticker (kol),
+    med RS-rating som verdi. Benchmark-indeksene holdes utenfor rangeringen,
+    akkurat som i vanlig screening. Tom ramme hvis data mangler.
+
+    Lett å kjøre (~0,1 s for hele Oslo Børs), så den kan regnes ved behov.
+    """
+    if priser is None or priser.empty:
+        return pd.DataFrame()
+    benchmarks = {b.benchmark for b in konfig.BORSER.values() if b.benchmark}
+    benchmarks.add(konfig.BENCHMARK)
+
+    bred = priser.pivot_table(index="Date", columns="Ticker", values="Close", aggfunc="last")
+    bred = bred.drop(columns=[c for c in benchmarks if c in bred.columns], errors="ignore")
+    if bred.empty:
+        return pd.DataFrame()
+    bred.index = pd.to_datetime(bred.index)
+    bred = bred.sort_index()
+
+    # Vektet avkastning (IBD) for alle aksjer × alle dager på én gang.
+    vektet = sum(v * (bred / bred.shift(p) - 1.0)
+                 for p, v in zip(konfig.RS_PERIODER, konfig.RS_VEKTER))
+
+    # Persentil PER DAG på tvers av aksjene → skala 1–99 (99 = sterkest).
+    rang = vektet.rank(axis=1, pct=True)
+    return (rang * 98 + 1).round()
+
+
 def screen(priser: pd.DataFrame, preset: Preset = konfig.STANDARD) -> pd.DataFrame:
     """Kjører analysen for alle tickere i prisdataene og returnerer én stor tabell."""
     if priser is None or priser.empty:
