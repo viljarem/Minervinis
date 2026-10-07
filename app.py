@@ -680,7 +680,7 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                   vis_indeks: bool = False, indeks: pd.DataFrame | None = None,
                   indeks_navn: str = "indeks",
                   ukentlig: bool = False, hoyde: int = 620, pos: dict | None = None,
-                  morkt: bool = False) -> list | None:
+                  morkt: bool = False, tittel: str = "") -> list | None:
     """Bygger data-spesifikasjonen for lightweight-charts.
 
     Tar med alt det gamle Plotly-chartet hadde: candles, MA50/150/200, 52-ukers
@@ -802,7 +802,11 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
         hoved = {"type": "Candlestick", "data": candles,
                  "options": {"upColor": "#26a69a", "downColor": "#ef5350",
                              "borderVisible": False, "wickUpColor": "#26a69a",
-                             "wickDownColor": "#ef5350"}}
+                             "wickDownColor": "#ef5350",
+                             # Siste kurs som alltid-synlig etikett til høyre.
+                             "lastValueVisible": True, "priceLineVisible": True,
+                             "priceLineWidth": 1, "priceLineStyle": 2,
+                             "priceLineColor": "#787b86"}}
         if rene:
             hoved["markers"] = rene
 
@@ -962,6 +966,16 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
             "timeScale": {"borderVisible": False, "rightOffset": 4},
             "crosshair": {"mode": 0},
         }
+        # Vannmerke: svak ticker-tekst bak chartet, så du alltid ser hvilken aksje
+        # det gjelder – nyttig når flere charts tegnes under hverandre i tabellene.
+        if tittel:
+            vm_tekst = f"{tittel} \u00b7 uke" if ukentlig else tittel
+            chart_options["watermark"] = {
+                "visible": True, "text": vm_tekst,
+                "fontSize": 34, "lineHeight": 34,
+                "color": "rgba(160,160,160,0.12)" if not morkt else "rgba(200,200,200,0.10)",
+                "horzAlign": "center", "vertAlign": "top",
+            }
         charts = [{"chart": chart_options, "series": serier}]
 
         # --- RS-rating over tid (1–99) som egen delgraf ---
@@ -1632,7 +1646,7 @@ def vis_golden_cross(gc_resultat):
                                   vis_rs_rating=_gc_rs_rating, rs_rating=_rs_serie_gc,
                                   vis_indeks=_gc_indeks, indeks=_gc_indeks_serie,
                                   indeks_navn=BORS.benchmark, ukentlig=_gc_ukentlig,
-                                  hoyde=460, morkt=MORKT)
+                                  hoyde=460, morkt=MORKT, tittel=_tk)
             if _spec:
                 renderLightweightCharts(_spec, key=f"gc_{_tk}_{_gc_periode}_{_gc_tidsramme}_{TEMA}")
         else:
@@ -1768,7 +1782,7 @@ with fane1:
                                           vis_rs_rating=_hl_rs_rating, rs_rating=_rs_serie_hl,
                                           vis_indeks=_hl_indeks, indeks=_hl_indeks_serie,
                                           indeks_navn=BORS.benchmark, ukentlig=_hl_ukentlig,
-                                          hoyde=460, morkt=MORKT)
+                                          hoyde=460, morkt=MORKT, tittel=_tk)
                     if _spec:
                         renderLightweightCharts(_spec, key=f"hl_{nokkel}_{_tk}_{_hl_periode}_{_hl_tidsramme}_{TEMA}")
 
@@ -1863,7 +1877,7 @@ with fane2:
                                  vis_7av7=vis_7av7, vis_hist=vis_hist, vis_golden=vis_golden,
                                  vis_rs_rating=vis_rs_rating, rs_rating=_rs_serie,
                                  vis_indeks=vis_indeks, indeks=_indeks, indeks_navn=BORS.benchmark,
-                                 ukentlig=ukentlig, pos=pos, morkt=MORKT)
+                                 ukentlig=ukentlig, pos=pos, morkt=MORKT, tittel=valg)
             if spec is None:
                 st.info("Klarte ikke bygge chartet for denne aksjen.")
             else:
@@ -1938,7 +1952,7 @@ with fane3:
                                           vis_7av7=vis_7av7_3, vis_hist=vis_hist3, vis_golden=vis_golden3,
                                           vis_rs_rating=vis_rs_rating3, rs_rating=_rs_serie3,
                                           vis_indeks=vis_indeks3, indeks=_indeks3, indeks_navn=BORS.benchmark,
-                                          ukentlig=ukentlig3, pos=pos3, morkt=MORKT)
+                                          ukentlig=ukentlig3, pos=pos3, morkt=MORKT, tittel=sok)
                     if spec3 is not None:
                         renderLightweightCharts(
                             spec3,
