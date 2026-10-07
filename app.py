@@ -1254,7 +1254,19 @@ def stil_hovedtabell(vis: pd.DataFrame):
     (6/7 eller volum over snittet). Returnerer en pandas Styler som st.dataframe
     tegner med farger – column_config styrer fortsatt format og hjelpetekster.
     """
-    sterk, lys = "background-color:#b7e4c7;font-weight:600", "background-color:#eaf7ec"
+    # Fargepalett som tilpasser seg tema. I mørkt tema er standard-teksten lys,
+    # så vi må bruke MØRKE bakgrunner (ellers blir lys tekst på lys grønn uleselig).
+    # I lyst tema beholder vi de luftige pastellfargene som før.
+    if _er_morkt():
+        sterk = "background-color:#1b5e20;color:#eaffea;font-weight:600"
+        lys = "background-color:#2f4733;color:#eaffea"
+        gul = "background-color:#5c4d12;color:#fff4c2"
+        rod = "background-color:#5c2020;color:#ffd6d6"
+    else:
+        sterk = "background-color:#b7e4c7;color:#14321f;font-weight:600"
+        lys = "background-color:#eaf7ec;color:#14321f"
+        gul = "background-color:#fef9c3;color:#3f3a10"
+        rod = "background-color:#fee2e2;color:#4a1414"
 
     def _krit(v):
         if v == "7/7":
@@ -1314,9 +1326,9 @@ def stil_hovedtabell(vis: pd.DataFrame):
         if v.startswith("🟢"):
             return lys
         if v.startswith("🟡"):
-            return "background-color:#fef9c3"
+            return gul
         if v.startswith("🔴"):
-            return "background-color:#fee2e2"
+            return rod
         return ""
 
     styler = vis.style
