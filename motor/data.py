@@ -252,39 +252,18 @@ def hent_live(ticker: str, periode: str = "2y") -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Live-kurser + projisert relativt volum (KUN til visning – rører aldri fila)
+# Live-kurser + rått relativt volum (KUN til visning – rører aldri fila)
 # ---------------------------------------------------------------------------
-# Typisk andel av en dags volum som er handlet innen et gitt klokkeslett på Oslo
-# Børs. Volum er U-formet – tyngst rundt åpning (09:00) og mot slutten (~16:25) –
-# så en rett linje ville bommet. Tallene er anslag, men fanger formen godt nok.
-# Minutter fra 09:00  ->  andel av dagsvolum (0–1).
-_VOLUMKURVE_MIN = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390, 420, 445]
-_VOLUMKURVE_AND = [0.0, 0.12, 0.21, 0.29, 0.36, 0.42, 0.48, 0.54,
-                   0.60, 0.66, 0.72, 0.78, 0.84, 0.90, 0.95, 1.0]
 
 
-def dagsandel(naa) -> float:
-    """Typisk andel (0–1) av dagens volum som er handlet innen tidspunktet `naa`.
+def live_rvol(volum, snitt50, naa=None) -> float:
+    """Rå live-faktor: dagens volum-så-langt delt på 50-dagers snittvolum.
 
-    Brukes til å projisere dagens volum-så-langt til et helt døgn, slik at «live»
-    relativt volum blir meningsfullt også tidlig på dagen (da rått volum ellers
-    alltid ser lavt ut). Utenfor børstid returneres 1.0 (økta er komplett).
-    `naa` er en tidssone-bevisst Timestamp i norsk tid.
-    """
-    aapen = naa.replace(hour=9, minute=0, second=0, microsecond=0)
-    minutter = (naa - aapen).total_seconds() / 60.0
-    if minutter <= 0 or minutter >= _VOLUMKURVE_MIN[-1]:
-        return 1.0
-    return float(np.interp(minutter, _VOLUMKURVE_MIN, _VOLUMKURVE_AND))
-
-
-def live_rvol(volum, snitt50, naa) -> float:
-    """Projisert relativt volum for inneværende dag, målt mot 50-dagers snittvolum.
-
-    1,0 = på vei mot et helt normalt dagsvolum · 2,0 = dobbelt så travelt som
-    normalt. Vi deler dagens volum-så-langt på den TYPISKE andelen som pleier å
-    være handlet på dette klokkeslettet (se dagsandel), så tallet ikke blir
-    kunstig lavt om morgenen. Fortsatt et anslag – mest presist utover dagen.
+    INGEN klokkeslett-projeksjon – tallet er bokstavelig talt hvor mye som er
+    handlet hittil i dag relativt til et normalt dagsvolum. Tidlig på dagen vil
+    tallet derfor naturlig være lavt; brukeren vurderer selv hvor langt på dagen
+    vi er. 1,0 = allerede et helt normalt dagsvolum omsatt · 0,5 = halvveis.
+    `naa` ignoreres (beholdt for bakoverkompatibel signatur).
     Returnerer NaN når vi mangler tall.
     """
     try:
@@ -294,8 +273,7 @@ def live_rvol(volum, snitt50, naa) -> float:
         return float("nan")
     if pd.isna(volum) or pd.isna(snitt50) or snitt50 <= 0 or volum <= 0:
         return float("nan")
-    andel = max(dagsandel(naa), 0.05)          # gulv så vi ikke deler på ~0 ved åpning
-    return (volum / andel) / snitt50
+    return volum / snitt50
 
 
 def hent_sanntid(tickere: list[str]) -> dict[str, dict]:

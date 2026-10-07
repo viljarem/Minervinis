@@ -49,44 +49,28 @@ def test_hent_sanntid_returnerer_dict_type():
 
 
 # ---------------------------------------------------------------------------
-# Projisert live relativt volum (volumkurve)
+# Rått live relativt volum (ingen klokkeslett-projeksjon)
 # ---------------------------------------------------------------------------
 def _oslo(tid: str):
     return pd.Timestamp(tid, tz="Europe/Oslo")
 
 
-def test_dagsandel_oker_utover_dagen():
-    """Andelen av dagsvolum skal vokse gjennom børsdagen."""
-    d10 = datamod.dagsandel(_oslo("2026-07-02 10:00"))
-    d13 = datamod.dagsandel(_oslo("2026-07-02 13:00"))
-    d16 = datamod.dagsandel(_oslo("2026-07-02 16:00"))
-    assert 0 < d10 < d13 < d16 <= 1.0
+def test_live_rvol_er_raa_faktor():
+    """RVol (live) = volum-så-langt / snitt50, uten projeksjon.
 
-
-def test_dagsandel_utenfor_borstid_er_full():
-    """Før åpning og etter stengning er økta komplett (1.0)."""
-    assert datamod.dagsandel(_oslo("2026-07-02 07:00")) == 1.0
-    assert datamod.dagsandel(_oslo("2026-07-02 20:00")) == 1.0
-
-
-def test_live_rvol_normal_dag_er_naer_1():
-    """Følger dagens volum den TYPISKE kurven, skal RVol ≈ 1,0 – uansett klokkeslett.
-
-    Dette er hele poenget: tallet skal ikke være kunstig lavt om morgenen.
+    Halvveis til et normalt dagsvolum → 0,5. Klokkeslett skal ikke påvirke.
     """
     snitt = 1_000_000
     for tid in ["2026-07-02 10:00", "2026-07-02 12:30", "2026-07-02 15:00"]:
         naa = _oslo(tid)
-        volum_saa_langt = datamod.dagsandel(naa) * snitt        # «normalt» tempo
-        assert abs(datamod.live_rvol(volum_saa_langt, snitt, naa) - 1.0) < 0.01
+        assert datamod.live_rvol(snitt // 2, snitt, naa) == 0.5
+        assert datamod.live_rvol(snitt, snitt, naa) == 1.0
+        assert datamod.live_rvol(snitt * 2, snitt, naa) == 2.0
 
 
-def test_live_rvol_dobbelt_tempo_gir_2():
-    """Dobbelt så mye volum som normalt på klokkeslettet → RVol ≈ 2,0."""
-    naa = _oslo("2026-07-02 13:00")
-    snitt = 500_000
-    volum = datamod.dagsandel(naa) * snitt * 2
-    assert abs(datamod.live_rvol(volum, snitt, naa) - 2.0) < 0.02
+def test_live_rvol_uten_tidspunkt():
+    """`naa` er valgfri nå – skal fungere uten tidspunkt."""
+    assert datamod.live_rvol(500_000, 1_000_000) == 0.5
 
 
 def test_live_rvol_mangler_tall_gir_nan():
