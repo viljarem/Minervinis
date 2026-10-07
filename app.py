@@ -68,9 +68,18 @@ def kjor_golden_cross(bors_navn: str, versjon: float) -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def rs_rating_historikk(bors_navn: str, versjon: float) -> pd.DataFrame:
-    """RS-rating (1–99) per dag for hele universet – bred tabell (Date × Ticker)."""
+    """RS-rating (1–99) per dag for hele universet – bred tabell (Date × Ticker).
+
+    getattr-fallback: hvis Streamlit Cloud ennå kjører en gammel, bufret utgave av
+    screener-modulen (kan skje det første minuttet etter utrulling), mangler
+    funksjonen. Da returnerer vi en tom ramme i stedet for å krasje appen –
+    RS-over-tid-laget blir bare borte til den nye modulen er lastet.
+    """
+    _fn = getattr(screener, "rs_rating_historikk", None)
+    if _fn is None:
+        return pd.DataFrame()
     priser = datamod.les_priser(konfig.BORSER[bors_navn].priser_fil)
-    return screener.rs_rating_historikk(priser)
+    return _fn(priser)
 
 
 def kjor_screening_retrospektiv(bors_navn: str, preset_navn: str, dato: pd.Timestamp, versjon: float) -> pd.DataFrame:
