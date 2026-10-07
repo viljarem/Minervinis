@@ -60,6 +60,12 @@ MIN_HANDELSDAGER = 200        # aksjen må ha minst så mange dager for å vurde
 # ---------------------------------------------------------------------------
 # Relativ styrke (RS) – IBD-metoden
 # ---------------------------------------------------------------------------
+# IBDs RS Rating: vektet kvartalsytelse (2·3mnd + 1·6mnd + 1·9mnd + 1·12mnd)/5,
+# som gir vektene 0.40/0.20/0.20/0.20 – dobbelt trykk på ferskeste 3 mnd. Deretter
+# rangeres hver aksje som persentil (1–99, 99 = sterkest) MOT HELE UNIVERSET.
+# NB: IBD rangerer mot ~8000 US-aksjer; vi rangerer mot vårt valgte univers
+# (Oslo ~300 / S&P 500), så tallet er relativt til DEN børsen – ikke globalt.
+# RS er rå kursytelse rangert mot andre aksjer, IKKE en aksje/indeks-ratio.
 RS_PERIODER = (63, 126, 189, 252)      # 3, 6, 9, 12 måneder målt i handelsdager
 RS_VEKTER = (0.40, 0.20, 0.20, 0.20)
 RS_MIN = 70                            # Minervinis fulle template krever RS >= 70

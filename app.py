@@ -1847,7 +1847,8 @@ with fane2:
             vis_rs_rating = st.checkbox("📈 RS-rating over tid (1–99)", value=False,
                                         key="chart_rs_rating",
                                         help="Egen rute under chartet. Viser hvordan skanne-tallet "
-                                             "(relativ styrke mot hele universet) har beveget seg. "
+                                             "(IBD-vektet relativ styrke mot hele universet) har beveget seg. "
+                                             "Persentil mot DETTE universet, ikke globalt IBD-tall. "
                                              "Grønt over 70 = blant de sterkeste, rødt under. "
                                              "Høyre kant = dagens RS-rating.")
         serie = datamod.serie_for(last_priser(bors_navn, versjon), valg)
@@ -1861,9 +1862,11 @@ with fane2:
                 _rsv = int(_rs_rad.iloc[0]["rs"])
                 _cR, _ = st.columns([1, 3])
                 _cR.metric("RS-rating", f"{_rsv}/99",
-                           help="Relativ styrke mot ALLE aksjer i universet (persentil). "
-                                "70+ = sterkere enn 70 % av aksjene. Huk av «RS-rating over tid» "
-                                "i ⚙️ for å se hvordan tallet har beveget seg.")
+                           help="IBD-vektet relativ styrke (40 % siste 3 mnd + 20 % hver "
+                                "av 6/9/12 mnd), rangert som persentil mot alle aksjene i "
+                                f"DETTE universet ({BORS.navn}) – ikke mot hele verdensmarkedet "
+                                "slik IBD-tallet i avisen er. 70+ = sterkere enn 70 % av "
+                                "aksjene her. Huk av «RS-rating over tid» i ⚙️ for forløpet.")
             _init_posisjon_state(res, f"chart_{valg}")
             pos, pos_suffix = _posisjon_fra_state(f"chart_{valg}")
             _rs_serie = None
