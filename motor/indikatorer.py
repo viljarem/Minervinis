@@ -130,6 +130,24 @@ def multi_timeframe(df: pd.DataFrame) -> dict:
     return {"status": "neutral", "emoji": "⚠️", "tekst": f"Ukentlig blandet (RSI {rsi:.0f})"}
 
 
+def til_ukedata(df: pd.DataFrame) -> pd.DataFrame:
+    """Gjør daglige OHLCV-data om til UKENTLIGE barer (uke slutter søndag).
+
+    Open = ukens første, High = ukens høyeste, Low = laveste, Close = siste,
+    Volume = sum. Returnerer tom ramme hvis input er tom eller mangler datoindeks.
+    Brukes til ukentlig chart-visning (SMA50 blir da 50 UKER, osv.).
+    """
+    if df is None or df.empty or not isinstance(df.index, pd.DatetimeIndex):
+        return pd.DataFrame()
+    try:
+        uke = df.resample("W").agg(
+            {"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"}
+        ).dropna()
+    except (TypeError, ValueError):
+        return pd.DataFrame()
+    return uke
+
+
 def rs_avkastning(close: pd.Series) -> float:
     """
     Vektet avkastning brukt i RS-ratingen (IBD-metoden):

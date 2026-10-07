@@ -669,7 +669,8 @@ def posisjon_verktoy(res: dict, nokkel: str, valuta: str = "kr") -> None:
 def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                   vis_ma: bool = True, vis_52u: bool = True, vis_vcp: bool = True,
                   vis_7av7: bool = True, vis_hist: bool = False, vis_golden: bool = False,
-                  hoyde: int = 620, pos: dict | None = None, morkt: bool = False) -> list | None:
+                  ukentlig: bool = False, hoyde: int = 620, pos: dict | None = None,
+                  morkt: bool = False) -> list | None:
     """Bygger data-spesifikasjonen for lightweight-charts.
 
     Tar med alt det gamle Plotly-chartet hadde: candles, MA50/150/200, 52-ukers
@@ -677,12 +678,27 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
     7/7-markører (ble/mistet), historiske volumbrudd og «brudd nå». Hvert lag kan
     slås av/på. Returnerer lista renderLightweightCharts venter, eller None.
     Pakket i try/except så testfanen aldri kan krasje appen.
+
+    ukentlig=True resampler til UKEDATA før indikatorene regnes – da blir SMA50
+    = 50 uker, volum-snittet SMA10 (10 uker), osv. De daglige analyse-artefaktene
+    (VCP-punkter, 7/7-markører, historiske brudd) vises kun i dagsvisning siden
+    datoene deres ikke faller på ukeslutt; pivot/stop (prisnivåer) vises i begge.
     """
     try:
-        full = indikatorer.legg_til_indikatorer(serie)
+        if ukentlig:
+            uke = indikatorer.til_ukedata(serie)
+            if uke.empty or len(uke) < 30:
+                return None
+            full = indikatorer.legg_til_indikatorer(uke)
+            vindu = max(dager // 5, 30)          # omtrent samme tidsspenn som dagsvisning
+            vol_vindu = 10                        # SMA10 på volum i ukevisning
+        else:
+            full = indikatorer.legg_til_indikatorer(serie)
+            vindu = dager
+            vol_vindu = 50
         if full.empty:
             return None
-        d = full.iloc[-min(dager, len(full)):].copy()
+        d = full.iloc[-min(vindu, len(full)):].copy()
         t = list(d.index.strftime("%Y-%m-%d"))
         t_sett = set(t)
 
@@ -857,11 +873,12 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                                        "lineStyle": 2, "priceLineVisible": False,
                                        "lastValueVisible": False}})
 
-        # Volum + 50-dagers snittvolum (delt overlay-skala i bunnen)
+        # Volum + snittvolum (delt overlay-skala i bunnen). Vindu følger tidsrammen:
+        # 50-dagers snitt i dagsvisning, 10-ukers (SMA10) i ukevisning.
         serier.append({"type": "Histogram", "data": volum,
                        "options": {"priceFormat": {"type": "volume"}, "priceScaleId": "vol"},
                        "priceScale": {"scaleMargins": {"top": 0.78, "bottom": 0}}})
-        d["_volsnitt"] = d["Volume"].rolling(50, min_periods=10).mean()
+        d["_volsnitt"] = d["Volume"].rolling(vol_vindu, min_periods=max(2, vol_vindu // 5)).mean()
         serier.append(linje("_volsnitt", "#3949ab", 1, skala="vol"))
 
         # Pivot (gull) og stop (rød stiplet) som flate linjer. Aktiv pivot er
@@ -1649,8 +1666,15 @@ with fane2:
         st.info("Ingen treff å velge mellom ennå.")
     else:
         valg = st.selectbox("Velg aksje", resultat["ticker"].tolist())
-        periode = st.radio("Periode", list(PERIODER_VALG.keys()), index=3, horizontal=True,
-                           key="periode_chart")
+        _c1, _c2 = st.columns([3, 1])
+        with _c1:
+            periode = st.radio("Periode", list(PERIODER_VALG.keys()), index=3, horizontal=True,
+                               key="periode_chart")
+        with _c2:
+            tidsramme = st.radio("Tidsramme", ["Dag", "Uke"], horizontal=True, key="tf_chart",
+                                 help="Uke = ukentlige barer. Da blir SMA50 = 50 uker og "
+                                      "volumsnittet SMA10 (10 uker).")
+        ukentlig = tidsramme == "Uke"
         with st.popover("⚙️ Tilpass chartet"):
             st.caption("Huk av hva du vil se. Færre lag = renere bilde.")
             vis_ma = st.checkbox("Glidende snitt (MA50/150/200)", value=True, key="chart_ma")
@@ -1669,11 +1693,11 @@ with fane2:
             spec = lag_chart_lwc(serie, res, PERIODER_VALG[periode],
                                  vis_ma=vis_ma, vis_52u=vis_52u, vis_vcp=vis_vcp,
                                  vis_7av7=vis_7av7, vis_hist=vis_hist, vis_golden=vis_golden,
-                                 pos=pos, morkt=MORKT)
+                                 ukentlig=ukentlig, pos=pos, morkt=MORKT)
             if spec is None:
                 st.info("Klarte ikke bygge chartet for denne aksjen.")
             else:
-                noekkel = f"chart_{valg}_{periode}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{vis_golden}{pos_suffix}_{TEMA}"
+                noekkel = f"chart_{valg}_{periode}_{tidsramme}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{vis_golden}{pos_suffix}_{TEMA}"
                 renderLightweightCharts(spec, key=noekkel)
                 st.caption("💡 Dra sidelengs, rull musehjulet for å zoome, dra loddrett på "
                            "prisaksen for å strekke høyden. 🟡 **Kraftig gull = aktiv pivot** · "
@@ -1703,8 +1727,14 @@ with fane3:
                 st.info("For lite historikk (trenger ~200 handelsdager) til full analyse.")
             else:
                 st.subheader(f"{sok} · {res['score']}/7 · {res['status']} {res['statustekst']}")
-                periode3 = st.radio("Periode", list(PERIODER_VALG.keys()), index=3,
-                                    horizontal=True, key="periode_sok")
+                _s1, _s2 = st.columns([3, 1])
+                with _s1:
+                    periode3 = st.radio("Periode", list(PERIODER_VALG.keys()), index=3,
+                                        horizontal=True, key="periode_sok")
+                with _s2:
+                    tidsramme3 = st.radio("Tidsramme", ["Dag", "Uke"], horizontal=True, key="tf_sok",
+                                          help="Uke = ukentlige barer (SMA50 = 50 uker, volum SMA10).")
+                ukentlig3 = tidsramme3 == "Uke"
                 with st.popover("⚙️ Tilpass chartet"):
                     st.caption("Huk av hva du vil se. Færre lag = renere bilde.")
                     vis_ma3 = st.checkbox("Glidende snitt (MA50/150/200)", value=True, key="sok_ma")
@@ -1721,11 +1751,11 @@ with fane3:
                     spec3 = lag_chart_lwc(serie, res, PERIODER_VALG[periode3],
                                           vis_ma=vis_ma3, vis_52u=vis_52u3, vis_vcp=vis_vcp3,
                                           vis_7av7=vis_7av7_3, vis_hist=vis_hist3, vis_golden=vis_golden3,
-                                          pos=pos3, morkt=MORKT)
+                                          ukentlig=ukentlig3, pos=pos3, morkt=MORKT)
                     if spec3 is not None:
                         renderLightweightCharts(
                             spec3,
-                            key=f"sok_{sok}_{periode3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{pos_suffix3}_{TEMA}")
+                            key=f"sok_{sok}_{periode3}_{tidsramme3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{pos_suffix3}_{TEMA}")
                 vis_vcp_boks(res)
                 fundamenta_seksjon(sok, f"sok_{sok}")
                 st.divider()
