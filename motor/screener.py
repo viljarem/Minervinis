@@ -19,6 +19,19 @@ from . import konfig, data as datamod, indikatorer, minervini, vcp
 from .konfig import Preset
 
 
+def _avstand_52u(d: pd.DataFrame, pris: float) -> tuple[float, float]:
+    """(% fra 52u høy, % over 52u lav) for siste dag. NaN hvis mangler.
+
+    % fra høy er negativ/0 (hvor langt UNDER toppen), % over lav er positiv
+    (hvor langt OVER bunnen). Begge basert på High_52w/Low_52w-kolonnene.
+    """
+    hoy = d["High_52w"].iloc[-1] if "High_52w" in d.columns else np.nan
+    lav = d["Low_52w"].iloc[-1] if "Low_52w" in d.columns else np.nan
+    fra_hoy = (pris - hoy) / hoy * 100 if pd.notna(hoy) and hoy > 0 else np.nan
+    over_lav = (pris - lav) / lav * 100 if pd.notna(lav) and lav > 0 else np.nan
+    return (fra_hoy, over_lav)
+
+
 # ---------------------------------------------------------------------------
 # Analyse av ÉN aksje
 # ---------------------------------------------------------------------------
@@ -54,6 +67,9 @@ def analyser_ticker(serie: pd.DataFrame, ticker: str, preset: Preset = konfig.ST
 
     pris = float(d["Close"].iloc[-1])
     dagsomsetning = float((d["Close"] * d["Volume"]).rolling(konfig.OMSETNING_VINDU).mean().iloc[-1])
+
+    # Avstand til 52-ukers høy/lav (Minervini-kriterium 6 og 7, nå også som tall).
+    fra_52h, over_52l = _avstand_52u(d, pris)
 
     # Relativt volum (RVol): siste dags volum delt på 50-dagers snittvolum (før i dag).
     # 1,0 = helt normalt, >1 = mer handel enn vanlig. Et ekte brudd skjer typisk
@@ -107,6 +123,8 @@ def analyser_ticker(serie: pd.DataFrame, ticker: str, preset: Preset = konfig.ST
         "golden_cross_dato": None if gc["dato"] is None else pd.Timestamp(gc["dato"]).date().isoformat(),
         "golden_cross_dager": gc["dager_siden"],
         "golden_cross_over": gc["over"],
+        "pct_fra_52h": None if pd.isna(fra_52h) else round(float(fra_52h), 1),
+        "pct_over_52l": None if pd.isna(over_52l) else round(float(over_52l), 1),
         "rs_avkastning": indikatorer.rs_avkastning(d["Close"]),
         "dagsomsetning": dagsomsetning,
         "rel_volum": None if pd.isna(rel_volum) else round(rel_volum, 2),
@@ -250,6 +268,7 @@ def analyser_golden_cross(serie: pd.DataFrame, ticker: str) -> dict | None:
         return None
 
     dagsomsetning = float((d["Close"] * d["Volume"]).rolling(konfig.OMSETNING_VINDU).mean().iloc[-1])
+    fra_52h, over_52l = _avstand_52u(d, pris)
     return {
         "ticker": ticker,
         "pris": round(pris, 2),
@@ -259,6 +278,8 @@ def analyser_golden_cross(serie: pd.DataFrame, ticker: str) -> dict | None:
         "golden_cross_dager": gc["dager_siden"],
         "sma50": round(float(s50), 2),
         "sma200": round(float(s200), 2),
+        "pct_fra_52h": None if pd.isna(fra_52h) else round(float(fra_52h), 1),
+        "pct_over_52l": None if pd.isna(over_52l) else round(float(over_52l), 1),
         "dagsomsetning": dagsomsetning,
         "rs_avkastning": indikatorer.rs_avkastning(d["Close"]),
     }

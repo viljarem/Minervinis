@@ -1004,6 +1004,10 @@ def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None, r
     vis["Volum ±2"] = (df["volum_signatur"].map(_signatur_kort)
                        if "volum_signatur" in df.columns else "—")
     vis["RS"] = df["rs"]
+    vis["Fra 52u høy"] = (df["pct_fra_52h"].map(lambda p: f"{p:+.1f}%" if pd.notna(p) else "—")
+                          if "pct_fra_52h" in df.columns else "—")
+    vis["Over 52u lav"] = (df["pct_over_52l"].map(lambda p: f"{p:+.0f}%" if pd.notna(p) else "—")
+                           if "pct_over_52l" in df.columns else "—")
     if "golden_cross_dager" in df.columns:
         vis["GC"] = [_golden_cross_tekst(dg, ov)
                      for dg, ov in zip(df["golden_cross_dager"],
@@ -1204,6 +1208,12 @@ TABELL_HJELP = {
         "«–» = dag mangler ennå, «—» = ikke brutt pivot ennå."),
     "RS": st.column_config.NumberColumn(
         "RS", help="Relativ styrke 1–99 (99 = sterkest momentum i universet)."),
+    "Fra 52u høy": st.column_config.TextColumn(
+        "Fra 52u høy", help="Hvor langt under 52-ukers høyeste kurs aksjen er (negativt = under "
+        "toppen). Minervini vil se kursen innen 25 % av toppen (kriterium 7)."),
+    "Over 52u lav": st.column_config.TextColumn(
+        "Over 52u lav", help="Hvor langt over 52-ukers laveste kurs aksjen er. Minervini vil se "
+        "minst 30 % over bunnen (kriterium 6)."),
     "GC": st.column_config.TextColumn(
         "GC", help="Golden cross (SMA50 over SMA200): ✨ = nylig bekreftet (krysset opp ≤ "
         "25 handelsdager siden), ✅ = i golden-cross-tilstand men krysset for lengre siden, "
@@ -1427,6 +1437,10 @@ def _formater_golden_cross_tabell(df: pd.DataFrame) -> pd.DataFrame:
     ]
     vis["SMA50"] = df["sma50"]
     vis["SMA200"] = df["sma200"]
+    vis["Fra 52u høy"] = df["pct_fra_52h"].map(
+        lambda p: f"{p:+.1f}%" if pd.notna(p) else "—") if "pct_fra_52h" in df.columns else "—"
+    vis["Over 52u lav"] = df["pct_over_52l"].map(
+        lambda p: f"{p:+.0f}%" if pd.notna(p) else "—") if "pct_over_52l" in df.columns else "—"
     vis["RS"] = df["rs"]
     return vis
 
@@ -1443,6 +1457,10 @@ GC_TABELL_HJELP = {
     "Status": st.column_config.TextColumn(
         "Status", help="✨ Fersk = krysset ≤ 25 dager siden · ✅ Etablert = over, men eldre kryss · "
         "⏳ Venter = SMA50 rett under SMA200 og nærmer seg et kryss."),
+    "Fra 52u høy": st.column_config.TextColumn(
+        "Fra 52u høy", help="Hvor langt under 52-ukers høyeste kurs aksjen er (negativt = under toppen)."),
+    "Over 52u lav": st.column_config.TextColumn(
+        "Over 52u lav", help="Hvor langt over 52-ukers laveste kurs aksjen er."),
     "RS": st.column_config.NumberColumn("RS", help="Relativ styrke 1–99 (99 = sterkest i universet)."),
 }
 
