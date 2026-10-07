@@ -49,6 +49,9 @@ def analyser_ticker(serie: pd.DataFrame, ticker: str, preset: Preset = konfig.ST
 
     mtf = indikatorer.multi_timeframe(d)
 
+    # Golden cross-status (SMA50 vs SMA200): siste golden cross + om vi er over nå.
+    gc = indikatorer.golden_cross_status(d)
+
     pris = float(d["Close"].iloc[-1])
     dagsomsetning = float((d["Close"] * d["Volume"]).rolling(konfig.OMSETNING_VINDU).mean().iloc[-1])
 
@@ -101,6 +104,9 @@ def analyser_ticker(serie: pd.DataFrame, ticker: str, preset: Preset = konfig.ST
         "mtf_status": mtf["status"],
         "mtf_emoji": mtf["emoji"],
         "mtf_tekst": mtf["tekst"],
+        "golden_cross_dato": None if gc["dato"] is None else pd.Timestamp(gc["dato"]).date().isoformat(),
+        "golden_cross_dager": gc["dager_siden"],
+        "golden_cross_over": gc["over"],
         "rs_avkastning": indikatorer.rs_avkastning(d["Close"]),
         "dagsomsetning": dagsomsetning,
         "rel_volum": None if pd.isna(rel_volum) else round(rel_volum, 2),
@@ -184,6 +190,120 @@ def screen(priser: pd.DataFrame, preset: Preset = konfig.STANDARD) -> pd.DataFra
         df["oppfyller"] = df["oppfyller"] & (df["rs"] >= konfig.RS_MIN)
 
     df = df.sort_values(["oppfyller", "score", "rs"], ascending=False).reset_index(drop=True)
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Golden cross-screener (SELVSTENDIG – IKKE Minervini-template)
+# ---------------------------------------------------------------------------
+# Denne screeneren leter kun etter forholdet mellom SMA50 og SMA200. Den bryr
+# seg ikke om Minervinis 7 kriterier, VCP, pivot e.l. – den svarer på ett enkelt
+# spørsmål: «hvem har nettopp fått (eller er i ferd med å få) et golden cross?»
+GC_FERSK = "✨"       # golden cross bekreftet nylig (fersk)
+GC_ETABLERT = "✅"    # golden cross for lenge siden, fortsatt over
+GC_VENTER = "⏳"      # SMA50 rett under SMA200 og nærmer seg = venter på kryss
+
+
+def analyser_golden_cross(serie: pd.DataFrame, ticker: str) -> dict | None:
+    """Vurderer én aksje KUN ut fra SMA50/SMA200-forholdet (golden cross).
+
+    Returnerer en dict hvis aksjen er relevant (nylig/etablert golden cross ELLER
+    rett under og nærmer seg et kryss), ellers None. Ingen Minervini-logikk her.
+    """
+    if serie is None or len(serie) < konfig.MIN_HANDELSDAGER:
+        return None
+    d = indikatorer.legg_til_indikatorer(serie)
+    if d["SMA200"].isna().all():
+        return None
+    s50 = d["SMA50"].iloc[-1]
+    s200 = d["SMA200"].iloc[-1]
+    if pd.isna(s50) or pd.isna(s200) or s200 <= 0:
+        return None
+
+    pris = float(d["Close"].iloc[-1])
+    gap_pct = float((s50 - s200) / s200 * 100)      # + = SMA50 over, − = under
+    gc = indikatorer.golden_cross_status(d)
+
+    # Gapet N dager tilbake – brukes til å se om SMA50 nærmer seg SMA200 nedenfra.
+    n = konfig.GOLDEN_CROSS_KONVERGENS_DAGER
+    gap_for = np.nan
+    if len(d) > n:
+        s50_f, s200_f = d["SMA50"].iloc[-1 - n], d["SMA200"].iloc[-1 - n]
+        if pd.notna(s50_f) and pd.notna(s200_f) and s200_f > 0:
+            gap_for = float((s50_f - s200_f) / s200_f * 100)
+
+    status = None
+    if gc["over"]:
+        # SMA50 ligger over SMA200 akkurat nå = aktivt golden cross.
+        if gc["dager_siden"] is not None and gc["dager_siden"] <= konfig.GOLDEN_CROSS_FERSK_DAGER:
+            status = GC_FERSK
+        else:
+            status = GC_ETABLERT
+    else:
+        # SMA50 under SMA200: er vi nær OG på vei opp mot et kryss?
+        naer = -konfig.GOLDEN_CROSS_NAER_PROSENT * 100   # f.eks. −3.0 %
+        krymper = pd.notna(gap_for) and gap_pct > gap_for   # gapet er mindre negativt nå
+        if naer <= gap_pct < 0 and krymper:
+            status = GC_VENTER
+
+    if status is None:
+        return None
+
+    dagsomsetning = float((d["Close"] * d["Volume"]).rolling(konfig.OMSETNING_VINDU).mean().iloc[-1])
+    return {
+        "ticker": ticker,
+        "pris": round(pris, 2),
+        "gc_status": status,
+        "gap_pct": round(gap_pct, 2),
+        "golden_cross_dato": None if gc["dato"] is None else pd.Timestamp(gc["dato"]).date().isoformat(),
+        "golden_cross_dager": gc["dager_siden"],
+        "sma50": round(float(s50), 2),
+        "sma200": round(float(s200), 2),
+        "dagsomsetning": dagsomsetning,
+        "rs_avkastning": indikatorer.rs_avkastning(d["Close"]),
+    }
+
+
+# Sorteringsrekkefølge: ferske kryss først, så de som venter (nærmest), så etablerte.
+_GC_RANG = {GC_FERSK: 0, GC_VENTER: 1, GC_ETABLERT: 2}
+
+
+def screen_golden_cross(priser: pd.DataFrame) -> pd.DataFrame:
+    """Skanner HELE universet for golden cross (bekreftet + ventende). Egen tabell.
+
+    Helt uavhengig av Minervini-screeningen. Bruker samme likviditetsfilter og
+    RS-rating (relativ styrke i universet), men ingen av de 7 kriteriene.
+    """
+    if priser is None or priser.empty:
+        return pd.DataFrame()
+
+    benchmarks = {b.benchmark for b in konfig.BORSER.values() if b.benchmark}
+    benchmarks.add(konfig.BENCHMARK)
+    tickere = [t for t in sorted(priser["Ticker"].unique()) if t not in benchmarks]
+    rader = []
+    for t in tickere:
+        res = analyser_golden_cross(datamod.serie_for(priser, t), t)
+        if res is not None:
+            rader.append(res)
+
+    df = pd.DataFrame(rader)
+    if df.empty:
+        return df
+
+    df = df[df["dagsomsetning"] >= konfig.MIN_DAGSOMSETNING].copy()
+    if df.empty:
+        return df
+
+    df["rs"] = _persentil(df["rs_avkastning"])
+    df["rs"] = df["rs"].astype("Int64")
+
+    # Ferske kryss øverst, så ventende (nærmest kryss først = minst negativt gap),
+    # så etablerte. Innen hver gruppe: ferske nærmest krysset, ventende nærmest 0.
+    df["_rang"] = df["gc_status"].map(_GC_RANG).fillna(3).astype(int)
+    df["_naer"] = df["gap_pct"].abs()
+    df = (df.sort_values(["_rang", "_naer"], ascending=[True, True], kind="mergesort")
+            .drop(columns=["_rang", "_naer"])
+            .reset_index(drop=True))
     return df
 
 

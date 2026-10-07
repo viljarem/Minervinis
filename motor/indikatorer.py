@@ -46,6 +46,51 @@ def _atr(d: pd.DataFrame, periode: int = 14) -> pd.Series:
     return sann_range.rolling(periode).mean()
 
 
+# ---------------------------------------------------------------------------
+# Golden cross (SMA50 krysser SMA200)
+# ---------------------------------------------------------------------------
+def golden_cross_hendelser(d: pd.DataFrame) -> list[dict]:
+    """Finner ALLE golden/death cross mellom SMA50 og SMA200 i historikken.
+
+    Golden cross = SMA50 krysser OPP gjennom SMA200 (klassisk bullish signal).
+    Death cross  = SMA50 krysser NED gjennom SMA200 (bearish).
+    Returnerer en liste med {"dato": Timestamp, "type": "golden"|"death",
+    "pris": sluttkurs} sortert stigende på dato. Tom liste hvis SMA-ene mangler.
+    """
+    if "SMA50" not in d.columns or "SMA200" not in d.columns:
+        return []
+    diff = d["SMA50"] - d["SMA200"]
+    fortegn = np.sign(diff)                 # +1 når SMA50 over, -1 under, 0 likt
+    forrige = fortegn.shift(1)
+    hendelser = []
+    for dato, naa_f, forr_f, pris in zip(d.index, fortegn, forrige, d["Close"]):
+        if pd.isna(naa_f) or pd.isna(forr_f) or naa_f == 0:
+            continue
+        if forr_f <= 0 and naa_f > 0:
+            hendelser.append({"dato": dato, "type": "golden", "pris": float(pris)})
+        elif forr_f >= 0 and naa_f < 0:
+            hendelser.append({"dato": dato, "type": "death", "pris": float(pris)})
+    return hendelser
+
+
+def golden_cross_status(d: pd.DataFrame) -> dict:
+    """Oppsummerer siste golden cross: dato, handelsdager siden, og om vi er over nå.
+
+    {"dato": Timestamp|None, "dager_siden": int|None, "over": bool}. «over» = SMA50
+    ligger over SMA200 på siste dag (dvs. vi er i golden-cross-tilstand akkurat nå).
+    """
+    over = False
+    if "SMA50" in d.columns and "SMA200" in d.columns:
+        s50, s200 = d["SMA50"].iloc[-1], d["SMA200"].iloc[-1]
+        over = bool(pd.notna(s50) and pd.notna(s200) and s50 > s200)
+    golden = [h for h in golden_cross_hendelser(d) if h["type"] == "golden"]
+    if not golden:
+        return {"dato": None, "dager_siden": None, "over": over}
+    siste = golden[-1]
+    dager = int(len(d.index) - 1 - d.index.get_loc(siste["dato"]))
+    return {"dato": siste["dato"], "dager_siden": dager, "over": over}
+
+
 def multi_timeframe(df: pd.DataFrame) -> dict:
     """Sjekker om den UKENTLIGE trenden bekrefter dagstrenden.
 

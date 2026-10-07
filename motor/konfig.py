@@ -87,6 +87,17 @@ BRUDD_FORLENGET = 0.10        # mer enn 10 % over pivot = "forlenget" (ikke jag)
 HIST_BRUDD_VINDU = 40         # historiske utbrudd: motstand = høyeste High siste ~8 uker
 
 # ---------------------------------------------------------------------------
+# Golden cross (SMA50 krysser over SMA200)
+# ---------------------------------------------------------------------------
+# Et "golden cross" (SMA50 opp gjennom SMA200) regnes som NYLIG bekreftet i så
+# mange handelsdager etter krysset. Brukes til filteret i tabellen.
+GOLDEN_CROSS_FERSK_DAGER = 25
+# "Venter på kryss": SMA50 ligger under SMA200, men maks så mange prosent under –
+# og gapet må ha KRYMPET de siste dagene (SMA50 nærmer seg SMA200 nedenfra).
+GOLDEN_CROSS_NAER_PROSENT = 0.03      # SMA50 maks 3 % under SMA200 = "nær kryss"
+GOLDEN_CROSS_KONVERGENS_DAGER = 10    # gapet skal ha krympet de siste N dagene
+
+# ---------------------------------------------------------------------------
 # Multi-timeframe (ukentlig bekreftelse)
 # ---------------------------------------------------------------------------
 # Vi sjekker at også den UKENTLIGE trenden peker opp før et brudd stoles på.
@@ -107,9 +118,8 @@ class Preset:
 
 
 STANDARD = Preset("Standard (Minervini)", over_lav=0.30, under_hoy=0.25, krev_antall=7, krev_rs=False)
-TIDLIG_FASE = Preset("Tidlig fase", over_lav=0.25, under_hoy=0.30, krev_antall=6, krev_rs=False)
 
-PRESETS = {STANDARD.navn: STANDARD, TIDLIG_FASE.navn: TIDLIG_FASE}
+PRESETS = {STANDARD.navn: STANDARD}
 
 
 # ---------------------------------------------------------------------------

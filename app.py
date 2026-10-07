@@ -60,6 +60,12 @@ def kjor_screening(bors_navn: str, preset_navn: str, versjon: float) -> pd.DataF
     return screener.screen(priser, konfig.PRESETS[preset_navn])
 
 
+@st.cache_data(show_spinner="Søker etter golden cross i hele børsen ...")
+def kjor_golden_cross(bors_navn: str, versjon: float) -> pd.DataFrame:
+    priser = datamod.les_priser(konfig.BORSER[bors_navn].priser_fil)
+    return screener.screen_golden_cross(priser)
+
+
 def kjor_screening_retrospektiv(bors_navn: str, preset_navn: str, dato: pd.Timestamp, versjon: float) -> pd.DataFrame:
     """Kjør screening på data slik det var på en historisk dato (uten look-ahead bias).
     
@@ -297,6 +303,26 @@ def beregn_kursutvikling_siden_dato(priser_df: pd.DataFrame, ticker: str, dato: 
         }
     except Exception:
         return {"pct_change": None, "peak_high_pct": None, "peak_low_pct": None, "siste_pris": None}
+
+
+def _golden_cross_tekst(dager, over) -> str:
+    """Kompakt golden cross-status til tabellen.
+
+    Krever at vi fortsatt er i golden-cross-tilstand (SMA50 over SMA200) – et
+    kryss som allerede har reversert (whipsaw) regnes ikke som gyldig.
+    ✨ = nylig bekreftet golden cross (≤ GOLDEN_CROSS_FERSK_DAGER dager siden).
+    ✅ = i golden-cross-tilstand, men krysset for lenge siden.
+    «—» = SMA50 under SMA200 (ingen aktiv golden cross) eller mangler data.
+    """
+    if not bool(over):
+        return "—"
+    try:
+        d = int(dager)
+    except (TypeError, ValueError):
+        return "✅"
+    if d <= konfig.GOLDEN_CROSS_FERSK_DAGER:
+        return f"✨ {d}d"
+    return f"✅ {d}d"
 
 
 def _stor_tall(x) -> str:
@@ -642,8 +668,8 @@ def posisjon_verktoy(res: dict, nokkel: str, valuta: str = "kr") -> None:
 # ---------------------------------------------------------------------------
 def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                   vis_ma: bool = True, vis_52u: bool = True, vis_vcp: bool = True,
-                  vis_7av7: bool = True, vis_hist: bool = False, hoyde: int = 620,
-                  pos: dict | None = None, morkt: bool = False) -> list | None:
+                  vis_7av7: bool = True, vis_hist: bool = False, vis_golden: bool = False,
+                  hoyde: int = 620, pos: dict | None = None, morkt: bool = False) -> list | None:
     """Bygger data-spesifikasjonen for lightweight-charts.
 
     Tar med alt det gamle Plotly-chartet hadde: candles, MA50/150/200, 52-ukers
@@ -723,6 +749,21 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
             if bd in t_sett:
                 markorer.append({"time": bd, "position": "belowBar",
                                  "color": "#f6c343", "shape": "arrowUp", "text": "BRUDD"})
+        # Golden/death cross (SMA50 krysser SMA200): historiske signal som markører.
+        if vis_golden:
+            try:
+                for h in indikatorer.golden_cross_hendelser(full):
+                    dato = pd.Timestamp(h["dato"]).strftime("%Y-%m-%d")
+                    if dato not in t_sett:
+                        continue
+                    if h["type"] == "golden":
+                        markorer.append({"time": dato, "position": "belowBar",
+                                         "color": "#fbc02d", "shape": "arrowUp", "text": "GC"})
+                    else:
+                        markorer.append({"time": dato, "position": "aboveBar",
+                                         "color": "#78909c", "shape": "arrowDown", "text": "DC"})
+            except Exception:
+                pass
         # Fjern duplikater (samme tid+form) og sorter stigende på tid (LWC-krav)
         sett = set()
         rene = []
@@ -958,9 +999,15 @@ def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None, r
                                   for v, s in zip(vol_liste, df["snittvolum50"])]
     vis["Kriterie 1-7"] = df["score"].astype(str) + "/7"
     vis["RVol"] = df["rel_volum"] if "rel_volum" in df.columns else np.nan
+    vis["Vol snitt50"] = (df["snittvolum50"].map(_stor_tall)
+                          if "snittvolum50" in df.columns else "—")
     vis["Volum ±2"] = (df["volum_signatur"].map(_signatur_kort)
                        if "volum_signatur" in df.columns else "—")
     vis["RS"] = df["rs"]
+    if "golden_cross_dager" in df.columns:
+        vis["GC"] = [_golden_cross_tekst(dg, ov)
+                     for dg, ov in zip(df["golden_cross_dager"],
+                                       df.get("golden_cross_over", [False] * len(df)))]
     scores = st.session_state.get("fund_scores", {})
     vis["Fund"] = df["ticker"].map(
         lambda t: (
@@ -1130,9 +1177,10 @@ TABELL_HJELP = {
         "mange % på brudd akkurat nå. Grønn = bryter eller nærmer seg pivot live."),
     "RVol (live)": st.column_config.NumberColumn(
         "RVol (live)", format="%.1f×",
-        help="Projisert relativt volum i dag mot 50-dagers snitt: 1,0 = på vei mot en normal "
-        "dag, 2,0 = dobbelt så travelt. Justert for at volum er tyngst ved åpning/slutt – "
-        "grovt tidlig på dagen, mest presist utover ettermiddagen. Grønn ≥ 1,4×."),
+        help="Rå live-faktor: dagens volum så langt delt på 50-dagers snitt – INGEN "
+        "klokkeslett-justering. 0,1 = 10 % av et normalt dagsvolum omsatt hittil, 1,0 = "
+        "allerede et helt dagsvolum. Tidlig på dagen er tallet naturlig lavt – vurder selv "
+        "hvor langt på dagen vi er. Grønn ≥ 1,4×."),
     "Setup": st.column_config.TextColumn(
         "Setup", help="🟢 ferskt brudd (følg nå) · 🟡 brudd uten volum · "
         "⚪ klar/venter på brudd · 🔵 forlenget (for sent å jage)."),
@@ -1146,6 +1194,9 @@ TABELL_HJELP = {
         "RVol", format="%.1f×",
         help="Relativt volum: siste dags volum delt på 50-dagers snitt. 1,0 = normalt. "
         "Grønn ≥ 1,4× = bruddvolum (Minervini vil se høyt volum når kursen bryter ut)."),
+    "Vol snitt50": st.column_config.TextColumn(
+        "Vol snitt50", help="50-dagers gjennomsnittlig dagsvolum (antall aksjer handlet per dag). "
+        "Dette er baseline som både RVol og RVol (live) måles mot."),
     "Volum ±2": st.column_config.TextColumn(
         "Volum ±2", help="Relativt volum rundt bruddet: dag −2, −1, 0 (brudd), +1, +2 mot "
         "50-dagers snitt. Minervini vil se volumet tørke inn før og eksplodere på bruddet. "
@@ -1153,6 +1204,10 @@ TABELL_HJELP = {
         "«–» = dag mangler ennå, «—» = ikke brutt pivot ennå."),
     "RS": st.column_config.NumberColumn(
         "RS", help="Relativ styrke 1–99 (99 = sterkest momentum i universet)."),
+    "GC": st.column_config.TextColumn(
+        "GC", help="Golden cross (SMA50 over SMA200): ✨ = nylig bekreftet (krysset opp ≤ "
+        "25 handelsdager siden), ✅ = i golden-cross-tilstand men krysset for lengre siden, "
+        "«—» = SMA50 ligger under SMA200. Tallet = handelsdager siden siste golden cross."),
     "Fund": st.column_config.TextColumn(
         "Fund",
         help="Fundamental Minervini-score 0–5: 🟢 4–5 = sterk vekst ✅, 🟡 2–3 = godkjent, "
@@ -1187,7 +1242,8 @@ with st.sidebar:
     BORS = konfig.BORSER[bors_navn]
     VALUTA = BORS.valuta
     if st.button(f"🔍 Skann {BORS.navn}", type="primary", width="stretch",
-                 help="Søk gjennom hele børsen etter Minervini-treff."):
+                 help="Søk gjennom hele børsen. Hva det søkes etter styres av «Oppsett» "
+                      "under Filtre (Minervini-template eller golden cross)."):
         st.session_state["skannet_bors"] = bors_navn
     st.divider()
 
@@ -1281,38 +1337,68 @@ visning og rører **aldri** kursdataene screeningen bygger på.
     )
 
 # --- Sidefelt: filtre ---
+GOLDEN_VALG = "✨ Golden Cross"
 with st.sidebar:
     st.header("Filtre")
-    preset_navn = st.selectbox("Oppsett (preset)", list(konfig.PRESETS.keys()))
-    
-    # Datovelger for retrospektiv screening (valgfritt)
-    bruker_dato = st.date_input(
-        "📅 Analyser en historisk dato",
-        value=None,
-        help="La stå tom for nåværende data. Velg en dato for å se hva screeningen fant "
-             "den dagen, med kursutvikling siden da.",
-        max_value=pd.Timestamp.now()
-    )
-    
-    min_krit = st.slider("Minimum antall kriterier", 0, 7, konfig.PRESETS[preset_navn].krev_antall)
-    min_rs = st.slider("Minimum RS-rating", 0, 99, 0)
-    kun_ferske = st.checkbox("Vis kun ferske brudd (🟢)", value=False)
-    krev_uke = st.checkbox("Krev ukentlig bekreftelse (✅)", value=False,
-                           help="Vis kun aksjer der også den ukentlige trenden peker opp.")
+    preset_navn = st.selectbox(
+        "Oppsett", list(konfig.PRESETS.keys()) + [GOLDEN_VALG],
+        help="Velg hva skanningen skal lete etter: Minervini-template (standard) "
+             "eller golden cross (SMA50 over SMA200 + aksjer som venter på kryss).")
+    er_golden = preset_navn == GOLDEN_VALG
+    # Trygt preset-navn for Minervini-analyser (chart/søk) også i golden-modus.
+    aktiv_preset_navn = konfig.STANDARD.navn if er_golden else preset_navn
+
+    # Standardverdier så variablene finnes uansett modus.
+    bruker_dato = None
+    min_krit = konfig.STANDARD.krev_antall
+    min_rs = 0
+    kun_ferske = False
+    krev_uke = False
+    del_opp = False
+
+    if er_golden:
+        st.caption("✨ **Golden cross-modus** – leter etter SMA50 over SMA200 (bekreftet) "
+                   "og aksjer rett under som nærmer seg et kryss. Minervini-filtrene under "
+                   "er skrudd av i denne modusen.")
+    else:
+        # Datovelger for retrospektiv screening (valgfritt)
+        bruker_dato = st.date_input(
+            "📅 Analyser en historisk dato",
+            value=None,
+            help="La stå tom for nåværende data. Velg en dato for å se hva screeningen fant "
+                 "den dagen, med kursutvikling siden da.",
+            max_value=pd.Timestamp.now()
+        )
+
+        min_krit = st.slider("Minimum antall kriterier", 0, 7, konfig.PRESETS[preset_navn].krev_antall)
+        min_rs = st.slider("Minimum RS-rating", 0, 99, 0)
+        kun_ferske = st.checkbox("Vis kun ferske brudd (🟢)", value=False)
+        krev_uke = st.checkbox("Krev ukentlig bekreftelse (✅)", value=False,
+                               help="Vis kun aksjer der også den ukentlige trenden peker opp.")
+        del_opp = st.checkbox("📑 Del opp i tabeller per setup", value=False,
+                              help="Vis fire separate tabeller – én for hver setup-status "
+                                   "(🟢 bekreftet brudd · 🟡 brudd uten volum · ⚪ klar/venter · "
+                                   "🔵 forlenget) – i stedet for én samlet liste.")
     st.divider()
     vis_live = st.checkbox("🔴 Live-kurser (≈15 min forsinket)", value=False,
-                           help="Viser dagens intradag-kurs OG projisert relativt volum ved siden "
-                                "av lista, så du ser hvem som nærmer seg pivot – og om det er volum "
-                                "på gang – akkurat nå. Rører ALDRI dataene vi screener på.")
+                           help="Viser dagens intradag-kurs OG rått relativt volum (volum så langt "
+                                "mot 50-dagers snitt) ved siden av lista, så du ser hvem som nærmer "
+                                "seg pivot – og om det er volum på gang – akkurat nå. Rører ALDRI "
+                                "dataene vi screener på.")
     _sh = _status.get("sist_hentet")
     if _sh is not None:
         st.caption(f"🕔 Sist hentet: {_sh:%d.%m.%Y kl. %H:%M} (norsk tid)")
 
-# Bruk retrospektiv screening hvis bruker har valgt en dato
-if bruker_dato:
-    resultat = kjor_screening_retrospektiv(bors_navn, preset_navn, pd.Timestamp(bruker_dato), versjon)
+# Hva skal skanningen lete etter? Styres av «Oppsett»-dropdownen.
+if er_golden:
+    gc_resultat = kjor_golden_cross(bors_navn, versjon) if skannet_na else None
+    resultat = None
 else:
-    resultat = kjor_screening(bors_navn, preset_navn, versjon) if skannet_na else None
+    gc_resultat = None
+    if bruker_dato:
+        resultat = kjor_screening_retrospektiv(bors_navn, preset_navn, pd.Timestamp(bruker_dato), versjon)
+    else:
+        resultat = kjor_screening(bors_navn, preset_navn, versjon) if skannet_na else None
 
 fane1, fane2, fane3 = st.tabs(["📋 Hovedliste", "📊 Chart", "🔎 Søk"])
 
@@ -1321,9 +1407,107 @@ fane1, fane2, fane3 = st.tabs(["📋 Hovedliste", "📊 Chart", "🔎 Søk"])
 MORKT = _er_morkt()
 TEMA = "d" if MORKT else "l"
 
+
+# ---------------------------------------------------------------------------
+# Golden cross-visning (brukes i Hovedliste-fanen når «✨ Golden Cross» er valgt)
+# ---------------------------------------------------------------------------
+def _formater_golden_cross_tabell(df: pd.DataFrame) -> pd.DataFrame:
+    """Bygger visningstabellen for golden cross-screeneren."""
+    vis = pd.DataFrame()
+    vis["Ticker"] = df["ticker"]
+    vis["Status"] = df["gc_status"].map({
+        "✨": "✨ Fersk kryss", "✅": "✅ Etablert", "⏳": "⏳ Venter på kryss"})
+    vis["Pris"] = df["pris"]
+    vis["Gap SMA50-200"] = df["gap_pct"].map(
+        lambda g: f"{g:+.1f}%" if pd.notna(g) else "—")
+    # For ⏳ "venter" er krysset ikke skjedd ennå – da gir "dager siden" ingen mening.
+    vis["Dager siden"] = [
+        (f"{int(d)}d" if (pd.notna(d) and s != "⏳") else "—")
+        for d, s in zip(df["golden_cross_dager"], df["gc_status"])
+    ]
+    vis["SMA50"] = df["sma50"]
+    vis["SMA200"] = df["sma200"]
+    vis["RS"] = df["rs"]
+    return vis
+
+
+GC_TABELL_HJELP = {
+    "Pris": st.column_config.NumberColumn("Pris", format="%.2f", help="Siste sluttkurs."),
+    "SMA50": st.column_config.NumberColumn("SMA50", format="%.2f", help="50-dagers glidende snitt."),
+    "SMA200": st.column_config.NumberColumn("SMA200", format="%.2f", help="200-dagers glidende snitt."),
+    "Gap SMA50-200": st.column_config.TextColumn(
+        "Gap SMA50-200", help="Hvor langt SMA50 er over (+) eller under (−) SMA200, i prosent. "
+        "Positivt = golden cross aktivt. Negativt (men nær 0) = venter på kryss."),
+    "Dager siden": st.column_config.TextColumn(
+        "Dager siden", help="Handelsdager siden siste golden cross (SMA50 krysset opp over SMA200)."),
+    "Status": st.column_config.TextColumn(
+        "Status", help="✨ Fersk = krysset ≤ 25 dager siden · ✅ Etablert = over, men eldre kryss · "
+        "⏳ Venter = SMA50 rett under SMA200 og nærmer seg et kryss."),
+    "RS": st.column_config.NumberColumn("RS", help="Relativ styrke 1–99 (99 = sterkest i universet)."),
+}
+
+
+def vis_golden_cross(gc_resultat):
+    """Rendrer golden cross-tabellen + chart i Hovedliste-fanen (golden-modus)."""
+    st.markdown("### ✨ Golden Cross-screener")
+    st.caption("Leter etter aksjer der SMA50 har krysset opp over SMA200 (golden cross), "
+               "pluss de som ligger rett under og nærmer seg et kryss. **Uavhengig av "
+               "Minervini-templaten.**")
+    if gc_resultat is None:
+        st.info(f"Trykk **🔍 Skann {BORS.navn}** i menyen til venstre for å søke gjennom hele "
+                "børsen etter golden cross. (Ingenting skannes automatisk – du velger når.)")
+        return
+    if gc_resultat.empty:
+        st.info("Fant ingen golden cross (eller aksjer nær et kryss) akkurat nå.")
+        return
+    _antall = {
+        "fersk": int((gc_resultat["gc_status"] == "✨").sum()),
+        "venter": int((gc_resultat["gc_status"] == "⏳").sum()),
+        "etablert": int((gc_resultat["gc_status"] == "✅").sum()),
+    }
+    st.markdown(
+        f"**{len(gc_resultat)} treff** – ✨ {_antall['fersk']} ferske kryss · "
+        f"⏳ {_antall['venter']} venter på kryss · ✅ {_antall['etablert']} etablerte. "
+        "Sortert med ferske kryss øverst, så de som er nærmest et kryss."
+    )
+    _gc_tab = st.dataframe(
+        _formater_golden_cross_tabell(gc_resultat),
+        width="stretch", hide_index=True, height=560, column_config=GC_TABELL_HJELP,
+        on_select="rerun", selection_mode="multi-row", key="golden_cross_tabell",
+    )
+    st.caption("💡 **Huk av én eller flere rader** for å tegne chart med golden cross-markører under.")
+
+    _gc_rader = list(getattr(_gc_tab.selection, "rows", []) or [])
+    _gc_valgte = [gc_resultat.iloc[i]["ticker"] for i in _gc_rader if i < len(gc_resultat)]
+    if not _gc_valgte:
+        st.caption("Ingen rader valgt ennå – huk av i tabellen over for å tegne chart her.")
+        return
+    st.divider()
+    _maks = 15
+    if len(_gc_valgte) > _maks:
+        st.info(f"Viser de {_maks} første av {len(_gc_valgte)} valgte (for fartens skyld).")
+        _gc_valgte = _gc_valgte[:_maks]
+    st.subheader(f"📊 Chart for {len(_gc_valgte)} valgte")
+    _gc_priser = last_priser(bors_navn, versjon)
+    for _tk in _gc_valgte:
+        _s = datamod.serie_for(_gc_priser, _tk)
+        _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[aktiv_preset_navn])
+        st.markdown(f"**{_tk}**")
+        if HAR_LWC:
+            # Golden cross-markører PÅ som standard her – det er jo poenget.
+            _spec = lag_chart_lwc(_s, _r, PERIODER_VALG["2 år"], vis_golden=True,
+                                  hoyde=460, morkt=MORKT)
+            if _spec:
+                renderLightweightCharts(_spec, key=f"gc_{_tk}_{TEMA}")
+        else:
+            st.caption("Chart-komponenten er ikke lastet i dette miljøet ennå.")
+
+
 # --- Fane 1: Hovedliste ---
 with fane1:
-    if resultat is None:
+    if er_golden:
+        vis_golden_cross(gc_resultat)
+    elif resultat is None:
         st.info(f"Trykk **🔍 Skann {BORS.navn}** i menyen til venstre for å søke gjennom hele "
                 "børsen etter Minervini-treff. (Ingenting skannes automatisk – du velger når.)")
     elif resultat.empty:
@@ -1366,33 +1550,39 @@ with fane1:
         if vis_live and not filt.empty:
             live_priser = hent_live_priser(tuple(filt["ticker"].head(80).tolist()))
 
-        st.markdown(
-            f"**{len(filt)} aksjer** – sortert med de mest handlbare øverst: ferske brudd (🟢) "
-            f"først, så de som er nærmest et brudd. Ferske brudd vises alltid, også under {min_krit}/7."
-        )
-        _tabell = st.dataframe(
-            stil_hovedtabell(formater_tabell(filt, live_priser or None, naa_oslo, retrospektiv_dato=pd.Timestamp(bruker_dato) if bruker_dato else None)),
-            width="stretch", hide_index=True, height=560, column_config=TABELL_HJELP,
-            on_select="rerun", selection_mode="multi-row", key="hovedliste_tabell",
-        )
-        st.caption("Øverst = skjer nå / nærmest brudd. **Til pivot**: negativt = mangler så mange % "
-                   "på brudd, positivt = over pivot. **Grønt** = 7/7 eller bruddvolum (≥1,4×). "
-                   "💡 **Huk av én eller flere rader** (venstre kant) for å se chartene nederst.")
+        # Lastes én gang her, så hver tabell-gruppe kan tegne chart uten å laste på nytt.
+        _priser_alle_hl = last_priser(bors_navn, versjon)
 
-        # Chart for radene du huker av – tegnes stablet nedover, her på hovedsiden.
-        _valgte_rader = list(getattr(_tabell.selection, "rows", []) or [])
-        _valgte = [filt.iloc[i]["ticker"] for i in _valgte_rader if i < len(filt)]
-        if _valgte:
+        def _vis_gruppe_tabell(df_gruppe, nokkel):
+            """Rendrer én tabell + chart for radene brukeren huker av.
+
+            Brukes både for den samlede lista (nokkel='alle') og for hver av de fire
+            setup-gruppene når «Del opp i tabeller per setup» er huket av. `nokkel` gjør
+            dataframe- og chart-nøklene unike så Streamlit ikke blander gruppene.
+            """
+            if df_gruppe.empty:
+                st.caption("Ingen aksjer i denne gruppen akkurat nå.")
+                return
+            _tab = st.dataframe(
+                stil_hovedtabell(formater_tabell(df_gruppe, live_priser or None, naa_oslo,
+                                 retrospektiv_dato=pd.Timestamp(bruker_dato) if bruker_dato else None)),
+                width="stretch", hide_index=True, height=560, column_config=TABELL_HJELP,
+                on_select="rerun", selection_mode="multi-row", key=f"hovedliste_tabell_{nokkel}",
+            )
+            _rader = list(getattr(_tab.selection, "rows", []) or [])
+            _valgte = [df_gruppe.iloc[i]["ticker"] for i in _rader if i < len(df_gruppe)]
+            if not _valgte:
+                st.caption("Ingen rader valgt ennå – huk av i tabellen over for å tegne chart her.")
+                return
             st.divider()
             _maks = 15
             if len(_valgte) > _maks:
                 st.info(f"Viser de {_maks} første av {len(_valgte)} valgte (for fartens skyld).")
                 _valgte = _valgte[:_maks]
             st.subheader(f"📊 Chart for {len(_valgte)} valgte")
-            _priser_alle = last_priser(bors_navn, versjon)
             for _tk in _valgte:
-                _s = datamod.serie_for(_priser_alle, _tk)
-                _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[preset_navn])
+                _s = datamod.serie_for(_priser_alle_hl, _tk)
+                _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[aktiv_preset_navn])
                 _lp, _ = _live_verdi(live_priser.get(_tk))
                 _live_txt = f" · 🔴 live ≈ {_lp:.2f}" if _lp is not None else ""
                 if _r is None:
@@ -1403,9 +1593,33 @@ with fane1:
                 if HAR_LWC:
                     _spec = lag_chart_lwc(_s, _r, PERIODER_VALG["2 år"], hoyde=460, morkt=MORKT)
                     if _spec:
-                        renderLightweightCharts(_spec, key=f"hl_{_tk}_{TEMA}")
+                        renderLightweightCharts(_spec, key=f"hl_{nokkel}_{_tk}_{TEMA}")
+
+        if del_opp:
+            # Fire separate tabeller – én per setup-status, i handlbar rekkefølge.
+            st.markdown(f"**{len(filt)} aksjer** – delt opp i fire tabeller per setup-status.")
+            _NOKKEL = {"🟢": "gronn", "🟡": "gul", "⚪": "klar", "🔵": "blaa"}
+            _grupper = [
+                ("🟢", "Bekreftet brudd", "krysset pivot på høyt volum – følg nå"),
+                ("🟡", "Brudd uten volum", "krysset pivot, men mangler volumbekreftelse"),
+                ("⚪", "Klar / venter", "bygger base under pivot – venter på brudd"),
+                ("🔵", "Forlenget", "for langt over pivot / for lenge siden – ikke jag"),
+            ]
+            for _emoji, _tittel, _forkl in _grupper:
+                _gr = filt[filt["status"] == _emoji]
+                st.markdown(f"### {_emoji} {_tittel} ({len(_gr)})")
+                st.caption(_forkl)
+                _vis_gruppe_tabell(_gr, nokkel=_NOKKEL[_emoji])
+                st.divider()
         else:
-            st.caption("Ingen rader valgt ennå – huk av i tabellen over for å tegne chart her.")
+            st.markdown(
+                f"**{len(filt)} aksjer** – sortert med de mest handlbare øverst: ferske brudd (🟢) "
+                f"først, så de som er nærmest et brudd. Ferske brudd vises alltid, også under {min_krit}/7."
+            )
+            _vis_gruppe_tabell(filt, nokkel="alle")
+            st.caption("Øverst = skjer nå / nærmest brudd. **Til pivot**: negativt = mangler så mange % "
+                       "på brudd, positivt = over pivot. **Grønt** = 7/7 eller bruddvolum (≥1,4×). "
+                       "💡 **Huk av én eller flere rader** (venstre kant) for å se chartene nederst.")
 
 # --- Fane 2: Chart ---
 with fane2:
@@ -1426,8 +1640,9 @@ with fane2:
             vis_vcp = st.checkbox("VCP-kontraksjoner (gul zigzag)", value=True, key="chart_vcp")
             vis_7av7 = st.checkbox("7/7-markører (ble/mistet)", value=True, key="chart_7av7")
             vis_hist = st.checkbox("Historiske volumbrudd", value=False, key="chart_hist")
+            vis_golden = st.checkbox("Golden cross (SMA50×SMA200)", value=False, key="chart_golden")
         serie = datamod.serie_for(last_priser(bors_navn, versjon), valg)
-        res = screener.analyser_ticker(serie, valg, konfig.PRESETS[preset_navn])
+        res = screener.analyser_ticker(serie, valg, konfig.PRESETS[aktiv_preset_navn])
         if res is None:
             st.info("For lite historikk til å tegne chart for denne aksjen.")
         else:
@@ -1435,11 +1650,12 @@ with fane2:
             pos, pos_suffix = _posisjon_fra_state(f"chart_{valg}")
             spec = lag_chart_lwc(serie, res, PERIODER_VALG[periode],
                                  vis_ma=vis_ma, vis_52u=vis_52u, vis_vcp=vis_vcp,
-                                 vis_7av7=vis_7av7, vis_hist=vis_hist, pos=pos, morkt=MORKT)
+                                 vis_7av7=vis_7av7, vis_hist=vis_hist, vis_golden=vis_golden,
+                                 pos=pos, morkt=MORKT)
             if spec is None:
                 st.info("Klarte ikke bygge chartet for denne aksjen.")
             else:
-                noekkel = f"chart_{valg}_{periode}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{pos_suffix}_{TEMA}"
+                noekkel = f"chart_{valg}_{periode}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{vis_golden}{pos_suffix}_{TEMA}"
                 renderLightweightCharts(spec, key=noekkel)
                 st.caption("💡 Dra sidelengs, rull musehjulet for å zoome, dra loddrett på "
                            "prisaksen for å strekke høyden. 🟡 **Kraftig gull = aktiv pivot** · "
@@ -1464,7 +1680,7 @@ with fane3:
         if serie is None or serie.empty:
             st.error(f"Fant ingen data for «{sok}». Sjekk at tickeren er riktig skrevet.")
         else:
-            res = screener.analyser_ticker(serie, sok, konfig.PRESETS[preset_navn])
+            res = screener.analyser_ticker(serie, sok, konfig.PRESETS[aktiv_preset_navn])
             if res is None:
                 st.info("For lite historikk (trenger ~200 handelsdager) til full analyse.")
             else:
@@ -1478,6 +1694,7 @@ with fane3:
                     vis_vcp3 = st.checkbox("VCP-kontraksjoner (gul zigzag)", value=True, key="sok_vcp")
                     vis_7av7_3 = st.checkbox("7/7-markører (ble/mistet)", value=True, key="sok_7av7")
                     vis_hist3 = st.checkbox("Historiske volumbrudd", value=False, key="sok_hist")
+                    vis_golden3 = st.checkbox("Golden cross (SMA50×SMA200)", value=False, key="sok_golden")
                 if not HAR_LWC:
                     st.warning("Chart-komponenten er ikke lastet i dette miljøet ennå.")
                 else:
@@ -1485,11 +1702,12 @@ with fane3:
                     pos3, pos_suffix3 = _posisjon_fra_state(f"sok_{sok}")
                     spec3 = lag_chart_lwc(serie, res, PERIODER_VALG[periode3],
                                           vis_ma=vis_ma3, vis_52u=vis_52u3, vis_vcp=vis_vcp3,
-                                          vis_7av7=vis_7av7_3, vis_hist=vis_hist3, pos=pos3, morkt=MORKT)
+                                          vis_7av7=vis_7av7_3, vis_hist=vis_hist3, vis_golden=vis_golden3,
+                                          pos=pos3, morkt=MORKT)
                     if spec3 is not None:
                         renderLightweightCharts(
                             spec3,
-                            key=f"sok_{sok}_{periode3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{pos_suffix3}_{TEMA}")
+                            key=f"sok_{sok}_{periode3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{pos_suffix3}_{TEMA}")
                 vis_vcp_boks(res)
                 fundamenta_seksjon(sok, f"sok_{sok}")
                 st.divider()

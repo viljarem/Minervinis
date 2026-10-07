@@ -180,7 +180,6 @@ likviditetsgrense, RS-krav og VCP-innstillinger. Endre der, så gjelder det i he
 appen (både robot og nettside). Ferdige oppsett:
 
 - **Standard (Minervini)**: ≥ 30 % over 52u lav, ≤ 25 % under 52u høy, krever 7/7.
-- **Tidlig fase**: ≥ 25 % over lav, ≤ 30 % under høy, krever 6/7.
 
 ---
 
