@@ -1596,16 +1596,45 @@ def vis_golden_cross(gc_resultat):
         _gc_valgte = _gc_valgte[:_maks]
     st.subheader(f"📊 Chart for {len(_gc_valgte)} valgte")
     _gc_priser = last_priser(bors_navn, versjon)
+    _gcc1, _gcc2 = st.columns([3, 1])
+    with _gcc1:
+        _gc_periode = st.radio("Periode (chart)", list(PERIODER_VALG.keys()), index=3,
+                               horizontal=True, key="gc_periode")
+    with _gcc2:
+        _gc_tidsramme = st.radio("Tidsramme", ["Dag", "Uke"], horizontal=True, key="gc_tf",
+                                 help="Uke = ukentlige barer (SMA50 = 50 uker, volum SMA10).")
+    _gc_ukentlig = _gc_tidsramme == "Uke"
+    with st.popover("⚙️ Tilpass chartene"):
+        st.caption("Gjelder alle golden cross-chartene. Krysset vises som standard – det er jo poenget.")
+        _gc_ma = st.checkbox("Glidende snitt (MA50/150/200)", value=True, key="gc_ma")
+        _gc_52u = st.checkbox("52-ukers høy/lav (grå stiplet)", value=True, key="gc_52u")
+        _gc_vcp = st.checkbox("VCP-kontraksjoner (gul zigzag)", value=False, key="gc_vcp")
+        _gc_7av7 = st.checkbox("7/7-markører (ble/mistet)", value=False, key="gc_7av7")
+        _gc_hist = st.checkbox("Historiske volumbrudd", value=False, key="gc_hist")
+        _gc_golden_v = st.checkbox("Golden cross (SMA50×SMA200)", value=True, key="gc_golden")
+        _gc_indeks = st.checkbox(f"📉 Indeks-overlay ({BORS.benchmark})", value=False, key="gc_indeks",
+                                 help="Legger indeksen oppå chartet, skalert til å starte likt med aksjen.")
+        _gc_rs_rating = st.checkbox("📈 RS-rating over tid (1–99)", value=False, key="gc_rs_rating",
+                                    help="Egen rute under chartet. Relativ styrke mot universet over tid.")
+    _gc_rs_mat = rs_rating_historikk(bors_navn, versjon) if _gc_rs_rating else None
+    _gc_indeks_serie = (datamod.serie_for(_gc_priser, BORS.benchmark) if _gc_indeks else None)
     for _tk in _gc_valgte:
         _s = datamod.serie_for(_gc_priser, _tk)
         _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[aktiv_preset_navn])
         st.markdown(f"**{_tk}**")
         if HAR_LWC:
-            # Golden cross-markører PÅ som standard her – det er jo poenget.
-            _spec = lag_chart_lwc(_s, _r, PERIODER_VALG["2 år"], vis_golden=True,
+            _rs_serie_gc = None
+            if _gc_rs_mat is not None and _tk in _gc_rs_mat.columns:
+                _rs_serie_gc = _gc_rs_mat[_tk].dropna()
+            _spec = lag_chart_lwc(_s, _r, PERIODER_VALG[_gc_periode],
+                                  vis_ma=_gc_ma, vis_52u=_gc_52u, vis_vcp=_gc_vcp,
+                                  vis_7av7=_gc_7av7, vis_hist=_gc_hist, vis_golden=_gc_golden_v,
+                                  vis_rs_rating=_gc_rs_rating, rs_rating=_rs_serie_gc,
+                                  vis_indeks=_gc_indeks, indeks=_gc_indeks_serie,
+                                  indeks_navn=BORS.benchmark, ukentlig=_gc_ukentlig,
                                   hoyde=460, morkt=MORKT)
             if _spec:
-                renderLightweightCharts(_spec, key=f"gc_{_tk}_{TEMA}")
+                renderLightweightCharts(_spec, key=f"gc_{_tk}_{_gc_periode}_{_gc_tidsramme}_{TEMA}")
         else:
             st.caption("Chart-komponenten er ikke lastet i dette miljøet ennå.")
 
@@ -1660,6 +1689,38 @@ with fane1:
         # Lastes én gang her, så hver tabell-gruppe kan tegne chart uten å laste på nytt.
         _priser_alle_hl = last_priser(bors_navn, versjon)
 
+        # Felles chart-innstillinger for alle tabell-chartene (samme som Chart-fanen).
+        _ch1, _ch2 = st.columns([3, 1])
+        with _ch1:
+            _hl_periode = st.radio("Periode (chart)", list(PERIODER_VALG.keys()), index=3,
+                                   horizontal=True, key="hl_periode")
+        with _ch2:
+            _hl_tidsramme = st.radio("Tidsramme", ["Dag", "Uke"], horizontal=True, key="hl_tf",
+                                     help="Uke = ukentlige barer (SMA50 = 50 uker, volum SMA10).")
+        _hl_ukentlig = _hl_tidsramme == "Uke"
+        with st.popover("⚙️ Tilpass tabell-chartene"):
+            st.caption("Gjelder alle chartene som tegnes når du huker av rader. Færre lag = renere bilde.")
+            _hl_ma = st.checkbox("Glidende snitt (MA50/150/200)", value=True, key="hl_ma")
+            _hl_52u = st.checkbox("52-ukers høy/lav (grå stiplet)", value=True, key="hl_52u")
+            _hl_vcp = st.checkbox("VCP-kontraksjoner (gul zigzag)", value=True, key="hl_vcp")
+            _hl_7av7 = st.checkbox("7/7-markører (ble/mistet)", value=True, key="hl_7av7")
+            _hl_hist = st.checkbox("Historiske volumbrudd", value=False, key="hl_hist")
+            _hl_golden = st.checkbox("Golden cross (SMA50×SMA200)", value=False, key="hl_golden")
+            _hl_indeks = st.checkbox(f"📉 Indeks-overlay ({BORS.benchmark})", value=False,
+                                     key="hl_indeks",
+                                     help="Legger indeksen oppå chartet, skalert til å starte likt "
+                                          "med aksjen. Faller indekslinjen mens candlene står støtt, "
+                                          "holdt aksjen seg sterkere enn markedet.")
+            _hl_rs_rating = st.checkbox("📈 RS-rating over tid (1–99)", value=False,
+                                        key="hl_rs_rating",
+                                        help="Egen rute under hvert chart. Viser hvordan skanne-tallet "
+                                             "(relativ styrke mot universet) har beveget seg. "
+                                             "Grønt over 70 = blant de sterkeste, rødt under.")
+        # Tunge data hentes kun når lagene faktisk er på.
+        _hl_rs_mat = rs_rating_historikk(bors_navn, versjon) if _hl_rs_rating else None
+        _hl_indeks_serie = (datamod.serie_for(_priser_alle_hl, BORS.benchmark)
+                            if _hl_indeks else None)
+
         def _vis_gruppe_tabell(df_gruppe, nokkel):
             """Rendrer én tabell + chart for radene brukeren huker av.
 
@@ -1698,9 +1759,18 @@ with fane1:
                     continue
                 st.markdown(f"**{_tk}** — {_r['status']} {_r['statustekst']}{_live_txt}")
                 if HAR_LWC:
-                    _spec = lag_chart_lwc(_s, _r, PERIODER_VALG["2 år"], hoyde=460, morkt=MORKT)
+                    _rs_serie_hl = None
+                    if _hl_rs_mat is not None and _tk in _hl_rs_mat.columns:
+                        _rs_serie_hl = _hl_rs_mat[_tk].dropna()
+                    _spec = lag_chart_lwc(_s, _r, PERIODER_VALG[_hl_periode],
+                                          vis_ma=_hl_ma, vis_52u=_hl_52u, vis_vcp=_hl_vcp,
+                                          vis_7av7=_hl_7av7, vis_hist=_hl_hist, vis_golden=_hl_golden,
+                                          vis_rs_rating=_hl_rs_rating, rs_rating=_rs_serie_hl,
+                                          vis_indeks=_hl_indeks, indeks=_hl_indeks_serie,
+                                          indeks_navn=BORS.benchmark, ukentlig=_hl_ukentlig,
+                                          hoyde=460, morkt=MORKT)
                     if _spec:
-                        renderLightweightCharts(_spec, key=f"hl_{nokkel}_{_tk}_{TEMA}")
+                        renderLightweightCharts(_spec, key=f"hl_{nokkel}_{_tk}_{_hl_periode}_{_hl_tidsramme}_{TEMA}")
 
         if del_opp:
             # Fire separate tabeller – én per setup-status, i handlbar rekkefølge.
