@@ -66,6 +66,20 @@ def kjor_golden_cross(bors_navn: str, versjon: float) -> pd.DataFrame:
     return screener.screen_golden_cross(priser)
 
 
+@st.cache_data(show_spinner="Leter etter nye noteringer ...")
+def kjor_nye_ipoer(bors_navn: str, versjon: float) -> pd.DataFrame:
+    """Ferske noteringer (for kort historikk til full analyse).
+
+    getattr-fallback som for RS-historikken: hvis Streamlit Cloud ennå kjører en
+    gammel, bufret screener-modul, returner tom ramme i stedet for å krasje.
+    """
+    _fn = getattr(screener, "screen_nye_ipoer", None)
+    if _fn is None:
+        return pd.DataFrame()
+    priser = datamod.les_priser(konfig.BORSER[bors_navn].priser_fil)
+    return _fn(priser)
+
+
 @st.cache_data(show_spinner=False)
 def rs_rating_historikk(bors_navn: str, versjon: float) -> pd.DataFrame:
     """RS-rating (1–99) per dag for hele universet – bred tabell (Date × Ticker).
@@ -1460,15 +1474,18 @@ visning og rører **aldri** kursdataene screeningen bygger på.
 
 # --- Sidefelt: filtre ---
 GOLDEN_VALG = "✨ Golden Cross"
+IPO_VALG = "🆕 Nye IPO-er"
 with st.sidebar:
     st.header("Filtre")
     preset_navn = st.selectbox(
-        "Oppsett", list(konfig.PRESETS.keys()) + [GOLDEN_VALG],
-        help="Velg hva skanningen skal lete etter: Minervini-template (standard) "
-             "eller golden cross (SMA50 over SMA200 + aksjer som venter på kryss).")
+        "Oppsett", list(konfig.PRESETS.keys()) + [GOLDEN_VALG, IPO_VALG],
+        help="Velg hva skanningen skal lete etter: Minervini-template (standard), "
+             "golden cross (SMA50 over SMA200 + aksjer som venter på kryss), eller "
+             "nye IPO-er (ferske noteringer med for kort historikk til full analyse).")
     er_golden = preset_navn == GOLDEN_VALG
-    # Trygt preset-navn for Minervini-analyser (chart/søk) også i golden-modus.
-    aktiv_preset_navn = konfig.STANDARD.navn if er_golden else preset_navn
+    er_ipo = preset_navn == IPO_VALG
+    # Trygt preset-navn for Minervini-analyser (chart/søk) også i golden-/ipo-modus.
+    aktiv_preset_navn = konfig.STANDARD.navn if (er_golden or er_ipo) else preset_navn
 
     # Standardverdier så variablene finnes uansett modus.
     bruker_dato = None
@@ -1482,6 +1499,11 @@ with st.sidebar:
         st.caption("✨ **Golden cross-modus** – leter etter SMA50 over SMA200 (bekreftet) "
                    "og aksjer rett under som nærmer seg et kryss. Minervini-filtrene under "
                    "er skrudd av i denne modusen.")
+    elif er_ipo:
+        st.caption("🆕 **Nye IPO-er** – ferske noteringer som ennå har for kort historikk "
+                   f"(< {konfig.MIN_HANDELSDAGER} handelsdager) til full Minervini-analyse. "
+                   "Her ser du hva som er på vei inn i universet og hvor mange dager til de "
+                   "kvalifiserer. Minervini-filtrene under er skrudd av.")
     else:
         # Datovelger for retrospektiv screening (valgfritt)
         bruker_dato = st.date_input(
@@ -1515,8 +1537,14 @@ with st.sidebar:
 if er_golden:
     gc_resultat = kjor_golden_cross(bors_navn, versjon) if skannet_na else None
     resultat = None
+    ipo_resultat = None
+elif er_ipo:
+    ipo_resultat = kjor_nye_ipoer(bors_navn, versjon) if skannet_na else None
+    gc_resultat = None
+    resultat = None
 else:
     gc_resultat = None
+    ipo_resultat = None
     if bruker_dato:
         resultat = kjor_screening_retrospektiv(bors_navn, preset_navn, pd.Timestamp(bruker_dato), versjon)
     else:
@@ -1662,10 +1690,84 @@ def vis_golden_cross(gc_resultat):
             st.caption("Chart-komponenten er ikke lastet i dette miljøet ennå.")
 
 
+def vis_nye_ipoer(ipo_resultat):
+    """Viser ferske noteringer (for kort historikk til full Minervini-analyse).
+
+    Tabell øverst med nøkkeltall (alder, dager igjen til kvalifisering, utvikling),
+    og chart for radene brukeren huker av. Chartene bruker lag_chart_lwc uten de
+    Minervini-lagene som krever lang historikk – candles, volum og MA så langt det
+    rekker holder for en fersk notering.
+    """
+    st.subheader(f"🆕 Nye noteringer på {BORS.navn}")
+    if ipo_resultat is None:
+        st.info(f"Trykk **🔍 Skann {BORS.navn}** i menyen til venstre for å lete etter ferske "
+                "noteringer. (Ingenting skannes automatisk – du velger når.)")
+        return
+    if ipo_resultat.empty:
+        st.info(f"Fant ingen ferske noteringer akkurat nå – ingen aksjer med mellom "
+                f"{getattr(konfig, 'IPO_MIN_DAGER', 20)} og {konfig.MIN_HANDELSDAGER} "
+                "handelsdagers historikk i universet.")
+        return
+    st.caption(
+        f"**{len(ipo_resultat)} ferske noteringer** med mindre enn {konfig.MIN_HANDELSDAGER} "
+        "handelsdager – for kort til full Minervini-analyse. «Dager igjen» = handelsdager til "
+        "aksjen kvalifiserer for den vanlige screeningen. Nyest øverst."
+    )
+
+    _vis = pd.DataFrame()
+    _vis["Ticker"] = ipo_resultat["ticker"]
+    _vis["Pris"] = ipo_resultat["pris"]
+    _vis["Notert"] = ipo_resultat["forste_dato"]
+    _vis["Handelsdager"] = ipo_resultat["antall_dager"]
+    _vis["Dager igjen"] = ipo_resultat["dager_igjen"]
+    _vis["Siden start"] = ipo_resultat["utvikling_pct"].map(
+        lambda p: f"{p:+.1f}%" if pd.notna(p) else "—")
+    _vis["Fra topp"] = ipo_resultat["fra_topp_pct"].map(
+        lambda p: f"{p:+.1f}%" if pd.notna(p) else "—")
+
+    _tab = st.dataframe(
+        _vis, width="stretch", hide_index=True, height=440,
+        on_select="rerun", selection_mode="multi-row", key="ipo_tabell",
+    )
+    st.caption("💡 **Huk av én eller flere rader** for å tegne chart av det som finnes av historikk.")
+
+    _rader = list(getattr(_tab.selection, "rows", []) or [])
+    _valgte = [ipo_resultat.iloc[i]["ticker"] for i in _rader if i < len(ipo_resultat)]
+    if not _valgte:
+        st.caption("Ingen rader valgt ennå – huk av i tabellen over for å tegne chart her.")
+        return
+    st.divider()
+    _maks = 15
+    if len(_valgte) > _maks:
+        st.info(f"Viser de {_maks} første av {len(_valgte)} valgte.")
+        _valgte = _valgte[:_maks]
+    st.subheader(f"📊 Chart for {len(_valgte)} valgte")
+    _ipo_priser = last_priser(bors_navn, versjon)
+    for _tk in _valgte:
+        _s = datamod.serie_for(_ipo_priser, _tk)
+        st.markdown(f"**{_tk}**")
+        if HAR_LWC:
+            # Fersk notering: ingen pivot/VCP/7-7 (krever lang historikk). Vis bare
+            # candles + volum + MA så langt det rekker, med hele historikken.
+            _dager = len(_s.dropna(subset=["Close"])) if _s is not None else 0
+            _spec = lag_chart_lwc(_s, None, max(_dager, 30),
+                                  vis_ma=True, vis_52u=False, vis_vcp=False,
+                                  vis_7av7=False, vis_hist=False, vis_golden=False,
+                                  hoyde=420, morkt=MORKT, tittel=_tk)
+            if _spec:
+                renderLightweightCharts(_spec, key=f"ipo_{_tk}_{TEMA}")
+            else:
+                st.caption("For lite historikk til å tegne chart ennå.")
+        else:
+            st.caption("Chart-komponenten er ikke lastet i dette miljøet ennå.")
+
+
 # --- Fane 1: Hovedliste ---
 with fane1:
     if er_golden:
         vis_golden_cross(gc_resultat)
+    elif er_ipo:
+        vis_nye_ipoer(ipo_resultat)
     elif resultat is None:
         st.info(f"Trykk **🔍 Skann {BORS.navn}** i menyen til venstre for å søke gjennom hele "
                 "børsen etter Minervini-treff. (Ingenting skannes automatisk – du velger når.)")

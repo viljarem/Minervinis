@@ -56,7 +56,7 @@ SMA_PERIODER = (50, 150, 200)
 VINDU_52U = 252               # ~52 uker i handelsdager
 SMA200_STIGNING_DAGER = 22    # SMA200 i dag sammenlignes med for 22 dager siden
 MIN_HANDELSDAGER = 200        # aksjen må ha minst så mange dager for å vurderes
-
+IPO_MIN_DAGER = 20            # nye noteringer: minst så mange dager for å vises i IPO-lista
 # ---------------------------------------------------------------------------
 # Relativ styrke (RS) – IBD-metoden
 # ---------------------------------------------------------------------------

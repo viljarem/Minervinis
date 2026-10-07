@@ -361,6 +361,71 @@ def screen_golden_cross(priser: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Nye noteringer / IPO-er (for kort historikk til full Minervini-analyse)
+# ---------------------------------------------------------------------------
+def screen_nye_ipoer(priser: pd.DataFrame) -> pd.DataFrame:
+    """Finner FERSKE noteringer – aksjer med for kort historikk til full analyse.
+
+    Minervini/O'Neil-templaten krever ~200 handelsdager (SMA150/SMA200, 52-ukers
+    høy/lav, 12-mnd RS). Nylig noterte aksjer faller derfor ut av den vanlige
+    screeningen. Denne lista fanger nettopp dem, så du ser hva som er på vei inn
+    i universet og hvor lenge til de kvalifiserer.
+
+    En aksje tas med hvis den har MINST konfig.IPO_MIN_DAGER handelsdager (nok til
+    et meningsfylt chart) og FÆRRE enn konfig.MIN_HANDELSDAGER (ellers er den jo
+    med i den vanlige screeningen). Benchmark-indeksene holdes utenfor.
+
+    Kolonner: ticker, pris, forste_dato, antall_dager, dager_igjen (til
+    kvalifisering), utvikling_pct (siden første dag), fra_topp_pct (fra høyeste
+    close siden notering), dagsomsetning. Sortert med NYEST (færrest dager) øverst.
+    """
+    if priser is None or priser.empty:
+        return pd.DataFrame()
+
+    benchmarks = {b.benchmark for b in konfig.BORSER.values() if b.benchmark}
+    benchmarks.add(konfig.BENCHMARK)
+    tickere = [t for t in sorted(priser["Ticker"].unique()) if t not in benchmarks]
+
+    min_dager = getattr(konfig, "IPO_MIN_DAGER", 20)
+    rader = []
+    for t in tickere:
+        s = datamod.serie_for(priser, t)
+        if s is None or s.empty:
+            continue
+        s = s.dropna(subset=["Close"])
+        n = len(s)
+        if n < min_dager or n >= konfig.MIN_HANDELSDAGER:
+            continue
+        close = s["Close"]
+        pris = float(close.iloc[-1])
+        forste = float(close.iloc[0])
+        topp = float(close.max())
+        utvikling = (pris / forste - 1.0) * 100 if forste > 0 else np.nan
+        fra_topp = (pris - topp) / topp * 100 if topp > 0 else np.nan
+        # Snittomsetning siste 20 dager (likviditet) – NOK/USD per dag.
+        if "Volume" in s.columns:
+            oms = (s["Close"] * s["Volume"]).tail(20).mean()
+        else:
+            oms = np.nan
+        rader.append({
+            "ticker": t,
+            "pris": round(pris, 2),
+            "forste_dato": pd.Timestamp(s.index[0]).date().isoformat(),
+            "antall_dager": int(n),
+            "dager_igjen": int(max(0, konfig.MIN_HANDELSDAGER - n)),
+            "utvikling_pct": None if pd.isna(utvikling) else round(float(utvikling), 1),
+            "fra_topp_pct": None if pd.isna(fra_topp) else round(float(fra_topp), 1),
+            "dagsomsetning": None if pd.isna(oms) else round(float(oms), 0),
+        })
+
+    df = pd.DataFrame(rader)
+    if df.empty:
+        return df
+    # Nyest øverst (færrest handelsdager = ferskest notering).
+    return df.sort_values("antall_dager", kind="mergesort").reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
 # Dagens liste (JSON) + sammenligning mot forrige kjøring
 # ---------------------------------------------------------------------------
 def til_dagens_liste(df: pd.DataFrame) -> dict:
