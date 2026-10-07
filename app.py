@@ -669,6 +669,8 @@ def posisjon_verktoy(res: dict, nokkel: str, valuta: str = "kr") -> None:
 def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                   vis_ma: bool = True, vis_52u: bool = True, vis_vcp: bool = True,
                   vis_7av7: bool = True, vis_hist: bool = False, vis_golden: bool = False,
+                  vis_rs: bool = False, indeks: pd.DataFrame | None = None,
+                  indeks_navn: str = "indeks",
                   ukentlig: bool = False, hoyde: int = 620, pos: dict | None = None,
                   morkt: bool = False) -> list | None:
     """Bygger data-spesifikasjonen for lightweight-charts.
@@ -929,7 +931,46 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
             "timeScale": {"borderVisible": False, "rightOffset": 4},
             "crosshair": {"mode": 0},
         }
-        return [{"chart": chart_options, "series": serier}]
+        charts = [{"chart": chart_options, "series": serier}]
+
+        # --- RS-linje mot den EKTE indeksen (OSEBX.OL / ^GSPC) som egen delgraf ---
+        # aksje/indeks reindeksert til 100 ved start: grønt over 100 = slår
+        # indeksen, rødt under = henger etter. Flat 100 = følger indeksen.
+        if vis_rs and indeks is not None and not indeks.empty:
+            try:
+                idx_kilde = indikatorer.til_ukedata(indeks) if ukentlig else indeks
+                rs = indikatorer.rs_linje(d["Close"], idx_kilde["Close"])
+                rs_data = [{"time": ti.strftime("%Y-%m-%d"), "value": round(float(v), 2)}
+                           for ti, v in rs.items() if pd.notna(v)]
+                if len(rs_data) >= 2:
+                    gjennomsiktig = "rgba(0,0,0,0)"
+                    rs_serie = [{
+                        "type": "Baseline", "data": rs_data,
+                        "options": {
+                            "baseValue": {"type": "price", "price": 100},
+                            "topLineColor": "#26a69a", "bottomLineColor": "#ef5350",
+                            "topFillColor1": "rgba(38,166,154,0.28)",
+                            "topFillColor2": "rgba(38,166,154,0.05)",
+                            "bottomFillColor1": "rgba(239,83,80,0.05)",
+                            "bottomFillColor2": "rgba(239,83,80,0.28)",
+                            "lineWidth": 2, "priceLineVisible": False,
+                            "lastValueVisible": True, "title": f"RS vs {indeks_navn}"},
+                    }]
+                    rs_chart = {
+                        "height": 150,
+                        "layout": {"background": {"type": "solid", "color": bg},
+                                   "textColor": tekstfarge},
+                        "grid": {"vertLines": {"color": grid},
+                                 "horzLines": {"color": grid}},
+                        "rightPriceScale": {"scaleMargins": {"top": 0.12, "bottom": 0.12},
+                                            "borderVisible": False},
+                        "timeScale": {"borderVisible": False, "rightOffset": 4},
+                        "crosshair": {"mode": 0},
+                    }
+                    charts.append({"chart": rs_chart, "series": rs_serie})
+            except Exception:
+                pass
+        return charts
     except Exception:
         return None
 
@@ -1683,6 +1724,10 @@ with fane2:
             vis_7av7 = st.checkbox("7/7-markører (ble/mistet)", value=True, key="chart_7av7")
             vis_hist = st.checkbox("Historiske volumbrudd", value=False, key="chart_hist")
             vis_golden = st.checkbox("Golden cross (SMA50×SMA200)", value=False, key="chart_golden")
+            vis_rs = st.checkbox(f"RS-linje mot {BORS.benchmark} (egen delgraf)", value=False,
+                                 key="chart_rs",
+                                 help="Aksjen delt på indeksen, satt til 100 ved start. "
+                                      "Grønt over 100 = slår indeksen, rødt under = henger etter.")
         serie = datamod.serie_for(last_priser(bors_navn, versjon), valg)
         res = screener.analyser_ticker(serie, valg, konfig.PRESETS[aktiv_preset_navn])
         if res is None:
@@ -1690,14 +1735,16 @@ with fane2:
         else:
             _init_posisjon_state(res, f"chart_{valg}")
             pos, pos_suffix = _posisjon_fra_state(f"chart_{valg}")
+            _indeks = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark) if vis_rs else None
             spec = lag_chart_lwc(serie, res, PERIODER_VALG[periode],
                                  vis_ma=vis_ma, vis_52u=vis_52u, vis_vcp=vis_vcp,
                                  vis_7av7=vis_7av7, vis_hist=vis_hist, vis_golden=vis_golden,
+                                 vis_rs=vis_rs, indeks=_indeks, indeks_navn=BORS.benchmark,
                                  ukentlig=ukentlig, pos=pos, morkt=MORKT)
             if spec is None:
                 st.info("Klarte ikke bygge chartet for denne aksjen.")
             else:
-                noekkel = f"chart_{valg}_{periode}_{tidsramme}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{vis_golden}{pos_suffix}_{TEMA}"
+                noekkel = f"chart_{valg}_{periode}_{tidsramme}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{vis_golden}{vis_rs}{pos_suffix}_{TEMA}"
                 renderLightweightCharts(spec, key=noekkel)
                 st.caption("💡 Dra sidelengs, rull musehjulet for å zoome, dra loddrett på "
                            "prisaksen for å strekke høyden. 🟡 **Kraftig gull = aktiv pivot** · "
@@ -1743,19 +1790,25 @@ with fane3:
                     vis_7av7_3 = st.checkbox("7/7-markører (ble/mistet)", value=True, key="sok_7av7")
                     vis_hist3 = st.checkbox("Historiske volumbrudd", value=False, key="sok_hist")
                     vis_golden3 = st.checkbox("Golden cross (SMA50×SMA200)", value=False, key="sok_golden")
+                    vis_rs3 = st.checkbox(f"RS-linje mot {BORS.benchmark} (egen delgraf)", value=False,
+                                          key="sok_rs",
+                                          help="Aksjen delt på indeksen, satt til 100 ved start. "
+                                               "Grønt over 100 = slår indeksen, rødt under = henger etter.")
                 if not HAR_LWC:
                     st.warning("Chart-komponenten er ikke lastet i dette miljøet ennå.")
                 else:
                     _init_posisjon_state(res, f"sok_{sok}")
                     pos3, pos_suffix3 = _posisjon_fra_state(f"sok_{sok}")
+                    _indeks3 = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark) if vis_rs3 else None
                     spec3 = lag_chart_lwc(serie, res, PERIODER_VALG[periode3],
                                           vis_ma=vis_ma3, vis_52u=vis_52u3, vis_vcp=vis_vcp3,
                                           vis_7av7=vis_7av7_3, vis_hist=vis_hist3, vis_golden=vis_golden3,
+                                          vis_rs=vis_rs3, indeks=_indeks3, indeks_navn=BORS.benchmark,
                                           ukentlig=ukentlig3, pos=pos3, morkt=MORKT)
                     if spec3 is not None:
                         renderLightweightCharts(
                             spec3,
-                            key=f"sok_{sok}_{periode3}_{tidsramme3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{pos_suffix3}_{TEMA}")
+                            key=f"sok_{sok}_{periode3}_{tidsramme3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{vis_rs3}{pos_suffix3}_{TEMA}")
                 vis_vcp_boks(res)
                 fundamenta_seksjon(sok, f"sok_{sok}")
                 st.divider()
