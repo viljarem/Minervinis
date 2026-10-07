@@ -78,3 +78,46 @@ def test_tom_input_gir_tom_ut():
     """Tom ramme gir tom oversikt uten feil."""
     assert sektor.sektor_oversikt(pd.DataFrame(), {}).empty
     assert sektor.vinnere_i_sektor(pd.DataFrame(), {}, "Energi").empty
+
+
+def _rs_bred() -> pd.DataFrame:
+    """Liten bred RS-tabell (datoer × ticker) som rs_rating_historikk gir."""
+    datoer = pd.date_range("2024-01-01", periods=5, freq="D")
+    return pd.DataFrame({
+        "A.OL": [80, 82, 85, 88, 90],
+        "B.OL": [78, 79, 80, 82, 84],
+        "C.OL": [40, 38, 35, 30, 28],
+        "D.OL": [42, 41, 40, 38, 36],
+    }, index=datoer)
+
+
+def test_historikk_median_per_sektor_per_dag():
+    """Tidslinjen gir median RS per sektor for hver dag."""
+    bred = _rs_bred()
+    opp = {"A.OL": "Energi", "B.OL": "Energi", "C.OL": "Finans", "D.OL": "Finans"}
+    hist = sektor.sektor_historikk(bred, opp)
+    assert list(hist.columns) == ["Energi", "Finans"] or set(hist.columns) == {"Energi", "Finans"}
+    # Første dag: Energi = median(80,78)=79, Finans = median(40,42)=41
+    assert hist["Energi"].iloc[0] == 79.0
+    assert hist["Finans"].iloc[0] == 41.0
+    # Energi stiger, Finans faller over tid.
+    assert hist["Energi"].iloc[-1] > hist["Energi"].iloc[0]
+    assert hist["Finans"].iloc[-1] < hist["Finans"].iloc[0]
+
+
+def test_historikk_glatting_demper():
+    """Glatting (glidende snitt) demper svingninger uten å endre lengden."""
+    bred = _rs_bred()
+    opp = {"A.OL": "Energi", "B.OL": "Energi", "C.OL": "Finans", "D.OL": "Finans"}
+    glatt = sektor.sektor_historikk(bred, opp, glatting=3)
+    assert len(glatt) == len(bred)
+    # Glattet siste verdi skal ligge under det rå toppunktet (snitt av siste 3).
+    raa = sektor.sektor_historikk(bred, opp)
+    assert glatt["Energi"].iloc[-1] <= raa["Energi"].iloc[-1]
+
+
+def test_historikk_tom_input():
+    """Tom RS-tabell eller tomt oppslag gir tom ramme."""
+    assert sektor.sektor_historikk(pd.DataFrame(), {"A.OL": "Energi"}).empty
+    assert sektor.sektor_historikk(_rs_bred(), {}).empty
+

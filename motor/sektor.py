@@ -123,3 +123,46 @@ def vinnere_i_sektor(df: pd.DataFrame, sektorer: dict[str, str], sektor: str,
             g[k] = pd.to_numeric(g[k], errors="coerce")
         g = g.sort_values(sorter_på, ascending=False, kind="mergesort")
     return g.head(antall).reset_index(drop=True)
+
+
+def sektor_historikk(rs_bred: pd.DataFrame, sektorer: dict[str, str],
+                     min_medlemmer: int = 2, glatting: int = 0) -> pd.DataFrame:
+    """Median RS per sektor PER DAG – sektorstyrke langs en tidslinje.
+
+    rs_bred    – bred RS-tabell (datoer × ticker) slik rs_rating_historikk gir:
+                 hver celle er aksjens RS-rating (1–99) den dagen.
+    sektorer   – oppslag {ticker: sektornavn}. Tickere uten kjent sektor hoppes
+                 over (de forurenser ikke en bransjelinje).
+    min_medlemmer – en sektor trenger minst så mange tickere for en robust median.
+    glatting   – valgfritt glidende snitt (antall dager) for å dempe dag-til-dag-
+                 støy. 0/1 = ingen glatting.
+
+    Returnerer en bred tabell (datoer × sektor) med median RS per dag, så den er
+    lett å smelte til langt format for en fler-linjers tidslinje. Tom ramme hvis
+    input mangler. Siden RS allerede er tverrsnitt (rangert mot universet hver
+    dag), er medianen direkte sammenlignbar over tid: en linje som klatrer =
+    sektoren tar ledelsen, en som faller = den taper styrke.
+    """
+    if rs_bred is None or getattr(rs_bred, "empty", True) or not sektorer:
+        return pd.DataFrame()
+
+    # Grupper de tilgjengelige kolonnene (tickere) på sektor.
+    medlemmer: dict[str, list[str]] = {}
+    for t in rs_bred.columns:
+        s = sektorer.get(t)
+        if s:
+            medlemmer.setdefault(s, []).append(t)
+
+    data = {}
+    for s, tickere in medlemmer.items():
+        if len(tickere) < min_medlemmer:
+            continue
+        data[s] = rs_bred[tickere].median(axis=1)
+
+    if not data:
+        return pd.DataFrame()
+    ut = pd.DataFrame(data).sort_index()
+    if glatting and glatting > 1:
+        ut = ut.rolling(glatting, min_periods=1).mean()
+    return ut.round(1)
+

@@ -2190,6 +2190,65 @@ with fane4:
                         st.dataframe(_vis, width="stretch", hide_index=True,
                                      key="mh_sektor_tabell")
 
+                        # --- Tidslinje: sektorstyrke historisk (hvem har ledet?) ---
+                        st.divider()
+                        st.markdown("### 📈 Sektorstyrke over tid")
+                        st.caption(
+                            "Median RS-rating per sektor for hver dag bakover – ser du "
+                            "**rotasjonen**: en linje som klatrer tar ledelsen, en som "
+                            "faller taper styrke. Velg hvilke sektorer du vil følge."
+                        )
+                        _rs_mat = rs_rating_historikk(bors_navn, versjon)
+                        _hist = sektor.sektor_historikk(_rs_mat, _oppslag, glatting=10) \
+                            if (_rs_mat is not None and not _rs_mat.empty) else pd.DataFrame()
+                        if _hist.empty:
+                            st.caption("Ikke nok RS-historikk til en tidslinje ennå.")
+                        else:
+                            _c1, _c2 = st.columns([3, 1])
+                            with _c1:
+                                # Standard: de 5 sterkeste sektorene nå (fra rangeringen).
+                                _standard = _ov["sektor"].head(5).tolist()
+                                _valgte_sekt = st.multiselect(
+                                    "Sektorer å vise", list(_hist.columns),
+                                    default=[s for s in _standard if s in _hist.columns],
+                                    key="mh_tidslinje_sektorer")
+                            with _c2:
+                                _mnd = st.radio("Periode", ["1 år", "2 år", "Alt"],
+                                                index=1, key="mh_tidslinje_periode")
+                            if _valgte_sekt:
+                                _h = _hist[_valgte_sekt].copy()
+                                if _mnd != "Alt":
+                                    _dager = 252 if _mnd == "1 år" else 504
+                                    _h = _h.iloc[-_dager:]
+                                _lang = (_h.reset_index()
+                                         .melt(id_vars=_h.index.name or "index",
+                                               var_name="Sektor", value_name="RS"))
+                                _tidkol = _h.index.name or "index"
+                                _lang = _lang.rename(columns={_tidkol: "Dato"})
+                                _lang["Dato"] = pd.to_datetime(_lang["Dato"])
+                                import altair as alt
+                                _linje = (
+                                    alt.Chart(_lang)
+                                    .mark_line(interpolate="monotone")
+                                    .encode(
+                                        x=alt.X("Dato:T", title=None),
+                                        y=alt.Y("RS:Q", title="Median RS",
+                                                scale=alt.Scale(domain=[0, 100])),
+                                        color=alt.Color("Sektor:N", title="Sektor"),
+                                        tooltip=["Dato:T", "Sektor:N",
+                                                 alt.Tooltip("RS:Q", format=".0f")],
+                                    )
+                                    .properties(height=340)
+                                )
+                                # Referanselinje ved 50 (midt på universet).
+                                _ref = (alt.Chart(pd.DataFrame({"y": [50]}))
+                                        .mark_rule(strokeDash=[4, 4], color="#9e9e9e")
+                                        .encode(y="y:Q"))
+                                st.altair_chart(_ref + _linje, use_container_width=True)
+                                st.caption("Stiplet grå linje = 50 (midt på universet). "
+                                           "Over = sterkere enn snittaksjen, under = svakere. "
+                                           "Linjene er 10-dagers glattet for å dempe støy.")
+
                         st.divider()
                         # --- Drill-down: lederne i valgt sektor ---
                         st.markdown("### 🎯 Finn lederne i en sektor")
