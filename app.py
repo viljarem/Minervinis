@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from motor import konfig, data as datamod, fundamenta, indikatorer, minervini, posisjon, screener, univers, vcp
+from motor import konfig, data as datamod, fundamenta, indikatorer, minervini, posisjon, screener, sektor, univers, vcp
 
 # TradingViews lightweight-charts (testfane). Pakket i try/except så appen aldri
 # krasjer om komponenten ikke er installert i miljøet (f.eks. rett etter utrulling).
@@ -249,6 +249,42 @@ def vis_vcp_boks(res: dict) -> None:
 def hent_fundamenta_cached(ticker: str) -> dict:
     """Bufret innpakning – henter fundamentaltall bare én gang per aksje per 12 t."""
     return fundamenta.hent_fundamenta(ticker)
+
+
+@st.cache_data(ttl=86400, show_spinner=False)   # sektor endrer seg sjelden – 24 t
+def hent_sektor_cached(ticker: str) -> dict:
+    """Bufret, lettvekts sektor-henting (kun t.info). {ticker, sektor, industri}."""
+    _fn = getattr(fundamenta, "hent_sektor", None)
+    if _fn is None:
+        return {"ticker": ticker, "sektor": None, "industri": None}
+    return _fn(ticker)
+
+
+@st.cache_data(show_spinner=False)
+def sektor_oppslag(bors_navn: str, tickers: tuple[str, ...]) -> dict[str, str]:
+    """Henter sektor for alle tickere og returnerer et {ticker: sektor}-oppslag.
+
+    Cachet på (børs, ticker-sett), så den kjøres bare én gang per universe-utvalg.
+    Tickere uten kjent sektor hos Yahoo utelates (de havner i «Ukjent»-bøtta i
+    sektor-modulen). Viser en progressbar første gang siden det er mange nettkall;
+    etterpå er hver ticker 24 t-cachet, så det går momentant.
+    """
+    oppslag: dict[str, str] = {}
+    if not tickers:
+        return oppslag
+    _bar = st.progress(0.0, text="Henter sektorer fra Yahoo (første gang) ...")
+    n = len(tickers)
+    for i, t in enumerate(tickers, start=1):
+        try:
+            s = hent_sektor_cached(t).get("sektor")
+            if s:
+                oppslag[t] = s
+        except Exception:
+            pass
+        if i % 5 == 0 or i == n:
+            _bar.progress(i / n, text=f"Henter sektorer ... {i}/{n}")
+    _bar.empty()
+    return oppslag
 
 
 def prefetch_fund_scores(tickers: list[str]) -> None:
@@ -1550,7 +1586,7 @@ else:
     else:
         resultat = kjor_screening(bors_navn, preset_navn, versjon) if skannet_na else None
 
-fane1, fane2, fane3 = st.tabs(["📋 Hovedliste", "📊 Chart", "🔎 Søk"])
+fane1, fane2, fane3, fane4 = st.tabs(["📋 Hovedliste", "📊 Chart", "🔎 Søk", "🌡️ Markedshelse"])
 
 # Følg app-temaet i chartet (mørk bakgrunn i dark mode). Legges i chart-nøklene
 # lenger nede så bildet tegnes på nytt når du bytter tema.
@@ -2075,3 +2111,127 @@ with fane3:
                 fundamenta_seksjon(sok, f"sok_{sok}")
                 st.divider()
                 posisjon_verktoy(res, f"sok_{sok}", VALUTA)
+
+
+# --- Fane 4: Markedshelse (sektorstyrke) ---
+with fane4:
+    st.subheader(f"🌡️ Markedshelse – sektorstyrke på {BORS.navn}")
+    st.markdown(
+        "O'Neil: *~halvparten av en aksjes bevegelse skyldes gruppen den tilhører.* "
+        "Du vil eie den **sterkeste aksjen i den sterkeste sektoren** – ikke en sterk "
+        "aksje i en død sektor. Her rangeres sektorene etter samlet relativ styrke, "
+        "og du kan bore ned til **lederne** i hver."
+    )
+
+    # Sektor-oversikten bygger på RS + score for HELE universet. Bruk en standard
+    # Minervini-screening (cachet) uansett hvilken modus «Oppsett» står i, så fanen
+    # alltid har noe å vise etter en skanning.
+    if not skannet_na:
+        st.info(f"Trykk **🔍 Skann {BORS.navn}** i menyen til venstre først – så regner "
+                "jeg sektorstyrken ut fra relativ styrke i hele universet.")
+    else:
+        _mh = kjor_screening(bors_navn, konfig.STANDARD.navn, versjon)
+        if _mh is None or _mh.empty or "rs" not in _mh.columns:
+            st.info("Fant ikke nok data til å regne sektorstyrke ennå.")
+        else:
+            st.caption(
+                "💡 Sektor hentes fra Yahoo første gang (tar litt tid for hele børsen), "
+                "deretter er det bufret i et døgn. Små Growth/Expand-aksjer uten "
+                "sektordata hos Yahoo holdes utenfor rangeringen."
+            )
+            _hent = st.button("🏭 Hent / oppdater sektorstyrke", key="mh_hent")
+            if _hent or st.session_state.get("mh_vist"):
+                st.session_state["mh_vist"] = True
+                _tickere = tuple(sorted(_mh["ticker"].dropna().astype(str).tolist()))
+                _oppslag = sektor_oppslag(bors_navn, _tickere)
+                if not _oppslag:
+                    st.warning("Yahoo ga ingen sektordata for dette universet akkurat nå. "
+                               "Prøv igjen senere.")
+                else:
+                    _ov = sektor.sektor_oversikt(_mh, _oppslag)
+                    if _ov.empty:
+                        st.info("For få aksjer med kjent sektor til en meningsfull rangering ennå.")
+                    else:
+                        _dekning = len(_oppslag)
+                        st.caption(f"Sektor funnet for **{_dekning}** av {len(_tickere)} aksjer · "
+                                   f"**{len(_ov)}** sektorer rangert.")
+
+                        # --- Heatmap: horisontale barer farget etter sektor-RS ---
+                        import altair as alt
+                        _kilde = _ov.rename(columns={
+                            "sektor": "Sektor", "sektor_rs": "Sektor-RS",
+                            "antall": "Antall", "andel_sterke": "Andel sterke",
+                            "andel_trend": "Andel i trend"})
+                        _chart = (
+                            alt.Chart(_kilde)
+                            .mark_bar(cornerRadiusEnd=4)
+                            .encode(
+                                x=alt.X("Sektor-RS:Q", title="Sektor-RS (1–99)",
+                                        scale=alt.Scale(domain=[0, 100])),
+                                y=alt.Y("Sektor:N", sort="-x", title=None),
+                                color=alt.Color("Sektor-RS:Q",
+                                                scale=alt.Scale(scheme="redyellowgreen",
+                                                                domain=[0, 100]),
+                                                legend=None),
+                                tooltip=["Sektor", "Sektor-RS", "Antall",
+                                         "Andel sterke", "Andel i trend"],
+                            )
+                            .properties(height=max(220, 34 * len(_ov)))
+                        )
+                        st.altair_chart(_chart, use_container_width=True)
+
+                        # --- Full tabell med nøkkeltall ---
+                        _vis = _ov.copy()
+                        _vis = _vis.rename(columns={
+                            "sektor": "Sektor", "sektor_rs": "Sektor-RS", "antall": "Antall",
+                            "rs_median": "RS median", "rs_snitt": "RS snitt",
+                            "antall_sterke": "Sterke (RS≥70)", "andel_sterke": "Andel sterke %",
+                            "antall_trend": "I trend (7/7)", "andel_trend": "Andel trend %"})
+                        st.dataframe(_vis, width="stretch", hide_index=True,
+                                     key="mh_sektor_tabell")
+
+                        st.divider()
+                        # --- Drill-down: lederne i valgt sektor ---
+                        st.markdown("### 🎯 Finn lederne i en sektor")
+                        _valgt_sektor = st.selectbox(
+                            "Velg sektor", _ov["sektor"].tolist(), key="mh_valgt_sektor",
+                            help="Topp-sektoren er valgt som standard. Her ser du de sterkeste "
+                                 "aksjene (høyest RS, så flest Minervini-kriterier) i gruppen.")
+                        _vinnere = sektor.vinnere_i_sektor(_mh, _oppslag, _valgt_sektor, antall=10)
+                        if _vinnere.empty:
+                            st.caption("Ingen aksjer med data i denne sektoren akkurat nå.")
+                        else:
+                            _vt = pd.DataFrame()
+                            _vt["Ticker"] = _vinnere["ticker"]
+                            if "pris" in _vinnere.columns:
+                                _vt["Pris"] = _vinnere["pris"]
+                            _vt["RS"] = _vinnere["rs"]
+                            if "score" in _vinnere.columns:
+                                _vt["Kriterier"] = _vinnere["score"].map(
+                                    lambda s: f"{int(s)}/7" if pd.notna(s) else "—")
+                            if "status" in _vinnere.columns:
+                                _vt["Status"] = _vinnere["status"]
+                            if "pct_fra_52h" in _vinnere.columns:
+                                _vt["Fra 52u høy"] = _vinnere["pct_fra_52h"].map(
+                                    lambda p: f"{p:+.1f}%" if pd.notna(p) else "—")
+                            _lt = st.dataframe(
+                                _vt, width="stretch", hide_index=True, height=360,
+                                on_select="rerun", selection_mode="multi-row",
+                                key="mh_vinnere_tabell")
+                            st.caption("💡 **Huk av rader** for å tegne chart av lederne.")
+
+                            _mh_rader = list(getattr(_lt.selection, "rows", []) or [])
+                            _mh_valgte = [_vinnere.iloc[i]["ticker"]
+                                          for i in _mh_rader if i < len(_vinnere)]
+                            if _mh_valgte and HAR_LWC:
+                                st.divider()
+                                _mh_priser = last_priser(bors_navn, versjon)
+                                for _tk in _mh_valgte[:10]:
+                                    _s = datamod.serie_for(_mh_priser, _tk)
+                                    _r = screener.analyser_ticker(
+                                        _s, _tk, konfig.PRESETS[aktiv_preset_navn])
+                                    st.markdown(f"**{_tk}**")
+                                    _spec = lag_chart_lwc(_s, _r, PERIODER_VALG["2 år"],
+                                                          hoyde=420, morkt=MORKT, tittel=_tk)
+                                    if _spec:
+                                        renderLightweightCharts(_spec, key=f"mh_{_tk}_{TEMA}")

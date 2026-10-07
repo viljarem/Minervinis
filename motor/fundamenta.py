@@ -251,6 +251,32 @@ def fund_score(fund: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Lettvekts sektor-henting (kun t.info – ingen tunge regnskaper)
+# ---------------------------------------------------------------------------
+def hent_sektor(ticker: str) -> dict:
+    """Henter BARE sektor/industri for én ticker (rask – kun t.info).
+
+    Mye lettere enn hent_fundamenta (som også henter resultatregnskap). Brukt til
+    sektor-oversikten der vi trenger bransje for hele universet. Returnerer
+    {"ticker", "sektor", "industri"} – sektor/industri er None hvis Yahoo mangler
+    data (typisk små Growth/Expand-aksjer). Alt pakket i try/except.
+    """
+    tom = {"ticker": (ticker or "").strip().upper(), "sektor": None, "industri": None}
+    tk = tom["ticker"]
+    if not tk:
+        return tom
+    try:
+        info = yf.Ticker(tk).info or {}
+    except Exception:
+        return tom
+    return {
+        "ticker": tk,
+        "sektor": (info.get("sector") or "").strip() or None,
+        "industri": (info.get("industry") or "").strip() or None,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Hovedfunksjon (henter fra nettet – alt pakket i try/except)
 # ---------------------------------------------------------------------------
 def hent_fundamenta(ticker: str) -> dict:
@@ -297,6 +323,8 @@ def hent_fundamenta(ticker: str) -> dict:
         "tilgjengelig": tilgjengelig,
         "ticker": ticker,
         "valuta": info.get("financialCurrency") or info.get("currency"),
+        "sektor": (info.get("sector") or "").strip() or None,
+        "industri": (info.get("industry") or "").strip() or None,
         "kvartal": kvartal,
         "aar": aar,
         "struktur": struktur,
