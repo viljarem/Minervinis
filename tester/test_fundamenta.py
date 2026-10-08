@@ -247,3 +247,14 @@ def test_vekst_akselerasjon_flat_gir_stabil():
 def test_vekst_akselerasjon_ett_punkt_gir_none():
     assert fu.vekst_akselerasjon([("a", 25.0)]) is None
     assert fu.vekst_akselerasjon([]) is None
+
+
+# --- vekst_serie() på ÅRLIGE tall (fallback-grunnlag) --------------------
+def test_vekst_serie_aarlig_regner_yoy_mellom_aar():
+    # Fire år med årsregnskap: YoY finnes for de tre siste.
+    datoer = [pd.Timestamp("2022-12-31"), pd.Timestamp("2023-12-31"),
+              pd.Timestamp("2024-12-31"), pd.Timestamp("2025-12-31")]
+    df = pd.DataFrame([[100, 110, 140, 200]], index=["Total Revenue"], columns=datoer)
+    serie = fu.vekst_serie(df, ["Total Revenue"], tol_dager=120)
+    verdier = [v for _, v in serie]
+    assert verdier == [10.0, 27.3, 42.9]       # 110/100, 140/110, 200/140

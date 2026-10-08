@@ -363,9 +363,9 @@ def hent_fundamenta(ticker: str) -> dict:
     struktur = bygg_struktur(info)
 
     kvartal = None
+    q = None
     oms_serie: list[tuple[str, float]] = []
     eps_serie: list[tuple[str, float]] = []
-    akselerasjon = None
     try:
         q = t.quarterly_income_stmt
         s, i = finn_periode_par(q)
@@ -373,17 +373,28 @@ def hent_fundamenta(ticker: str) -> dict:
         # Vekst-trend over flere kvartaler (akselererer veksten?).
         oms_serie = vekst_serie(q, _RAD_OMSETNING)
         eps_serie = vekst_serie(q, _RAD_RESULTAT)
-        akselerasjon = vekst_akselerasjon(oms_serie)
     except Exception:
         kvartal = None
 
     aar = None
+    a = None
     try:
         a = t.income_stmt
         s, i = finn_periode_par(a, tol_dager=120)
         aar = bygg_periode(a, s, i)
     except Exception:
         aar = None
+
+    # Vekst-TREND: foretrekk kvartalsvis (ferskest), men fall tilbake til ÅRLIG når
+    # Yahoo bare gir ett komplett YoY-par på kvartal (vanlig på gratis-data). Årstall
+    # har gjerne 3–4 år historikk, så trenden blir mer robust der.
+    akse_basis = "kvartal"
+    if len(oms_serie) < 2 and a is not None:
+        aar_oms = vekst_serie(a, _RAD_OMSETNING, tol_dager=120)
+        aar_eps = vekst_serie(a, _RAD_RESULTAT, tol_dager=120)
+        if len(aar_oms) >= 2:
+            oms_serie, eps_serie, akse_basis = aar_oms, aar_eps, "år"
+    akselerasjon = vekst_akselerasjon(oms_serie)
 
     tilgjengelig = bool(kvartal or aar or struktur.get("utestaende"))
     return {
@@ -398,4 +409,5 @@ def hent_fundamenta(ticker: str) -> dict:
         "vekst_oms_serie": oms_serie,
         "vekst_eps_serie": eps_serie,
         "akselerasjon": akselerasjon,
+        "akse_basis": akse_basis,
     }

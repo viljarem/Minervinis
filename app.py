@@ -565,17 +565,19 @@ def _tegn_fundamenta(fund: dict) -> None:
                "samme periode året før. 🟩 vekst ≥ 25 % · 🟢 15–25 % · 🟥 negativ. "
                f"Marginer måles i prosentpoeng (pp).{val_txt}")
 
-    # --- Vekst-trend over flere kvartaler (akselererer veksten?) ---
+    # --- Vekst-trend over flere perioder (akselererer veksten?) ---
     oms_serie = fund.get("vekst_oms_serie") or []
     eps_serie = fund.get("vekst_eps_serie") or []
     akse = fund.get("akselerasjon")
+    basis = fund.get("akse_basis", "kvartal")
+    periode_ord = "kvartaler" if basis == "kvartal" else "år"
     if len(oms_serie) >= 2 or len(eps_serie) >= 2:
         def _spor(serie):
             return " → ".join(f"{v:+.0f}%" for _, v in serie) if serie else "—"
         linjer = []
         if akse:
             linjer.append(f"{akse['merke']} **{akse['tekst']}**")
-        linjer.append(f"YoY-salg siste kvartaler: {_spor(oms_serie)}")
+        linjer.append(f"YoY-salg siste {periode_ord}: {_spor(oms_serie)}")
         if len(eps_serie) >= 2:
             linjer.append(f"YoY-resultat: {_spor(eps_serie)}")
         st.caption("📈 **Vekst-trend** — "
@@ -628,8 +630,10 @@ def _vis_vekst_trend(fund: dict) -> None:
     serie = (fund or {}).get("vekst_oms_serie") or []
     if not akse or len(serie) < 2:
         return
+    basis = (fund or {}).get("akse_basis", "kvartal")
+    periode_ord = "siste kvartaler" if basis == "kvartal" else "siste år"
     spor = " → ".join(f"{v:+.0f}%" for _, v in serie)
-    st.caption(f"{akse['merke']} **Vekst-trend (salg YoY):** {akse['tekst']}  ·  siste kvartaler: {spor}")
+    st.caption(f"{akse['merke']} **Vekst-trend (salg YoY):** {akse['tekst']}  ·  {periode_ord}: {spor}")
 
 
 def fundamenta_seksjon(ticker: str, nokkel: str) -> None:
