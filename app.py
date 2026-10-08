@@ -255,6 +255,34 @@ def hent_fundamenta_cached(ticker: str) -> dict:
     return fundamenta.hent_fundamenta(ticker)
 
 
+def hent_fundamenta_rikt(ticker: str) -> dict:
+    """Full fundamenta for ÉN aksje, robust mot cache-forgiftning fra bulk-prefetch.
+
+    prefetch_fund_scores henter fundamenta for HELE universet ved skann. Yahoo
+    rate-limiter den bulk-runden, så mange tickere får et TOMT svar bufret i 12 t.
+    Når du så åpner ett chart og vil se EPS/omsetning, ville den tomme bufferen gitt
+    ingen delgraf. Her sjekker vi om den bufrede versjonen mangler regnskapstall – og
+    henter i så fall FERSKT for nettopp denne ene aksjen (ingen rate-limit-risiko på
+    ett enkelt kall) og lagrer det i session_state så det er raskt ved re-render.
+    """
+    fersk = st.session_state.setdefault("fund_rik", {})
+    if ticker in fersk:
+        return fersk[ticker]
+    f = hent_fundamenta_cached(ticker)
+    har_regnskap = bool((f.get("oms_verdier") or f.get("eps_verdier")
+                         or f.get("kvartal") or f.get("aar")))
+    if not har_regnskap:
+        try:
+            f2 = fundamenta.hent_fundamenta(ticker)
+            if (f2.get("oms_verdier") or f2.get("eps_verdier")
+                    or f2.get("kvartal") or f2.get("aar")):
+                f = f2
+        except Exception:
+            pass
+    fersk[ticker] = f
+    return f
+
+
 @st.cache_data(ttl=86400, show_spinner=False)   # sektor endrer seg sjelden – 24 t
 def hent_sektor_cached(ticker: str) -> dict:
     """Bufret, lettvekts sektor-henting (kun t.info). {ticker, sektor, industri}."""
@@ -655,7 +683,7 @@ def fundamenta_seksjon(ticker: str, nokkel: str) -> None:
     Scoren lagres i session_state så tabellen kan vise Fund-kolonnen gradvis.
     Detaljert tabell bak toggle for de som vil dykke dypere.
     """
-    fund = hent_fundamenta_cached(ticker)
+    fund = hent_fundamenta_rikt(ticker)
     score = fundamenta.fund_score(fund)
     st.session_state.setdefault("fund_scores", {})[ticker] = score
     _vis_fund_merke(score, ticker)
@@ -2184,7 +2212,7 @@ with fane2:
             _graf_basis = "kvartal"
             _graf_valuta = ""
             if vis_eps:
-                _f = hent_fundamenta_cached(valg)
+                _f = hent_fundamenta_rikt(valg)
                 _eps_bars = _f.get("eps_verdier")
                 _oms_bars = _f.get("oms_verdier")
                 _graf_basis = _f.get("graf_basis", "kvartal")
