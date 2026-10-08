@@ -372,19 +372,28 @@ def sektor_oppslag(bors_navn: str, tickers: tuple[str, ...]) -> dict[str, str]:
     return oppslag
 
 
-def prefetch_fund_scores(tickers: list[str]) -> None:
-    """Pre-henter fundamental scores for alle tickers og lagrer i session_state.
-    
-    Gjør det mulig å vise Fund-kolonnen i tabellen immediately. Kjøres asynkront
-    så tabellen vises før alle scores er hentet.
+def prefetch_fund_scores(tickers: list[str], maks: int = 20) -> None:
+    """Pre-henter fundamental scores for de ØVERSTE tickerne – mildt mot Yahoo.
+
+    VIKTIG: Tidligere hentet denne fundamenta for HELE universet (~280 tickere)
+    ved hver skann. Hvert kall laster nå tre regnskap (kvartal + år + info), så
+    bulk-runden rate-limitet Yahoo og forgiftet 12 t-cachen med TOMME svar for
+    ALLE tickere – også store, likvide som EQNR. Derfor viste EPS-ruta «ingen
+    regnskapstall» selv for aksjer som åpenbart har tall.
+
+    Nå henter vi KUN de `maks` øverste radene (lista er allerede sortert). Resten
+    av Fund-kolonnen fylles LAT – score hentes først når brukeren faktisk åpner
+    den aksjens graf (fundamenta_seksjon → hent_fundamenta_rikt). Det holder
+    nettkallene få nok til at Yahoo ikke rate-limiter, så enkelt-oppslag (f.eks.
+    EQNR sin EPS-rute) alltid får ferske, gyldige tall.
     """
     if not tickers:
         return
-    
+
     scores = st.session_state.get("fund_scores", {})
-    
-    # Hent scores for alle tickers som ikke allerede er cached
-    for ticker in tickers:
+
+    # Kun de øverste radene – unngå bulk-hamring som rate-limiter Yahoo.
+    for ticker in tickers[:maks]:
         if ticker not in scores:
             try:
                 fund = hent_fundamenta_cached(ticker)
