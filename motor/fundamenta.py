@@ -131,6 +131,66 @@ def _dato_str(dato) -> str | None:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Vekst-TREND over flere kvartaler (akselererer veksten? – ren matematikk)
+# ---------------------------------------------------------------------------
+def vekst_serie(df: pd.DataFrame | None, navn_liste: list[str],
+                maks: int = 6, tol_dager: int = 80) -> list[tuple[str, float]]:
+    """YoY-vekst for hvert kvartal vi har et fjorårstall til, eldst → nyest.
+
+    For hver periode-kolonne finner vi perioden ~12 mnd tidligere og regner
+    prosentvis endring (samme logikk som finn_periode_par, men for HELE serien, ikke
+    bare siste kvartal). Dette er grunnlaget for å se om veksten akselererer. Returnerer
+    en liste av (dato_iso, vekst%), maks de `maks` ferskeste. Tom liste hvis for lite data.
+    """
+    serie = _rad_serie(df, navn_liste)
+    if serie is None:
+        return []
+    serie = serie.dropna().sort_index()
+    datoer = list(serie.index)
+    ut: list[tuple[str, float]] = []
+    for d in datoer:
+        mal = d - pd.DateOffset(months=12)
+        tidligere = [x for x in datoer if x < d]
+        if not tidligere:
+            continue
+        ifjor = min(tidligere, key=lambda x: abs((x - mal).days))
+        if abs((ifjor - mal).days) > tol_dager:
+            continue
+        v = vekst(serie.get(d), serie.get(ifjor))
+        if v is not None:
+            ut.append((_dato_str(d), v))
+    return ut[-maks:]
+
+
+def vekst_akselerasjon(vekstserie: list[tuple[str, float]], terskel: float = 3.0) -> dict | None:
+    """Ser på YoY-vekst over tid og avgjør om den akselererer, er stabil eller avtar.
+
+    Minervini (og O'Neil) elsker ØKENDE vekstrate: +18 % → +25 % → +40 % YoY er langt
+    sterkere enn flat +25 %. Vi sammenligner de to ferskeste YoY-punktene.
+      🚀 akselererer : siste minst `terskel` pp høyere enn forrige (og positiv nå)
+      🐢 avtar       : siste minst `terskel` pp lavere enn forrige
+      ➡️ stabil      : ellers
+    Returnerer {"merke", "retning", "tekst", "fra", "til"} eller None ved < 2 punkter.
+    """
+    if not vekstserie or len(vekstserie) < 2:
+        return None
+    forrige = vekstserie[-2][1]
+    siste = vekstserie[-1][1]
+    diff = siste - forrige
+    if diff >= terskel and siste > 0:
+        merke, retning = "🚀", "akselererer"
+        tekst = f"Veksten akselererer ({forrige:+.0f}% → {siste:+.0f}% YoY)"
+    elif diff <= -terskel:
+        merke, retning = "🐢", "avtar"
+        tekst = f"Veksten avtar ({forrige:+.0f}% → {siste:+.0f}% YoY)"
+    else:
+        merke, retning = "➡️", "stabil"
+        tekst = f"Veksten er stabil (~{siste:+.0f}% YoY)"
+    return {"merke": merke, "retning": retning, "tekst": tekst,
+            "fra": forrige, "til": siste}
+
+
 def bygg_periode(df: pd.DataFrame | None, siste, ifjor) -> dict | None:
     """Bygger ett sett med tall (omsetning, resultat, marginer + endringer) for en periode."""
     if df is None or siste is None:
@@ -303,10 +363,17 @@ def hent_fundamenta(ticker: str) -> dict:
     struktur = bygg_struktur(info)
 
     kvartal = None
+    oms_serie: list[tuple[str, float]] = []
+    eps_serie: list[tuple[str, float]] = []
+    akselerasjon = None
     try:
         q = t.quarterly_income_stmt
         s, i = finn_periode_par(q)
         kvartal = bygg_periode(q, s, i)
+        # Vekst-trend over flere kvartaler (akselererer veksten?).
+        oms_serie = vekst_serie(q, _RAD_OMSETNING)
+        eps_serie = vekst_serie(q, _RAD_RESULTAT)
+        akselerasjon = vekst_akselerasjon(oms_serie)
     except Exception:
         kvartal = None
 
@@ -328,4 +395,7 @@ def hent_fundamenta(ticker: str) -> dict:
         "kvartal": kvartal,
         "aar": aar,
         "struktur": struktur,
+        "vekst_oms_serie": oms_serie,
+        "vekst_eps_serie": eps_serie,
+        "akselerasjon": akselerasjon,
     }

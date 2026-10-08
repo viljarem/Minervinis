@@ -192,3 +192,58 @@ def test_fund_score_detaljer_inneholder_alle_fem_kriterier():
     assert len(s["detaljer"]) == 5
     # Kun Q-salg og Å-salg oppfyller terskelen
     assert s["poeng"] == 2
+
+
+# --- vekst_serie() + vekst_akselerasjon() --------------------------------
+def _trend_df(verdier):
+    """Bygger et kvartalsvis resultatregnskap med 8 kvartaler (eldst sist i kolonnene).
+
+    `verdier` er omsetning eldst → nyest; vi legger dem som Total Revenue-rad.
+    Kolonnene er periodeslutt kvartal for kvartal.
+    """
+    datoer = [pd.Timestamp("2024-03-31"), pd.Timestamp("2024-06-30"),
+              pd.Timestamp("2024-09-30"), pd.Timestamp("2024-12-31"),
+              pd.Timestamp("2025-03-31"), pd.Timestamp("2025-06-30"),
+              pd.Timestamp("2025-09-30"), pd.Timestamp("2025-12-31")]
+    return pd.DataFrame([verdier], index=["Total Revenue"], columns=datoer)
+
+
+def test_vekst_serie_regner_yoy_per_kvartal():
+    # 8 kvartaler: YoY finnes for de 4 ferskeste (mot samme kvartal i fjor).
+    df = _trend_df([100, 100, 100, 100, 110, 125, 150, 200])
+    serie = fu.vekst_serie(df, ["Total Revenue"])
+    verdier = [v for _, v in serie]
+    assert verdier == [10.0, 25.0, 50.0, 100.0]      # 110/100, 125/100, 150/100, 200/100
+
+
+def test_vekst_serie_for_lite_data_gir_tom():
+    df = pd.DataFrame([[100]], index=["Total Revenue"],
+                      columns=[pd.Timestamp("2025-12-31")])
+    assert fu.vekst_serie(df, ["Total Revenue"]) == []
+
+
+def test_vekst_akselerasjon_stigende_gir_rakett():
+    serie = [("a", 18.0), ("b", 25.0), ("c", 40.0)]
+    a = fu.vekst_akselerasjon(serie)
+    assert a["merke"] == "🚀"
+    assert a["retning"] == "akselererer"
+    assert a["fra"] == 25.0 and a["til"] == 40.0
+
+
+def test_vekst_akselerasjon_fallende_gir_skilpadde():
+    serie = [("a", 40.0), ("b", 20.0)]
+    a = fu.vekst_akselerasjon(serie)
+    assert a["merke"] == "🐢"
+    assert a["retning"] == "avtar"
+
+
+def test_vekst_akselerasjon_flat_gir_stabil():
+    serie = [("a", 24.0), ("b", 25.0)]
+    a = fu.vekst_akselerasjon(serie)
+    assert a["merke"] == "➡️"
+    assert a["retning"] == "stabil"
+
+
+def test_vekst_akselerasjon_ett_punkt_gir_none():
+    assert fu.vekst_akselerasjon([("a", 25.0)]) is None
+    assert fu.vekst_akselerasjon([]) is None

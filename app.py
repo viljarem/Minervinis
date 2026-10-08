@@ -565,6 +565,23 @@ def _tegn_fundamenta(fund: dict) -> None:
                "samme periode året før. 🟩 vekst ≥ 25 % · 🟢 15–25 % · 🟥 negativ. "
                f"Marginer måles i prosentpoeng (pp).{val_txt}")
 
+    # --- Vekst-trend over flere kvartaler (akselererer veksten?) ---
+    oms_serie = fund.get("vekst_oms_serie") or []
+    eps_serie = fund.get("vekst_eps_serie") or []
+    akse = fund.get("akselerasjon")
+    if len(oms_serie) >= 2 or len(eps_serie) >= 2:
+        def _spor(serie):
+            return " → ".join(f"{v:+.0f}%" for _, v in serie) if serie else "—"
+        linjer = []
+        if akse:
+            linjer.append(f"{akse['merke']} **{akse['tekst']}**")
+        linjer.append(f"YoY-salg siste kvartaler: {_spor(oms_serie)}")
+        if len(eps_serie) >= 2:
+            linjer.append(f"YoY-resultat: {_spor(eps_serie)}")
+        st.caption("📈 **Vekst-trend** — "
+                   + "  ·  ".join(linjer)
+                   + ".  🚀 = stigende vekstrate (Minervinis favoritt) · ➡️ stabil · 🐢 avtagende.")
+
 
     # --- Tabell 2: Aksjestruktur ---
     s = fund.get("struktur") or {}
@@ -600,6 +617,21 @@ def _vis_fund_merke(score: dict, ticker: str) -> None:
     st.caption(f"📊 **Fundamental Minervini-score:** {m} **{p}/5** ({label}) — {detaljer}")
 
 
+def _vis_vekst_trend(fund: dict) -> None:
+    """Viser om YoY-veksten akselererer – Minervinis favoritt-signal.
+
+    En vekstrate som STIGER kvartal for kvartal (f.eks. +18 % → +25 % → +40 % YoY)
+    er langt sterkere enn flat vekst. Vises som én kompakt linje med spor over de
+    siste kvartalene. Stille hvis Yahoo mangler nok historikk (typisk små aksjer).
+    """
+    akse = (fund or {}).get("akselerasjon")
+    serie = (fund or {}).get("vekst_oms_serie") or []
+    if not akse or len(serie) < 2:
+        return
+    spor = " → ".join(f"{v:+.0f}%" for _, v in serie)
+    st.caption(f"{akse['merke']} **Vekst-trend (salg YoY):** {akse['tekst']}  ·  siste kvartaler: {spor}")
+
+
 def fundamenta_seksjon(ticker: str, nokkel: str) -> None:
     """Henter alltid fundamental score (cached, rask etter første gang) og viser merke.
     Scoren lagres i session_state så tabellen kan vise Fund-kolonnen gradvis.
@@ -609,6 +641,7 @@ def fundamenta_seksjon(ticker: str, nokkel: str) -> None:
     score = fundamenta.fund_score(fund)
     st.session_state.setdefault("fund_scores", {})[ticker] = score
     _vis_fund_merke(score, ticker)
+    _vis_vekst_trend(fund)
     vis = st.toggle("📊 Vis detaljerte fundamentale tall (vekst, marginer, aksjestruktur)",
                     value=False, key=f"fund_{nokkel}")
     if not vis:
@@ -1167,6 +1200,8 @@ def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None, r
     vis["RVol"] = df["rel_volum"] if "rel_volum" in df.columns else np.nan
     vis["Vol snitt50"] = (df["snittvolum50"].map(_stor_tall)
                           if "snittvolum50" in df.columns else "—")
+    vis["Likviditet"] = (df["dagsomsetning"].map(_stor_tall)
+                         if "dagsomsetning" in df.columns else "—")
     vis["Volum ±2"] = (df["volum_signatur"].map(_signatur_kort)
                        if "volum_signatur" in df.columns else "—")
     vis["RS"] = df["rs"]
@@ -1378,6 +1413,11 @@ TABELL_HJELP = {
     "Vol snitt50": st.column_config.TextColumn(
         "Vol snitt50", help="50-dagers gjennomsnittlig dagsvolum (antall aksjer handlet per dag). "
         "Dette er baseline som både RVol og RVol (live) måles mot."),
+    "Likviditet": st.column_config.TextColumn(
+        "Likviditet", help="Gjennomsnittlig daglig omsetning i KRONER siste 20 dager (kurs × volum). "
+        "Minervini unngår illikvide aksjer – høyere tall = lettere å kjøpe og selge uten å flytte "
+        "kursen. Basisgulvet er allerede 500k; skru opp minstekravet i menyen til venstre for kun "
+        "svært likvide aksjer."),
     "Volum ±2": st.column_config.TextColumn(
         "Volum ±2", help="Relativt volum rundt bruddet: dag −2, −1, 0 (brudd), +1, +2 mot "
         "50-dagers snitt. Minervini vil se volumet tørke inn før og eksplodere på bruddet. "
@@ -1542,6 +1582,7 @@ with st.sidebar:
     bruker_dato = None
     min_krit = konfig.STANDARD.krev_antall
     min_rs = 0
+    min_oms_mill = 0.5
     kun_ferske = False
     krev_uke = False
     del_opp = False
@@ -1567,6 +1608,11 @@ with st.sidebar:
 
         min_krit = st.slider("Minimum antall kriterier", 0, 7, konfig.PRESETS[preset_navn].krev_antall)
         min_rs = st.slider("Minimum RS-rating", 0, 99, 0)
+        min_oms_mill = st.slider(
+            "Min. likviditet (mill./dag)", 0.5, 50.0, 0.5, 0.5,
+            help="Snitt daglig omsetning (kurs × volum) siste 20 dager, i millioner kroner. "
+                 "0,5 = ingen ekstra filtrering (basisgulvet er allerede 500k). Skru opp for kun "
+                 "svært likvide aksjer som er lette å handle uten å flytte kursen.")
         kun_ferske = st.checkbox("Vis kun ferske brudd (🟢)", value=False)
         krev_uke = st.checkbox("Krev ukentlig bekreftelse (✅)", value=False,
                                help="Vis kun aksjer der også den ukentlige trenden peker opp.")
@@ -1829,6 +1875,8 @@ with fane1:
         # så du aldri går glipp av et akkurat utløst kjøpssignal.
         filt = resultat[(resultat["score"] >= min_krit) | (resultat["status"] == "🟢")].copy()
         filt = filt[filt["rs"].fillna(0) >= min_rs]
+        if min_oms_mill > 0.5 and "dagsomsetning" in filt.columns:
+            filt = filt[filt["dagsomsetning"].fillna(0) >= min_oms_mill * 1e6]
         if kun_ferske:
             filt = filt[filt["status"] == "🟢"]
         if krev_uke:
