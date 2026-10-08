@@ -25,6 +25,38 @@ from __future__ import annotations
 import pandas as pd
 import yfinance as yf
 
+
+# ---------------------------------------------------------------------------
+# Nettleser-impersonert session (mot rate-limiting på Streamlit Cloud)
+# ---------------------------------------------------------------------------
+# Streamlit Cloud kjører på delte AWS-IP-er som Yahoo rate-limiter hardt – mange
+# andre yfinance-apper hamrer samme endepunkt fra samme IP-blokk. Lokalt har du en
+# «ren» hjemme-IP som Yahoo stoler på, derfor virker det lokalt men ikke online.
+# curl_cffi lar oss utgi oss for en ekte Chrome-nettleser (TLS-fingeravtrykk +
+# User-Agent), som Yahoo slipper gjennom langt oftere. Vi gjenbruker ÉN session
+# (connection pooling) og faller stille tilbake til vanlig yfinance om curl_cffi
+# ikke er installert.
+def _lag_session():
+    try:
+        from curl_cffi import requests as _cffi
+        return _cffi.Session(impersonate="chrome")
+    except Exception:
+        return None
+
+
+_SESSION = _lag_session()
+
+
+def _ticker(symbol: str) -> "yf.Ticker":
+    """yf.Ticker med delt, nettleser-impersonert session når tilgjengelig."""
+    if _SESSION is not None:
+        try:
+            return yf.Ticker(symbol, session=_SESSION)
+        except Exception:
+            pass
+    return yf.Ticker(symbol)
+
+
 # Radnavn kan variere litt mellom selskaper – vi prøver flere varianter i rekkefølge.
 _RAD_OMSETNING = ["Total Revenue", "Operating Revenue"]
 _RAD_BRUTTO = ["Gross Profit"]
@@ -341,7 +373,7 @@ def hent_sektor(ticker: str) -> dict:
     if not tk:
         return tom
     try:
-        info = yf.Ticker(tk).info or {}
+        info = _ticker(tk).info or {}
     except Exception:
         return tom
     return {
@@ -366,7 +398,7 @@ def hent_aksjeinfo(ticker: str) -> dict:
     if not tk:
         return tom
     try:
-        info = yf.Ticker(tk).info or {}
+        info = _ticker(tk).info or {}
     except Exception:
         return tom
     try:
@@ -397,7 +429,7 @@ def hent_fundamenta(ticker: str) -> dict:
         return tom
 
     try:
-        t = yf.Ticker(ticker)
+        t = _ticker(ticker)
     except Exception:
         return tom
 
