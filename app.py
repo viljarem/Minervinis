@@ -283,6 +283,30 @@ def hent_fundamenta_rikt(ticker: str) -> dict:
     return f
 
 
+def _eps_chart_kwargs(ticker: str, vis_eps: bool) -> dict:
+    """Bygger kwargs til lag_chart_lwc for EPS/omsetning-delgrafen.
+
+    Returnerer {"vis_eps": False} når ruten er av, ellers en dict med rå omsetning-
+    og resultat-verdier + grunnlag (kvartal/år) og valuta. Felles for ALLE
+    chart-stedene (Chart-fane, Søk, Hovedliste-tabeller, Golden cross) så logikken
+    bare finnes ett sted. Henter robust (hent_fundamenta_rikt) så en forgiftet
+    bulk-cache ikke gir tom rute.
+    """
+    if not vis_eps:
+        return {"vis_eps": False}
+    try:
+        f = hent_fundamenta_rikt(ticker)
+        return {
+            "vis_eps": True,
+            "eps_bars": f.get("eps_verdier"),
+            "oms_bars": f.get("oms_verdier"),
+            "graf_basis": f.get("graf_basis", "kvartal"),
+            "graf_valuta": f.get("valuta") or "",
+        }
+    except Exception:
+        return {"vis_eps": False}
+
+
 @st.cache_data(ttl=86400, show_spinner=False)   # sektor endrer seg sjelden – 24 t
 def hent_sektor_cached(ticker: str) -> dict:
     """Bufret, lettvekts sektor-henting (kun t.info). {ticker, sektor, industri}."""
@@ -1881,6 +1905,9 @@ def vis_golden_cross(gc_resultat):
                                  help="Legger indeksen oppå chartet, skalert til å starte likt med aksjen.")
         _gc_rs_rating = st.checkbox("📈 RS-rating over tid (1–99)", value=False, key="gc_rs_rating",
                                     help="Egen rute under chartet. Relativ styrke mot universet over tid.")
+        _gc_eps = st.checkbox("💰 Omsetning/resultat (EPS)", value=False, key="gc_eps",
+                              help="Egen rute: kvartalsvis/årlig omsetning (blå linje) og resultat "
+                                   "(søyler – grønn overskudd, rød underskudd).")
     _gc_rs_mat = rs_rating_historikk(bors_navn, versjon) if _gc_rs_rating else None
     _gc_indeks_serie = (datamod.serie_for(_gc_priser, BORS.benchmark) if _gc_indeks else None)
     for _tk in _gc_valgte:
@@ -1897,9 +1924,10 @@ def vis_golden_cross(gc_resultat):
                                   vis_rs_rating=_gc_rs_rating, rs_rating=_rs_serie_gc,
                                   vis_indeks=_gc_indeks, indeks=_gc_indeks_serie,
                                   indeks_navn=BORS.benchmark, ukentlig=_gc_ukentlig,
-                                  hoyde=460, morkt=MORKT, tittel=_tk)
+                                  hoyde=460, morkt=MORKT, tittel=_tk,
+                                  **_eps_chart_kwargs(_tk, _gc_eps))
             if _spec:
-                renderLightweightCharts(_spec, key=f"gc_{_tk}_{_gc_periode}_{_gc_tidsramme}_{TEMA}")
+                renderLightweightCharts(_spec, key=f"gc_{_tk}_{_gc_periode}_{_gc_tidsramme}_{_gc_eps}_{TEMA}")
         else:
             st.caption("Chart-komponenten er ikke lastet i dette miljøet ennå.")
 
@@ -2057,6 +2085,9 @@ with fane1:
                                         help="Egen rute under hvert chart. Viser hvordan skanne-tallet "
                                              "(relativ styrke mot universet) har beveget seg. "
                                              "Grønt over 70 = blant de sterkeste, rødt under.")
+            _hl_eps = st.checkbox("💰 Omsetning/resultat (EPS)", value=False, key="hl_eps",
+                                  help="Egen rute under hvert chart: kvartalsvis/årlig omsetning "
+                                       "(blå linje) og resultat (søyler – grønn/rød).")
         # Tunge data hentes kun når lagene faktisk er på.
         _hl_rs_mat = rs_rating_historikk(bors_navn, versjon) if _hl_rs_rating else None
         _hl_indeks_serie = (datamod.serie_for(_priser_alle_hl, BORS.benchmark)
@@ -2109,9 +2140,10 @@ with fane1:
                                           vis_rs_rating=_hl_rs_rating, rs_rating=_rs_serie_hl,
                                           vis_indeks=_hl_indeks, indeks=_hl_indeks_serie,
                                           indeks_navn=BORS.benchmark, ukentlig=_hl_ukentlig,
-                                          hoyde=460, morkt=MORKT, tittel=_tk)
+                                          hoyde=460, morkt=MORKT, tittel=_tk,
+                                          **_eps_chart_kwargs(_tk, _hl_eps))
                     if _spec:
-                        renderLightweightCharts(_spec, key=f"hl_{nokkel}_{_tk}_{_hl_periode}_{_hl_tidsramme}_{TEMA}")
+                        renderLightweightCharts(_spec, key=f"hl_{nokkel}_{_tk}_{_hl_periode}_{_hl_tidsramme}_{_hl_eps}_{TEMA}")
 
         if del_opp:
             # Fire separate tabeller – én per setup-status, i handlbar rekkefølge.
@@ -2208,23 +2240,13 @@ with fane2:
                 if valg in _rs_mat.columns:
                     _rs_serie = _rs_mat[valg].dropna()
             _indeks = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark) if vis_indeks else None
-            _eps_bars = _oms_bars = None
-            _graf_basis = "kvartal"
-            _graf_valuta = ""
-            if vis_eps:
-                _f = hent_fundamenta_rikt(valg)
-                _eps_bars = _f.get("eps_verdier")
-                _oms_bars = _f.get("oms_verdier")
-                _graf_basis = _f.get("graf_basis", "kvartal")
-                _graf_valuta = _f.get("valuta") or ""
+            _eps_kw = _eps_chart_kwargs(valg, vis_eps)
             spec = lag_chart_lwc(serie, res, PERIODER_VALG[periode],
                                  vis_ma=vis_ma, vis_52u=vis_52u, vis_vcp=vis_vcp,
                                  vis_7av7=vis_7av7, vis_hist=vis_hist, vis_golden=vis_golden,
                                  vis_rs_rating=vis_rs_rating, rs_rating=_rs_serie,
                                  vis_indeks=vis_indeks, indeks=_indeks, indeks_navn=BORS.benchmark,
-                                 ukentlig=ukentlig, pos=pos, morkt=MORKT, tittel=valg,
-                                 vis_eps=vis_eps, eps_bars=_eps_bars, oms_bars=_oms_bars,
-                                 graf_basis=_graf_basis, graf_valuta=_graf_valuta)
+                                 ukentlig=ukentlig, pos=pos, morkt=MORKT, tittel=valg, **_eps_kw)
             if spec is None:
                 st.info("Klarte ikke bygge chartet for denne aksjen.")
             else:
@@ -2235,11 +2257,15 @@ with fane2:
                            "🔴 stiplet rød = stop · 🟢/🔴 pil = ble/mistet 7/7. Svake stiplede "
                            "gull-streker = historiske brudd (ubiased).")
                 if vis_eps:
-                    _basis_ord = "kvartalsvis" if _graf_basis == "kvartal" else "årlig"
-                    _val = f" ({_graf_valuta})" if _graf_valuta else ""
-                    st.caption(f"💰 Nederste rute: {_basis_ord} **omsetning** (blå linje) og "
-                               f"**resultat**{_val} (søyler – grønn overskudd, rød underskudd). "
-                               "Snappet til nærmeste handelsdag. Tom = Yahoo mangler regnskap.")
+                    _basis_ord = "kvartalsvis" if _eps_kw.get("graf_basis") == "kvartal" else "årlig"
+                    _val = f" ({_eps_kw.get('graf_valuta')})" if _eps_kw.get("graf_valuta") else ""
+                    if _eps_kw.get("eps_bars") or _eps_kw.get("oms_bars"):
+                        st.caption(f"💰 Nederste rute: {_basis_ord} **omsetning** (blå linje) og "
+                                   f"**resultat**{_val} (søyler – grønn overskudd, rød underskudd). "
+                                   "Snappet til nærmeste handelsdag.")
+                    else:
+                        st.info(f"💰 Yahoo har ingen regnskapstall for {valg} – ingen EPS-rute å vise "
+                                "(vanlig for mindre Growth/Expand-aksjer).")
                 vis_vcp_boks(res)
                 fundamenta_seksjon(valg, f"chart_{valg}")
                 st.divider()
@@ -2289,6 +2315,9 @@ with fane3:
                                                  help="Egen rute under chartet. Hvordan skanne-tallet "
                                                       "(relativ styrke mot universet) har beveget seg. "
                                                       "Kun for aksjer i universet. Grønt over 70 = sterk.")
+                    vis_eps3 = st.checkbox("💰 Omsetning/resultat (EPS)", value=False, key="sok_eps",
+                                           help="Egen rute: kvartalsvis/årlig omsetning (blå linje) og "
+                                                "resultat (søyler – grønn overskudd, rød underskudd).")
                 if not HAR_LWC:
                     st.warning("Chart-komponenten er ikke lastet i dette miljøet ennå.")
                 else:
@@ -2305,11 +2334,12 @@ with fane3:
                                           vis_7av7=vis_7av7_3, vis_hist=vis_hist3, vis_golden=vis_golden3,
                                           vis_rs_rating=vis_rs_rating3, rs_rating=_rs_serie3,
                                           vis_indeks=vis_indeks3, indeks=_indeks3, indeks_navn=BORS.benchmark,
-                                          ukentlig=ukentlig3, pos=pos3, morkt=MORKT, tittel=sok)
+                                          ukentlig=ukentlig3, pos=pos3, morkt=MORKT, tittel=sok,
+                                          **_eps_chart_kwargs(sok, vis_eps3))
                     if spec3 is not None:
                         renderLightweightCharts(
                             spec3,
-                            key=f"sok_{sok}_{periode3}_{tidsramme3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{vis_rs_rating3}{vis_indeks3}{pos_suffix3}_{TEMA}")
+                            key=f"sok_{sok}_{periode3}_{tidsramme3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{vis_rs_rating3}{vis_indeks3}{vis_eps3}{pos_suffix3}_{TEMA}")
                 vis_vcp_boks(res)
                 fundamenta_seksjon(sok, f"sok_{sok}")
                 st.divider()
