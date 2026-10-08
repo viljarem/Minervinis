@@ -255,31 +255,46 @@ def hent_fundamenta_cached(ticker: str) -> dict:
     return fundamenta.hent_fundamenta(ticker)
 
 
+def _har_regnskap(f: dict) -> bool:
+    """True hvis fundamenta-dicten faktisk har regnskapstall (ikke et tomt svar)."""
+    return bool(f and (f.get("oms_verdier") or f.get("eps_verdier")
+                       or f.get("kvartal") or f.get("aar")))
+
+
 def hent_fundamenta_rikt(ticker: str) -> dict:
     """Full fundamenta for ÉN aksje, robust mot cache-forgiftning fra bulk-prefetch.
 
     prefetch_fund_scores henter fundamenta for HELE universet ved skann. Yahoo
-    rate-limiter den bulk-runden, så mange tickere får et TOMT svar bufret i 12 t.
-    Når du så åpner ett chart og vil se EPS/omsetning, ville den tomme bufferen gitt
-    ingen delgraf. Her sjekker vi om den bufrede versjonen mangler regnskapstall – og
-    henter i så fall FERSKT for nettopp denne ene aksjen (ingen rate-limit-risiko på
-    ett enkelt kall) og lagrer det i session_state så det er raskt ved re-render.
+    rate-limiter den bulk-runden, så mange tickere får et TOMT svar bufret i 12 t
+    (både i @st.cache_data OG tidligere i vår egen session-buffer). Her er vi
+    konsekvente:
+      • Vi cacher ALDRI et tomt svar i session_state – da ville ett uheldig
+        rate-limitet forsøk låst aksjen til «ingen data» resten av økta.
+      • Har den bufrede (12 t) versjonen regnskap, bruker vi den.
+      • Ellers henter vi FERSKT for nettopp denne ene aksjen (ett kall = ingen
+        rate-limit-risiko), og buster den forgiftede 12 t-cachen med et nytt,
+        gyldig svar via .clear()+varming er ikke mulig per nøkkel, så vi lagrer det
+        gode svaret i vår egen session-buffer som alltid sjekkes først.
     """
-    fersk = st.session_state.setdefault("fund_rik", {})
-    if ticker in fersk:
-        return fersk[ticker]
+    god = st.session_state.setdefault("fund_rik", {})
+    if ticker in god:                      # kun GYLDIGE svar havner her
+        return god[ticker]
+
     f = hent_fundamenta_cached(ticker)
-    har_regnskap = bool((f.get("oms_verdier") or f.get("eps_verdier")
-                         or f.get("kvartal") or f.get("aar")))
-    if not har_regnskap:
-        try:
-            f2 = fundamenta.hent_fundamenta(ticker)
-            if (f2.get("oms_verdier") or f2.get("eps_verdier")
-                    or f2.get("kvartal") or f2.get("aar")):
-                f = f2
-        except Exception:
-            pass
-    fersk[ticker] = f
+    if _har_regnskap(f):
+        god[ticker] = f
+        return f
+
+    # Bufret svar var tomt (sannsynligvis rate-limitet under bulk-skann) – prøv ferskt.
+    try:
+        f2 = fundamenta.hent_fundamenta(ticker)
+        if _har_regnskap(f2):
+            god[ticker] = f2               # lagre KUN gyldig svar
+            return f2
+    except Exception:
+        pass
+
+    # Fortsatt tomt: IKKE cache – returner det vi har, så neste render prøver igjen.
     return f
 
 
