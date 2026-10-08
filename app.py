@@ -1212,33 +1212,49 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                     kand = [ti for ti in t if ti <= dato_iso]
                     return kand[-1] if kand else (t[0] if t else None)
 
+                # Indeks for hver handelsdag, så vi kan fylle VERDIEN utover hele
+                # perioden (rapportdato → neste rapportdato) i stedet for én tynn
+                # endags-søyle. Det gir brede, lesbare kvartals-/årsblokker.
+                _idx = {ti: k for k, ti in enumerate(t)}
+
+                def _snap_par(bars):
+                    """(snap_tid, verdi) per rapport, sortert og deduplisert på tid."""
+                    par = []
+                    for dato_iso, verdi in (bars or []):
+                        ti = _snap(dato_iso)
+                        if ti is not None:
+                            par.append((ti, float(verdi)))
+                    par.sort(key=lambda x: x[0])
+                    sett, rene = set(), []
+                    for ti, v in par:
+                        if ti not in sett:
+                            sett.add(ti)
+                            rene.append((ti, v))
+                    return rene
+
+                def _blokker(par, med_farge=False):
+                    """Fyll hver rapports verdi fra sin dato til NESTE rapports dato.
+
+                    Resultat: en verdi på HVER handelsdag i perioden, så histogrammet
+                    tegner en solid, bred blokk per kvartal/år i stedet for en syl-tynn
+                    endags-søyle. Siste rapport fylles fram til vinduets slutt.
+                    """
+                    ut = []
+                    for n, (start_ti, verdi) in enumerate(par):
+                        start_k = _idx.get(start_ti, 0)
+                        slutt_k = _idx.get(par[n + 1][0], len(t)) if n + 1 < len(par) else len(t)
+                        v = round(verdi, 2)
+                        for k in range(start_k, slutt_k):
+                            pkt = {"time": t[k], "value": v}
+                            if med_farge:
+                                pkt["color"] = farge_opp if verdi >= 0 else farge_ned
+                            ut.append(pkt)
+                    return ut
+
                 farge_opp = "rgba(38,166,154,0.7)"
                 farge_ned = "rgba(239,83,80,0.7)"
-                eps_data = []
-                for dato_iso, verdi in (eps_bars or []):
-                    ti = _snap(dato_iso)
-                    if ti is None:
-                        continue
-                    eps_data.append({"time": ti, "value": round(float(verdi), 2),
-                                     "color": farge_opp if verdi >= 0 else farge_ned})
-                # Dedup på tid (LWC krever unike, stigende tider).
-                sett_t, eps_rene = set(), []
-                for pkt in sorted(eps_data, key=lambda x: x["time"]):
-                    if pkt["time"] not in sett_t:
-                        sett_t.add(pkt["time"])
-                        eps_rene.append(pkt)
-
-                oms_data = []
-                for dato_iso, verdi in (oms_bars or []):
-                    ti = _snap(dato_iso)
-                    if ti is None:
-                        continue
-                    oms_data.append({"time": ti, "value": round(float(verdi), 2)})
-                sett_o, oms_rene = set(), []
-                for pkt in sorted(oms_data, key=lambda x: x["time"]):
-                    if pkt["time"] not in sett_o:
-                        sett_o.add(pkt["time"])
-                        oms_rene.append(pkt)
+                eps_rene = _blokker(_snap_par(eps_bars), med_farge=True)
+                oms_rene = _blokker(_snap_par(oms_bars))
 
                 eps_serier = []
                 # Anker-serie: «whitespace»-punkter (tid uten verdi) for HELE vinduet,
@@ -1260,10 +1276,11 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                 if oms_rene:
                     eps_serier.append({
                         "type": "Line", "data": oms_rene,
-                        "options": {"color": "#42a5f5", "lineWidth": 2, "lineStyle": 0,
+                        "options": {"color": "#42a5f5", "lineWidth": 2,
+                                    "lineType": 1,          # WithSteps – flat gjennom hver periode
                                     "priceFormat": {"type": "volume"},
                                     "priceLineVisible": False, "lastValueVisible": True,
-                                    "pointMarkersVisible": True, "title": "Omsetning"}})
+                                    "pointMarkersVisible": False, "title": "Omsetning"}})
                 if len(eps_serier) > 1:          # mer enn bare anker-serien
                     eps_chart = {
                         "height": 170,
