@@ -264,6 +264,20 @@ def hent_sektor_cached(ticker: str) -> dict:
     return _fn(ticker)
 
 
+@st.cache_data(ttl=86400, show_spinner=False)   # aksjer utestående endrer seg sjelden
+def hent_aksjeinfo_cached(ticker: str) -> dict:
+    """Bufret, lettvekts aksjer-utestående + sektor (KUN t.info – 1 nettkall).
+
+    Egen, lett sti for Shares/MCAP-kolonnene, så de IKKE blir avhengige av den tunge
+    hent_fundamenta (som laster to resultatregnskap og rate-limites lett ved bulk).
+    getattr-fallback om Streamlit Cloud kjører en eldre, bufret modulversjon.
+    """
+    _fn = getattr(fundamenta, "hent_aksjeinfo", None)
+    if _fn is None:
+        return {"ticker": ticker, "utestaende": None, "sektor": None, "industri": None}
+    return _fn(ticker)
+
+
 @st.cache_data(show_spinner=False)
 def sektor_oppslag(bors_navn: str, tickers: tuple[str, ...]) -> dict[str, str]:
     """Henter sektor for alle tickere og returnerer et {ticker: sektor}-oppslag.
@@ -780,7 +794,10 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                   vis_indeks: bool = False, indeks: pd.DataFrame | None = None,
                   indeks_navn: str = "indeks",
                   ukentlig: bool = False, hoyde: int = 620, pos: dict | None = None,
-                  morkt: bool = False, tittel: str = "") -> list | None:
+                  morkt: bool = False, tittel: str = "",
+                  vis_eps: bool = False, eps_bars: list | None = None,
+                  oms_bars: list | None = None, graf_basis: str = "kvartal",
+                  graf_valuta: str = "") -> list | None:
     """Bygger data-spesifikasjonen for lightweight-charts.
 
     Tar med alt det gamle Plotly-chartet hadde: candles, MA50/150/200, 52-ukers
@@ -1115,6 +1132,76 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                     charts.append({"chart": rs_chart, "series": rs_serie})
             except Exception:
                 pass
+
+        # --- Omsetning + resultat (EPS) som egen delgraf ---
+        # Søyler = kvartalsvis (eller årlig) resultat/netto (grønn ved overskudd,
+        # rød ved underskudd) + omsetning som linje. Lar deg SE om bunnlinjen vokser
+        # – Minervinis «andre bein». Fundamentaldata ligger på rapportdatoer, så vi
+        # snapper hver verdi til nærmeste handelsdag i chartets vindu.
+        if vis_eps and (eps_bars or oms_bars):
+            try:
+                def _snap(dato_iso):
+                    # Nærmeste chart-dato (handelsdag) ≤ rapportdatoen, ellers første.
+                    kand = [ti for ti in t if ti <= dato_iso]
+                    return kand[-1] if kand else (t[0] if t else None)
+
+                farge_opp = "rgba(38,166,154,0.7)"
+                farge_ned = "rgba(239,83,80,0.7)"
+                eps_data = []
+                for dato_iso, verdi in (eps_bars or []):
+                    ti = _snap(dato_iso)
+                    if ti is None:
+                        continue
+                    eps_data.append({"time": ti, "value": round(float(verdi), 2),
+                                     "color": farge_opp if verdi >= 0 else farge_ned})
+                # Dedup på tid (LWC krever unike, stigende tider).
+                sett_t, eps_rene = set(), []
+                for pkt in sorted(eps_data, key=lambda x: x["time"]):
+                    if pkt["time"] not in sett_t:
+                        sett_t.add(pkt["time"])
+                        eps_rene.append(pkt)
+
+                oms_data = []
+                for dato_iso, verdi in (oms_bars or []):
+                    ti = _snap(dato_iso)
+                    if ti is None:
+                        continue
+                    oms_data.append({"time": ti, "value": round(float(verdi), 2)})
+                sett_o, oms_rene = set(), []
+                for pkt in sorted(oms_data, key=lambda x: x["time"]):
+                    if pkt["time"] not in sett_o:
+                        sett_o.add(pkt["time"])
+                        oms_rene.append(pkt)
+
+                eps_serier = []
+                if eps_rene:
+                    eps_serier.append({
+                        "type": "Histogram", "data": eps_rene,
+                        "options": {"priceFormat": {"type": "volume"},
+                                    "priceLineVisible": False, "lastValueVisible": True,
+                                    "title": "Resultat"}})
+                if oms_rene:
+                    eps_serier.append({
+                        "type": "Line", "data": oms_rene,
+                        "options": {"color": "#42a5f5", "lineWidth": 2, "lineStyle": 0,
+                                    "priceFormat": {"type": "volume"},
+                                    "priceLineVisible": False, "lastValueVisible": True,
+                                    "pointMarkersVisible": True, "title": "Omsetning"}})
+                if eps_serier:
+                    eps_chart = {
+                        "height": 170,
+                        "layout": {"background": {"type": "solid", "color": bg},
+                                   "textColor": tekstfarge},
+                        "grid": {"vertLines": {"color": grid},
+                                 "horzLines": {"color": grid}},
+                        "rightPriceScale": {"scaleMargins": {"top": 0.12, "bottom": 0.08},
+                                            "borderVisible": False},
+                        "timeScale": {"borderVisible": False, "rightOffset": 4},
+                        "crosshair": {"mode": 0},
+                    }
+                    charts.append({"chart": eps_chart, "series": eps_serier})
+            except Exception:
+                pass
         return charts
     except Exception:
         return None
@@ -1226,18 +1313,16 @@ def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None, r
         )
     )
     
-    # Shares og MCAP: leses fra samme fundamenta-buffer som Fund-kolonnen (allerede
-    # varmet av prefetch_fund_scores). hent_fundamenta_cached er @st.cache_data, så
-    # dette er ett bufret oppslag per ticker – ingen nye nettkall her. Vi cacher IKKE
-    # None i session_state (det låste tidligere kolonnene til «—» for hele økta selv
-    # etter at Yahoo-dataene kom på plass).
+    # Shares og MCAP: hentes via en LETTVEKTS, info-only sti (hent_aksjeinfo_cached)
+    # som KUN kaller t.info. Det gjør kolonnene uavhengige av den tunge hent_fundamenta
+    # (to resultatregnskap per ticker) som Yahoo rate-limiter lett ved bulk – det var
+    # grunnen til at kolonnene ble tomme. Vi cacher IKKE None i session_state.
     shares_liste = []
     mcap_liste = []
     for t, pris in zip(df["ticker"], df["pris"]):
         sh = None
         try:
-            fund = hent_fundamenta_cached(t)
-            sh = (fund.get("struktur") or {}).get("utestaende")
+            sh = (hent_aksjeinfo_cached(t) or {}).get("utestaende")
         except Exception:
             sh = None
         shares_liste.append(_stor_tall(sh) if sh else "—")
@@ -2065,6 +2150,12 @@ with fane2:
                                              "Persentil mot DETTE universet, ikke globalt IBD-tall. "
                                              "Grønt over 70 = blant de sterkeste, rødt under. "
                                              "Høyre kant = dagens RS-rating.")
+            vis_eps = st.checkbox("💰 Omsetning/resultat (EPS)", value=False,
+                                  key="chart_eps",
+                                  help="Egen rute under chartet med kvartalsvis (eller årlig) "
+                                       "omsetning (blå linje) og resultat/bunnlinje (søyler – grønn "
+                                       "overskudd, rød underskudd). Minervinis «andre bein»: vokser "
+                                       "inntjeningen? Hentes fra Yahoo (små aksjer kan mangle data).")
         serie = datamod.serie_for(last_priser(bors_navn, versjon), valg)
         res = screener.analyser_ticker(serie, valg, konfig.PRESETS[aktiv_preset_navn])
         if res is None:
@@ -2089,21 +2180,38 @@ with fane2:
                 if valg in _rs_mat.columns:
                     _rs_serie = _rs_mat[valg].dropna()
             _indeks = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark) if vis_indeks else None
+            _eps_bars = _oms_bars = None
+            _graf_basis = "kvartal"
+            _graf_valuta = ""
+            if vis_eps:
+                _f = hent_fundamenta_cached(valg)
+                _eps_bars = _f.get("eps_verdier")
+                _oms_bars = _f.get("oms_verdier")
+                _graf_basis = _f.get("graf_basis", "kvartal")
+                _graf_valuta = _f.get("valuta") or ""
             spec = lag_chart_lwc(serie, res, PERIODER_VALG[periode],
                                  vis_ma=vis_ma, vis_52u=vis_52u, vis_vcp=vis_vcp,
                                  vis_7av7=vis_7av7, vis_hist=vis_hist, vis_golden=vis_golden,
                                  vis_rs_rating=vis_rs_rating, rs_rating=_rs_serie,
                                  vis_indeks=vis_indeks, indeks=_indeks, indeks_navn=BORS.benchmark,
-                                 ukentlig=ukentlig, pos=pos, morkt=MORKT, tittel=valg)
+                                 ukentlig=ukentlig, pos=pos, morkt=MORKT, tittel=valg,
+                                 vis_eps=vis_eps, eps_bars=_eps_bars, oms_bars=_oms_bars,
+                                 graf_basis=_graf_basis, graf_valuta=_graf_valuta)
             if spec is None:
                 st.info("Klarte ikke bygge chartet for denne aksjen.")
             else:
-                noekkel = f"chart_{valg}_{periode}_{tidsramme}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{vis_golden}{vis_rs_rating}{vis_indeks}{pos_suffix}_{TEMA}"
+                noekkel = f"chart_{valg}_{periode}_{tidsramme}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{vis_golden}{vis_rs_rating}{vis_indeks}{vis_eps}{pos_suffix}_{TEMA}"
                 renderLightweightCharts(spec, key=noekkel)
                 st.caption("💡 Dra sidelengs, rull musehjulet for å zoome, dra loddrett på "
                            "prisaksen for å strekke høyden. 🟡 **Kraftig gull = aktiv pivot** · "
                            "🔴 stiplet rød = stop · 🟢/🔴 pil = ble/mistet 7/7. Svake stiplede "
                            "gull-streker = historiske brudd (ubiased).")
+                if vis_eps:
+                    _basis_ord = "kvartalsvis" if _graf_basis == "kvartal" else "årlig"
+                    _val = f" ({_graf_valuta})" if _graf_valuta else ""
+                    st.caption(f"💰 Nederste rute: {_basis_ord} **omsetning** (blå linje) og "
+                               f"**resultat**{_val} (søyler – grønn overskudd, rød underskudd). "
+                               "Snappet til nærmeste handelsdag. Tom = Yahoo mangler regnskap.")
                 vis_vcp_boks(res)
                 fundamenta_seksjon(valg, f"chart_{valg}")
                 st.divider()

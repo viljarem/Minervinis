@@ -258,3 +258,26 @@ def test_vekst_serie_aarlig_regner_yoy_mellom_aar():
     serie = fu.vekst_serie(df, ["Total Revenue"], tol_dager=120)
     verdier = [v for _, v in serie]
     assert verdier == [10.0, 27.3, 42.9]       # 110/100, 140/110, 200/140
+
+
+# --- belop_serie() (rå verdier til EPS-delgrafen) ------------------------
+def test_belop_serie_returnerer_dato_verdi_par():
+    datoer = [pd.Timestamp("2025-03-31"), pd.Timestamp("2025-06-30"),
+              pd.Timestamp("2025-09-30")]
+    df = pd.DataFrame([[100.0, 120.0, 150.0]], index=["Total Revenue"], columns=datoer)
+    serie = fu.belop_serie(df, ["Total Revenue"])
+    assert serie == [("2025-03-31", 100.0), ("2025-06-30", 120.0), ("2025-09-30", 150.0)]
+
+
+def test_belop_serie_droppar_nan_og_begrenser_antall():
+    datoer = pd.date_range("2024-03-31", periods=10, freq="QE")
+    df = pd.DataFrame([list(range(10))], index=["Total Revenue"], columns=datoer)
+    serie = fu.belop_serie(df, ["Total Revenue"], maks=3)
+    assert len(serie) == 3                      # kun de 3 ferskeste
+    assert [v for _, v in serie] == [7.0, 8.0, 9.0]
+
+
+def test_belop_serie_manglende_rad_gir_tom():
+    df = pd.DataFrame([[1, 2]], index=["Noe Annet"],
+                      columns=[pd.Timestamp("2025-03-31"), pd.Timestamp("2025-06-30")])
+    assert fu.belop_serie(df, ["Total Revenue"]) == []

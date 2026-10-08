@@ -131,6 +131,21 @@ def _dato_str(dato) -> str | None:
         return None
 
 
+def belop_serie(df: pd.DataFrame | None, navn_liste: list[str],
+                maks: int = 8) -> list[tuple[str, float]]:
+    """Rå periodeverdier (omsetning eller resultat) som (dato_iso, verdi), eldst → nyest.
+
+    Brukt til omsetning/EPS-delgrafen under kurschartet, der vi plotter selve
+    beløpene (ikke bare YoY-vekst). Tom liste hvis raden mangler helt.
+    """
+    serie = _rad_serie(df, navn_liste)
+    if serie is None:
+        return []
+    serie = serie.dropna().sort_index()
+    ut = [(_dato_str(d), float(v)) for d, v in serie.items() if pd.notna(v)]
+    return ut[-maks:]
+
+
 # ---------------------------------------------------------------------------
 # Vekst-TREND over flere kvartaler (akselererer veksten? – ren matematikk)
 # ---------------------------------------------------------------------------
@@ -336,6 +351,37 @@ def hent_sektor(ticker: str) -> dict:
     }
 
 
+def hent_aksjeinfo(ticker: str) -> dict:
+    """Lettvekts henting av aksjer utestående + sektor (KUN t.info, 1 nettkall).
+
+    Helt adskilt fra den tunge hent_fundamenta (som også laster resultatregnskap).
+    Brukes til Shares/MCAP-kolonnene, som da ikke blir avhengige av de skjøre
+    income-statement-kallene (Yahoo rate-limiter dem lett ved bulk-henting). Returnerer
+    {"ticker", "utestaende", "sektor", "industri"} – utestaende er None hvis Yahoo
+    mangler data. Alt pakket i try/except.
+    """
+    tom = {"ticker": (ticker or "").strip().upper(),
+           "utestaende": None, "sektor": None, "industri": None}
+    tk = tom["ticker"]
+    if not tk:
+        return tom
+    try:
+        info = yf.Ticker(tk).info or {}
+    except Exception:
+        return tom
+    try:
+        sh = info.get("sharesOutstanding")
+        sh = None if sh is None else float(sh)
+    except (TypeError, ValueError):
+        sh = None
+    return {
+        "ticker": tk,
+        "utestaende": sh,
+        "sektor": (info.get("sector") or "").strip() or None,
+        "industri": (info.get("industry") or "").strip() or None,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Hovedfunksjon (henter fra nettet – alt pakket i try/except)
 # ---------------------------------------------------------------------------
@@ -366,6 +412,8 @@ def hent_fundamenta(ticker: str) -> dict:
     q = None
     oms_serie: list[tuple[str, float]] = []
     eps_serie: list[tuple[str, float]] = []
+    oms_verdier: list[tuple[str, float]] = []
+    eps_verdier: list[tuple[str, float]] = []
     try:
         q = t.quarterly_income_stmt
         s, i = finn_periode_par(q)
@@ -373,6 +421,9 @@ def hent_fundamenta(ticker: str) -> dict:
         # Vekst-trend over flere kvartaler (akselererer veksten?).
         oms_serie = vekst_serie(q, _RAD_OMSETNING)
         eps_serie = vekst_serie(q, _RAD_RESULTAT)
+        # Rå beløp til omsetning/EPS-delgrafen.
+        oms_verdier = belop_serie(q, _RAD_OMSETNING)
+        eps_verdier = belop_serie(q, _RAD_RESULTAT)
     except Exception:
         kvartal = None
 
@@ -396,6 +447,19 @@ def hent_fundamenta(ticker: str) -> dict:
             oms_serie, eps_serie, akse_basis = aar_oms, aar_eps, "år"
     akselerasjon = vekst_akselerasjon(oms_serie)
 
+    # Beløpsgrafen følger samme grunnlag som trenden (kvartal/år).
+    graf_basis = akse_basis
+    if akse_basis == "år" and a is not None:
+        oms_verdier = belop_serie(a, _RAD_OMSETNING)
+        eps_verdier = belop_serie(a, _RAD_RESULTAT)
+    if len(oms_verdier) < 2 and a is not None:
+        # Kvartal var for tynt også for beløp – prøv årstall uansett.
+        a_oms = belop_serie(a, _RAD_OMSETNING)
+        if len(a_oms) >= 2:
+            oms_verdier = a_oms
+            eps_verdier = belop_serie(a, _RAD_RESULTAT)
+            graf_basis = "år"
+
     tilgjengelig = bool(kvartal or aar or struktur.get("utestaende"))
     return {
         "tilgjengelig": tilgjengelig,
@@ -410,4 +474,7 @@ def hent_fundamenta(ticker: str) -> dict:
         "vekst_eps_serie": eps_serie,
         "akselerasjon": akselerasjon,
         "akse_basis": akse_basis,
+        "oms_verdier": oms_verdier,
+        "eps_verdier": eps_verdier,
+        "graf_basis": graf_basis,
     }
