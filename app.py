@@ -1241,6 +1241,16 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                         oms_rene.append(pkt)
 
                 eps_serier = []
+                # Anker-serie: «whitespace»-punkter (tid uten verdi) for HELE vinduet,
+                # så delgrafens tidsakse spenner nøyaktig samme datoer som hovedchartet
+                # over – ellers auto-zoomer den til kun de få rapportdatoene og havner ut
+                # av takt. Tegner ingenting selv, utvider bare tidsaksen.
+                anker = [{"time": ti} for ti in t]
+                eps_serier.append({
+                    "type": "Line", "data": anker,
+                    "options": {"lastValueVisible": False, "priceLineVisible": False,
+                                "crosshairMarkerVisible": False,
+                                "color": "rgba(0,0,0,0)", "lineWidth": 1}})
                 if eps_rene:
                     eps_serier.append({
                         "type": "Histogram", "data": eps_rene,
@@ -1254,7 +1264,7 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                                     "priceFormat": {"type": "volume"},
                                     "priceLineVisible": False, "lastValueVisible": True,
                                     "pointMarkersVisible": True, "title": "Omsetning"}})
-                if eps_serier:
+                if len(eps_serier) > 1:          # mer enn bare anker-serien
                     eps_chart = {
                         "height": 170,
                         "layout": {"background": {"type": "solid", "color": bg},
@@ -1263,7 +1273,8 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                                  "horzLines": {"color": grid}},
                         "rightPriceScale": {"scaleMargins": {"top": 0.12, "bottom": 0.08},
                                             "borderVisible": False},
-                        "timeScale": {"borderVisible": False, "rightOffset": 4},
+                        "timeScale": {"borderVisible": False, "rightOffset": 4,
+                                      "fixLeftEdge": True, "fixRightEdge": True},
                         "crosshair": {"mode": 0},
                     }
                     charts.append({"chart": eps_chart, "series": eps_serier})
