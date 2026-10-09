@@ -42,6 +42,7 @@ UNIVERS_FIL = f"{DATA_MAPPE}/univers.txt"              # DINE egne ekstra ticker
 OSLOBORS_CACHE_FIL = f"{DATA_MAPPE}/univers_oslobors.txt"  # auto-hentet Oslo Børs-liste (+ fallback)
 SISTE_LISTE_FIL = f"{DATA_MAPPE}/siste_liste.json"     # forrige screening (til e-post-sammenligning)
 SIST_OPPDATERT_FIL = f"{DATA_MAPPE}/sist_oppdatert.json"  # NÅR roboten sist hentet data (norsk tid)
+AKSJEINFO_FIL = f"{DATA_MAPPE}/aksjeinfo.json"          # aksjer utestående + sektor (hentet av roboten)
 
 # ---------------------------------------------------------------------------
 # Likviditetsfilter (fjern aksjer det handles for lite i)
@@ -148,6 +149,7 @@ class Bors:
     valuta_navn: str          # ISO-navn ("NOK" / "USD")
     bruk_manuelle: bool = False  # ta med DINE ekstra tickere fra UNIVERS_FIL?
     benchmark: str | None = None  # hovedindeks (kun lagret som referanse)
+    aksjeinfo_fil: str = f"{DATA_MAPPE}/aksjeinfo.json"  # shares + sektor (robot-hentet)
 
 
 OSLO_BORS = Bors(
@@ -160,6 +162,7 @@ OSLO_BORS = Bors(
     valuta="kr", valuta_navn="NOK",
     bruk_manuelle=True,                            # dine egne ekstra tickere gjelder Oslo
     benchmark=BENCHMARK,
+    aksjeinfo_fil=AKSJEINFO_FIL,
 )
 SP500 = Bors(
     navn="S&P 500 (USA)",
@@ -171,6 +174,7 @@ SP500 = Bors(
     valuta="$", valuta_navn="USD",
     bruk_manuelle=False,
     benchmark="^GSPC",
+    aksjeinfo_fil=f"{DATA_MAPPE}/aksjeinfo_sp500.json",
 )
 
 # Rekkefølgen her styrer rekkefølgen i børsvelgeren (Oslo først = standard).

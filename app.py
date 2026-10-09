@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from motor import konfig, data as datamod, fundamenta, indikatorer, minervini, posisjon, screener, sektor, univers, vcp
+from motor import konfig, data as datamod, fundamenta, indikatorer, minervini, posisjon, screener, sektor, univers, vcp, aksjeinfo
 
 # TradingViews lightweight-charts (testfane). Pakket i try/except så appen aldri
 # krasjer om komponenten ikke er installert i miljøet (f.eks. rett etter utrulling).
@@ -345,21 +345,55 @@ def hent_aksjeinfo_cached(ticker: str) -> dict:
     return _fn(ticker)
 
 
+def _aksjeinfo_versjon(bors_navn: str) -> float:
+    """Mtime for aksjeinfo-fila – frisker opp bufferet når roboten skriver ny fil."""
+    sti = konfig.BORSER[bors_navn].aksjeinfo_fil
+    return os.path.getmtime(sti) if os.path.exists(sti) else 0.0
+
+
+@st.cache_data(show_spinner=False)
+def last_aksjeinfo(bors_navn: str, versjon: float) -> dict[str, dict]:
+    """Leser robot-hentet aksjeinfo (shares + sektor) fra fil. Tom dict om den mangler.
+
+    Dette er NØKKELEN til at Shares/MCAP og sektor virker på Streamlit Cloud:
+    natt-roboten henter tallene i ro og mak og lagrer dem til fil (motor/aksjeinfo.py),
+    så nettsiden slipper å spørre Yahoo ved render – der rate-limiter Yahoo de delte
+    sky-IP-ene så hardt at bare 2-3 aksjer fikk svar.
+    """
+    _fn = getattr(aksjeinfo, "last", None)
+    if _fn is None:
+        return {}
+    return _fn(konfig.BORSER[bors_navn].aksjeinfo_fil)
+
+
 @st.cache_data(show_spinner=False)
 def sektor_oppslag(bors_navn: str, tickers: tuple[str, ...]) -> dict[str, str]:
     """Henter sektor for alle tickere og returnerer et {ticker: sektor}-oppslag.
 
-    Cachet på (børs, ticker-sett), så den kjøres bare én gang per universe-utvalg.
-    Tickere uten kjent sektor hos Yahoo utelates (de havner i «Ukjent»-bøtta i
-    sektor-modulen). Viser en progressbar første gang siden det er mange nettkall;
-    etterpå er hver ticker 24 t-cachet, så det går momentant.
+    Leser FØRST robot-hentet aksjeinfo-fil (ingen Yahoo-kall – virker på Cloud).
+    Faller bare tilbake til live Yahoo-henting for tickere som mangler i fila
+    (typisk helt nye noteringer roboten ikke har rukket å hente ennå).
     """
     oppslag: dict[str, str] = {}
     if not tickers:
         return oppslag
-    _bar = st.progress(0.0, text="Henter sektorer fra Yahoo (første gang) ...")
-    n = len(tickers)
-    for i, t in enumerate(tickers, start=1):
+
+    fil = last_aksjeinfo(bors_navn, _aksjeinfo_versjon(bors_navn))
+    mangler = []
+    for t in tickers:
+        s = (fil.get(t) or {}).get("sektor")
+        if s:
+            oppslag[t] = s
+        else:
+            mangler.append(t)
+
+    # Alt dekket av fila? Ferdig – null nettkall.
+    if not mangler:
+        return oppslag
+
+    _bar = st.progress(0.0, text="Henter sektorer fra Yahoo (nye aksjer) ...")
+    n = len(mangler)
+    for i, t in enumerate(mangler, start=1):
         try:
             s = hent_sektor_cached(t).get("sektor")
             if s:
@@ -1417,18 +1451,21 @@ def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None, r
         )
     )
     
-    # Shares og MCAP: hentes via en LETTVEKTS, info-only sti (hent_aksjeinfo_cached)
-    # som KUN kaller t.info. Det gjør kolonnene uavhengige av den tunge hent_fundamenta
-    # (to resultatregnskap per ticker) som Yahoo rate-limiter lett ved bulk – det var
-    # grunnen til at kolonnene ble tomme. Vi cacher IKKE None i session_state.
+    # Shares og MCAP: leses FØRST fra robot-hentet aksjeinfo-fil (null Yahoo-kall –
+    # virker derfor på Streamlit Cloud, der Yahoo rate-limiter de delte IP-ene så
+    # hardt at bare 2-3 aksjer fikk svar ved live-henting). Faller bare tilbake til
+    # live-henting for tickere som mangler i fila (f.eks. helt nye noteringer).
+    _bn = st.session_state.get("bors_navn", "Oslo Børs")
+    _ai_fil = last_aksjeinfo(_bn, _aksjeinfo_versjon(_bn))
     shares_liste = []
     mcap_liste = []
     for t, pris in zip(df["ticker"], df["pris"]):
-        sh = None
-        try:
-            sh = (hent_aksjeinfo_cached(t) or {}).get("utestaende")
-        except Exception:
-            sh = None
+        sh = (_ai_fil.get(t) or {}).get("utestaende")
+        if not sh:
+            try:
+                sh = (hent_aksjeinfo_cached(t) or {}).get("utestaende")
+            except Exception:
+                sh = None
         shares_liste.append(_stor_tall(sh) if sh else "—")
         # MCAP = shares × pris (i native valuta)
         if sh and pris and sh > 0:

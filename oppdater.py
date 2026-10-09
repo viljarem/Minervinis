@@ -26,7 +26,7 @@ from email.mime.text import MIMEText
 
 import pandas as pd
 
-from motor import konfig, data as datamod, screener
+from motor import konfig, data as datamod, screener, aksjeinfo
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +153,14 @@ def kjor_bors(bors: "konfig.Bors") -> dict:
     print(f"   Nye: {endringer['nye']}")
     print(f"   Falt ut: {endringer['falt_ut']}")
     print(f"   Ferske brudd: {endringer['ferske_brudd']}")
+
+    print("=== 4) Henter aksjeinfo (shares + sektor) til nettsiden ===")
+    try:
+        tickere = df["ticker"].tolist() if not df.empty else []
+        aksjeinfo.oppdater(bors.aksjeinfo_fil, tickere)
+        print(f"   Lagret aksjeinfo for {len(tickere)} aksjer → {bors.aksjeinfo_fil}")
+    except Exception as e:
+        print(f"   !! Aksjeinfo hoppet over: {e}")
 
     return {"bors": bors, "df": df, "endringer": endringer}
 
