@@ -211,6 +211,67 @@ def hent_live_priser(tickere: tuple[str, ...]) -> dict:
 PERIODER_VALG = {"3 mnd": 63, "6 mnd": 126, "1 år": 252, "2 år": 504,
                  "3 år": 756, "5 år": 1260, "Alt": 100_000}
 
+# Chart-lag som kan slås av/på med pills. (etikett: standard-på?)  Rekkefølgen her
+# styrer rekkefølgen på pillene. Hjelpetekstene vises i caption under pillene.
+CHART_LAG = {
+    "📈 MA 50/150/200": True,
+    "📏 52u høy/lav":    True,
+    "🟡 VCP":            True,
+    "🎯 7/7-markører":   True,
+    "🕯️ Hist. volum":   False,
+    "✚ Golden cross":   False,
+    "📉 Indeks":         False,
+    "💪 RS-rating":      False,
+    "💰 EPS/omsetning":  False,
+    "🔥 TrendScore":     False,
+}
+# Oversetter pille-etikett → det interne vis_*-flagget.
+_LAG_FLAGG = {
+    "📈 MA 50/150/200": "vis_ma",     "📏 52u høy/lav": "vis_52u",
+    "🟡 VCP":           "vis_vcp",    "🎯 7/7-markører": "vis_7av7",
+    "🕯️ Hist. volum":  "vis_hist",   "✚ Golden cross": "vis_golden",
+    "📉 Indeks":        "vis_indeks", "💪 RS-rating":    "vis_rs_rating",
+    "💰 EPS/omsetning": "vis_eps",    "🔥 TrendScore":   "vis_trendscore",
+}
+
+
+def chart_kontroller(prefix: str) -> dict:
+    """Elegante chart-kontroller som matcher hover-charten: periode + tidsramme som
+    segmenterte pille-knapper, og chart-lagene som en rad av av/på-pills i stedet for
+    en popover full av checkbokser. `prefix` holder widget-nøklene unike per fane.
+
+    Returnerer en dict med: periode, ukentlig, klassisk og alle vis_*-flagg.
+    For å rulle tilbake til det gamle oppsettet: bytt kallene i Chart-/Søk-fanen
+    tilbake til de gamle radio/checkbox-blokkene.
+    """
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        periode = st.segmented_control("Periode", list(PERIODER_VALG.keys()),
+                                       default="2 år", key=f"{prefix}_periode")
+        periode = periode or "2 år"
+    with c2:
+        tf = st.segmented_control("Tidsramme", ["Dag", "Uke"], default="Dag",
+                                  key=f"{prefix}_tf",
+                                  help="Uke = ukentlige barer (SMA50 = 50 uker, volum SMA10).")
+        tf = tf or "Dag"
+
+    standard = [lag for lag, paa in CHART_LAG.items() if paa]
+    valgte = st.pills("Chart-lag", list(CHART_LAG.keys()), selection_mode="multi",
+                      default=standard, key=f"{prefix}_lag",
+                      help="Klikk for å slå lag av/på. Færre lag = renere bilde.")
+    valgte = set(valgte or [])
+    st.caption("🕯️ Hist. volum = tidligere volumbrudd · ✚ Golden cross = SMA50×SMA200 · "
+               "📉 Indeks = benchmark oppå chartet · 💪 RS / 🔥 TrendScore / 💰 EPS = egne ruter under.")
+
+    resultat = {flagg: (lag in valgte) for lag, flagg in _LAG_FLAGG.items()}
+    resultat["periode"] = periode
+    resultat["ukentlig"] = tf == "Uke"
+    resultat["klassisk"] = st.toggle(
+        "🧩 Klassisk chart", value=False, key=f"{prefix}_klassisk",
+        help="Faller tilbake til den innebygde chart-komponenten uten den mus-følgende "
+             "legenden. Standard er hover-chartet.")
+    return resultat
+
 
 def vis_vcp_boks(res: dict) -> None:
     """Viser VCP-detaljer under chartet som én pen, skalerbar tabell."""
@@ -2969,49 +3030,15 @@ with fane2:
         st.info("Ingen treff å velge mellom ennå.")
     else:
         valg = st.selectbox("Velg aksje", resultat["ticker"].tolist())
-        _c1, _c2 = st.columns([3, 1])
-        with _c1:
-            periode = st.radio("Periode", list(PERIODER_VALG.keys()), index=3, horizontal=True,
-                               key="periode_chart")
-        with _c2:
-            tidsramme = st.radio("Tidsramme", ["Dag", "Uke"], horizontal=True, key="tf_chart",
-                                 help="Uke = ukentlige barer. Da blir SMA50 = 50 uker og "
-                                      "volumsnittet SMA10 (10 uker).")
-        ukentlig = tidsramme == "Uke"
-        with st.popover("⚙️ Tilpass chartet"):
-            st.caption("Huk av hva du vil se. Færre lag = renere bilde.")
-            vis_ma = st.checkbox("Glidende snitt (MA50/150/200)", value=True, key="chart_ma")
-            vis_52u = st.checkbox("52-ukers høy/lav (grå stiplet)", value=True, key="chart_52u")
-            vis_vcp = st.checkbox("VCP-kontraksjoner (gul zigzag)", value=True, key="chart_vcp")
-            vis_7av7 = st.checkbox("7/7-markører (ble/mistet)", value=True, key="chart_7av7")
-            vis_hist = st.checkbox("Historiske volumbrudd", value=False, key="chart_hist")
-            vis_golden = st.checkbox("Golden cross (SMA50×SMA200)", value=False, key="chart_golden")
-            vis_indeks = st.checkbox(f"📉 Indeks-overlay ({BORS.benchmark})", value=False,
-                                     key="chart_indeks",
-                                     help="Legger indeksen OPPÅ chartet, skalert til å starte likt "
-                                          "med aksjen. Faller indekslinjen mens candlene står støtt, "
-                                          "holdt aksjen seg sterkere enn markedet.")
-            vis_rs_rating = st.checkbox("📈 RS-rating over tid (1–99)", value=False,
-                                        key="chart_rs_rating",
-                                        help="Egen rute under chartet. Viser hvordan skanne-tallet "
-                                             "(IBD-vektet relativ styrke mot hele universet) har beveget seg. "
-                                             "Persentil mot DETTE universet, ikke globalt IBD-tall. "
-                                             "Grønt over 70 = blant de sterkeste, rødt under. "
-                                             "Høyre kant = dagens RS-rating.")
-            vis_eps = st.checkbox("💰 Omsetning/resultat (EPS)", value=False,
-                                  key="chart_eps",
-                                  help="Egen rute under chartet med kvartalsvis (eller årlig) "
-                                       "omsetning (blå linje) og resultat/bunnlinje (søyler – grønn "
-                                       "overskudd, rød underskudd). Minervinis «andre bein»: vokser "
-                                       "inntjeningen? Hentes fra Yahoo (små aksjer kan mangle data).")
-            vis_trendscore_c = st.checkbox("📈 TrendScore (0–100)", value=False,
-                                           key="chart_trendscore",
-                                           help="Egen rute under chartet: TrendScore-kurven med fargede "
-                                                "soner (grønn ≥ 70, gul 40–70, rød < 40) og referanselinje ved 50.")
-            vis_klassisk = st.checkbox("🧩 Klassisk chart (uten hover-legend)", value=False,
-                                       key="chart_klassisk",
-                                       help="Faller tilbake til den innebygde chart-komponenten uten "
-                                            "den mus-følgende legenden. Standard er hover-chartet.")
+        _k = chart_kontroller("chart")
+        periode = _k["periode"]
+        ukentlig = _k["ukentlig"]
+        tidsramme = "Uke" if ukentlig else "Dag"
+        vis_ma = _k["vis_ma"]; vis_52u = _k["vis_52u"]; vis_vcp = _k["vis_vcp"]
+        vis_7av7 = _k["vis_7av7"]; vis_hist = _k["vis_hist"]; vis_golden = _k["vis_golden"]
+        vis_indeks = _k["vis_indeks"]; vis_rs_rating = _k["vis_rs_rating"]
+        vis_eps = _k["vis_eps"]; vis_trendscore_c = _k["vis_trendscore"]
+        vis_klassisk = _k["klassisk"]
         serie = datamod.serie_for(last_priser(bors_navn, versjon), valg)
         res = screener.analyser_ticker(serie, valg, konfig.PRESETS[aktiv_preset_navn])
         if res is None:
@@ -3099,41 +3126,15 @@ with fane3:
                 st.info("For lite historikk (trenger ~200 handelsdager) til full analyse.")
             else:
                 st.subheader(f"{sok} · {res['score']}/7 · {res['status']} {res['statustekst']}")
-                _s1, _s2 = st.columns([3, 1])
-                with _s1:
-                    periode3 = st.radio("Periode", list(PERIODER_VALG.keys()), index=3,
-                                        horizontal=True, key="periode_sok")
-                with _s2:
-                    tidsramme3 = st.radio("Tidsramme", ["Dag", "Uke"], horizontal=True, key="tf_sok",
-                                          help="Uke = ukentlige barer (SMA50 = 50 uker, volum SMA10).")
-                ukentlig3 = tidsramme3 == "Uke"
-                with st.popover("⚙️ Tilpass chartet"):
-                    st.caption("Huk av hva du vil se. Færre lag = renere bilde.")
-                    vis_ma3 = st.checkbox("Glidende snitt (MA50/150/200)", value=True, key="sok_ma")
-                    vis_52u3 = st.checkbox("52-ukers høy/lav (grå stiplet)", value=True, key="sok_52u")
-                    vis_vcp3 = st.checkbox("VCP-kontraksjoner (gul zigzag)", value=True, key="sok_vcp")
-                    vis_7av7_3 = st.checkbox("7/7-markører (ble/mistet)", value=True, key="sok_7av7")
-                    vis_hist3 = st.checkbox("Historiske volumbrudd", value=False, key="sok_hist")
-                    vis_golden3 = st.checkbox("Golden cross (SMA50×SMA200)", value=False, key="sok_golden")
-                    vis_indeks3 = st.checkbox(f"📉 Indeks-overlay ({BORS.benchmark})", value=False,
-                                              key="sok_indeks",
-                                              help="Legger indeksen oppå chartet, skalert til å starte "
-                                                   "likt. Ser du om aksjen holdt seg når indeksen falt.")
-                    vis_rs_rating3 = st.checkbox("📈 RS-rating over tid (1–99)", value=False,
-                                                 key="sok_rs_rating",
-                                                 help="Egen rute under chartet. Hvordan skanne-tallet "
-                                                      "(relativ styrke mot universet) har beveget seg. "
-                                                      "Kun for aksjer i universet. Grønt over 70 = sterk.")
-                    vis_eps3 = st.checkbox("💰 Omsetning/resultat (EPS)", value=False, key="sok_eps",
-                                           help="Egen rute: kvartalsvis/årlig omsetning (blå linje) og "
-                                                "resultat (søyler – grønn overskudd, rød underskudd).")
-                    vis_trendscore3 = st.checkbox("📈 TrendScore (0–100)", value=False, key="sok_trendscore",
-                                                  help="Egen rute: TrendScore-kurven med fargede soner "
-                                                       "(grønn ≥ 70, gul 40–70, rød < 40).")
-                    vis_klassisk3 = st.checkbox("🧩 Klassisk chart (uten hover-legend)", value=False,
-                                                key="sok_klassisk",
-                                                help="Faller tilbake til den innebygde komponenten. "
-                                                     "Standard er hover-chartet.")
+                _k3 = chart_kontroller("sok")
+                periode3 = _k3["periode"]
+                ukentlig3 = _k3["ukentlig"]
+                tidsramme3 = "Uke" if ukentlig3 else "Dag"
+                vis_ma3 = _k3["vis_ma"]; vis_52u3 = _k3["vis_52u"]; vis_vcp3 = _k3["vis_vcp"]
+                vis_7av7_3 = _k3["vis_7av7"]; vis_hist3 = _k3["vis_hist"]
+                vis_golden3 = _k3["vis_golden"]; vis_indeks3 = _k3["vis_indeks"]
+                vis_rs_rating3 = _k3["vis_rs_rating"]; vis_eps3 = _k3["vis_eps"]
+                vis_trendscore3 = _k3["vis_trendscore"]; vis_klassisk3 = _k3["klassisk"]
                 if not HAR_LWC:
                     st.warning("Chart-komponenten er ikke lastet i dette miljøet ennå.")
                 else:
