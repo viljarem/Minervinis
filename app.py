@@ -47,7 +47,7 @@ def _er_morkt() -> bool:
 # ---------------------------------------------------------------------------
 # Øk denne når screener-/tabell-logikken endres, så @st.cache_data-bufferet for
 # screening automatisk invalideres (slipper å tømme cache manuelt etter deploy).
-KODE_VERSJON = 5
+KODE_VERSJON = 6
 
 
 def data_versjon(bors: "konfig.Bors" = konfig.OSLO_BORS) -> float:
@@ -1652,6 +1652,24 @@ def _hover_total_hoyde(charts_spec: list | None) -> int:
     return h + 6 * len(charts_spec) + 12
 
 
+def render_chart_spec(spec: list | None, *, key: str, morkt: bool = False,
+                      valuta: str = "", klassisk: bool = False) -> None:
+    """Tegner en ferdig chart-spec: hover-chart (standard) eller klassisk fallback.
+
+    Brukes OVERALT der vi tegner chart (Chart, Søk, Hovedliste-tabeller, TrendScore,
+    golden cross, IPO, markedshelse) så alle får NØYAKTIG samme oppførsel: mus-
+    følgende legend, pivot/stop + delrute-verdier, pane-synk. `klassisk=True` (eller
+    når hover-bygging feiler) faller tilbake til den innebygde komponenten.
+    """
+    if not spec:
+        return
+    _html = None if klassisk else lag_chart_hover_fra_spec(spec, morkt=morkt, valuta=valuta)
+    if _html:
+        components.html(_html, height=_hover_total_hoyde(spec), scrolling=False)
+    else:
+        renderLightweightCharts(spec, key=key)
+
+
 # JS/HTML-mal. __DATA__ byttes ut med JSON. lightweight-charts v4 (standalone) fra
 # unpkg – samme API som Python-komponenten, så spec-en kan gjenbrukes direkte.
 _HOVER_CHART_MAL = """
@@ -2545,7 +2563,8 @@ def vis_golden_cross(gc_resultat):
                                   hoyde=460, morkt=MORKT, tittel=_tk,
                                   **_eps_chart_kwargs(_tk, _gc_eps))
             if _spec:
-                renderLightweightCharts(_spec, key=f"gc_{_tk}_{_gc_periode}_{_gc_tidsramme}_{_gc_eps}_{TEMA}")
+                render_chart_spec(_spec, key=f"gc_{_tk}_{_gc_periode}_{_gc_tidsramme}_{_gc_eps}_{TEMA}",
+                                  morkt=MORKT, valuta=VALUTA)
         else:
             st.caption("Chart-komponenten er ikke lastet i dette miljøet ennå.")
 
@@ -2669,7 +2688,8 @@ def vis_trendscore(ts_resultat):
                                   **_trendscore_chart_kwargs(_tk, True),
                                   **_eps_chart_kwargs(_tk, _ts_eps))
             if _spec:
-                renderLightweightCharts(_spec, key=f"ts_{_tk}_{_ts_periode}_{_ts_eps}_{TEMA}")
+                render_chart_spec(_spec, key=f"ts_{_tk}_{_ts_periode}_{_ts_eps}_{TEMA}",
+                                  morkt=MORKT, valuta=VALUTA)
         else:
             st.caption("Chart-komponenten er ikke lastet i dette miljøet ennå.")
 
@@ -2739,7 +2759,7 @@ def vis_nye_ipoer(ipo_resultat):
                                   vis_7av7=False, vis_hist=False, vis_golden=False,
                                   hoyde=420, morkt=MORKT, tittel=_tk)
             if _spec:
-                renderLightweightCharts(_spec, key=f"ipo_{_tk}_{TEMA}")
+                render_chart_spec(_spec, key=f"ipo_{_tk}_{TEMA}", morkt=MORKT, valuta=VALUTA)
             else:
                 st.caption("For lite historikk til å tegne chart ennå.")
         else:
@@ -2891,7 +2911,8 @@ with fane1:
                                           **_trendscore_chart_kwargs(_tk, _hl_trendscore),
                                           **_eps_chart_kwargs(_tk, _hl_eps))
                     if _spec:
-                        renderLightweightCharts(_spec, key=f"hl_{nokkel}_{_tk}_{_hl_periode}_{_hl_tidsramme}_{_hl_eps}_{_hl_trendscore}_{TEMA}")
+                        render_chart_spec(_spec, key=f"hl_{nokkel}_{_tk}_{_hl_periode}_{_hl_tidsramme}_{_hl_eps}_{_hl_trendscore}_{TEMA}",
+                                          morkt=MORKT, valuta=VALUTA)
 
         if del_opp:
             # Fire separate tabeller – én per setup-status, i handlbar rekkefølge.
@@ -3326,4 +3347,5 @@ with fane4:
                                     _spec = lag_chart_lwc(_s, _r, PERIODER_VALG["2 år"],
                                                           hoyde=420, morkt=MORKT, tittel=_tk)
                                     if _spec:
-                                        renderLightweightCharts(_spec, key=f"mh_{_tk}_{TEMA}")
+                                        render_chart_spec(_spec, key=f"mh_{_tk}_{TEMA}",
+                                                          morkt=MORKT, valuta=VALUTA)
