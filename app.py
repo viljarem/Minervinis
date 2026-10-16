@@ -47,7 +47,7 @@ def _er_morkt() -> bool:
 # ---------------------------------------------------------------------------
 # Øk denne når screener-/tabell-logikken endres, så @st.cache_data-bufferet for
 # screening automatisk invalideres (slipper å tømme cache manuelt etter deploy).
-KODE_VERSJON = 6
+KODE_VERSJON = 7
 
 
 def data_versjon(bors: "konfig.Bors" = konfig.OSLO_BORS) -> float:
@@ -1207,7 +1207,22 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                        "priceScale": {"scaleMargins": {"top": 0.78, "bottom": 0}},
                        "legend": {"label": "Vol", "kind": "vol"}})
         d["_volsnitt"] = d["Volume"].rolling(vol_vindu, min_periods=max(2, vol_vindu // 5)).mean()
-        serier.append(linje("_volsnitt", "#3949ab", 1, skala="vol"))
+        _volsnitt_serie = linje("_volsnitt", "#3949ab", 1, skala="vol")
+        serier.append(_volsnitt_serie)
+        # Relativt volum (RVol) som egen legend-post: dagens volum / snittvolum.
+        # Vises som eget tall under musepekeren (×). Bruker 'extra'-mekanismen som
+        # slår opp verdi via tid – ingen egen linje tegnes.
+        _rvol_par = d["Volume"] / d["_volsnitt"]
+        _rvol_data = [{"time": ti, "value": round(float(rv), 2)}
+                      for ti, rv in zip(t, _rvol_par) if pd.notna(rv)]
+        if _rvol_data:
+            serier.append({"type": "Line", "data": _rvol_data,
+                           "options": {"priceScaleId": "rvol_skjult", "visible": False,
+                                       "lastValueVisible": False, "priceLineVisible": False,
+                                       "crosshairMarkerVisible": False,
+                                       "color": "rgba(0,0,0,0)", "lineWidth": 0},
+                           "legend": {"label": "RVol", "color": "#3949ab",
+                                      "kind": "extra", "fmt": "rvol"}})
 
         # Pivot (gull) og stop (rød stiplet) som flate linjer. Aktiv pivot er
         # bevisst TYKKEST og solid, så den skiller seg klart fra de svakere,
@@ -1781,6 +1796,7 @@ _HOVER_CHART_MAL = """
     if(x===undefined||x===null) return '–';
     if(kind==='int') return String(Math.round(x));
     if(kind==='one') return Number(x).toFixed(1);
+    if(kind==='rvol') return Number(x).toFixed(2)+'×';
     return Number(x).toFixed(2);
   }
   function row(label, value, color){
@@ -1836,7 +1852,10 @@ _HOVER_CHART_MAL = """
         var ks = Object.keys(it.index);
         if(ks.length) val2 = it.index[ks[ks.length-1]];
       }
-      if(val2!==undefined) ekstraLinje.push(row(it.label, fmtKind(val2, it.fmt), it.color));
+      if(val2===undefined) return;
+      // RVol hører til volum – vis på midt-linjen ved siden av Vol.
+      if(it.fmt === 'rvol') midtLinje.push(row(it.label, fmtKind(val2, it.fmt), it.color));
+      else ekstraLinje.push(row(it.label, fmtKind(val2, it.fmt), it.color));
     });
     if(topLinje.length) html += '<div>'+topLinje.join('')+'</div>';
     if(midtLinje.length) html += '<div>'+midtLinje.join('  ')+'</div>';
