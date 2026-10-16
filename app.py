@@ -14,6 +14,8 @@ import os
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
+import json
 
 from motor import konfig, data as datamod, fundamenta, indikatorer, minervini, posisjon, screener, sektor, univers, vcp, aksjeinfo, trendscore
 
@@ -45,7 +47,7 @@ def _er_morkt() -> bool:
 # ---------------------------------------------------------------------------
 # Øk denne når screener-/tabell-logikken endres, så @st.cache_data-bufferet for
 # screening automatisk invalideres (slipper å tømme cache manuelt etter deploy).
-KODE_VERSJON = 2
+KODE_VERSJON = 3
 
 
 def data_versjon(bors: "konfig.Bors" = konfig.OSLO_BORS) -> float:
@@ -1540,6 +1542,7 @@ def vis_chart_legend(serie: pd.DataFrame, res: dict | None, *,
         _chip("TrendScore", f"{ts_v:.0f}", ts_f)
 
     # ADX (trendstyrke) – hentes fra siste indikatorrad om tilgjengelig.
+    _hoy52 = _lav52 = None
     try:
         d_ind = indikatorer.legg_til_indikatorer(serie)
         if "ADX" in d_ind.columns:
@@ -1547,20 +1550,49 @@ def vis_chart_legend(serie: pd.DataFrame, res: dict | None, *,
             if pd.notna(adx_v):
                 adx_f = opp if adx_v >= 20 else lab_f
                 _chip("ADX", f"{adx_v:.0f}", adx_f)
+        if "High_52w" in d_ind.columns and "Low_52w" in d_ind.columns:
+            _hv, _lv = d_ind["High_52w"].iloc[-1], d_ind["Low_52w"].iloc[-1]
+            if pd.notna(_hv) and pd.notna(_lv):
+                _hoy52, _lav52 = float(_hv), float(_lv)
     except Exception:
         pass
-
-    # Avstand fra 52-ukers høy.
-    fra_h = res.get("pct_fra_52h")
-    if fra_h is not None and pd.notna(fra_h):
-        fh_f = opp if fra_h >= -5 else (val_f if fra_h >= -25 else ned)
-        _chip("Fra 52u høy", f"{fra_h:+.1f}%", fh_f)
 
     # Trendstatus (emoji + kort tekst).
     status = res.get("status")
     statustekst = res.get("statustekst")
     if status:
         _chip("Status", f'{status} {statustekst or ""}'.strip())
+
+    # 52-ukers posisjon som lineær progressbar: hvor i spennet lav→høy kursen ligger.
+    # Fyll grønn når nær toppen, gul midt, rød nær bunnen. Egen bred «chip».
+    if pris is not None and _hoy52 and _lav52 and _hoy52 > _lav52:
+        frac = (float(pris) - _lav52) / (_hoy52 - _lav52)
+        frac = max(0.0, min(1.0, frac))
+        pct = frac * 100
+        bar_f = opp if frac >= 0.80 else (gul if frac >= 0.40 else ned)
+        spor = "rgba(255,255,255,0.10)" if morkt else "rgba(0,0,0,0.08)"
+        fra_hoy = res.get("pct_fra_52h")
+        hoy_txt = f"{fra_hoy:+.1f}% fra høy" if fra_hoy is not None and pd.notna(fra_hoy) else ""
+        chips.append(
+            f'<div style="display:flex;flex-direction:column;gap:3px;padding:6px 12px;'
+            f'background:{chip_bg};border:1px solid {chip_kant};border-radius:9px;'
+            f'min-width:190px;flex:1 1 190px;">'
+            f'<div style="display:flex;justify-content:space-between;align-items:baseline;">'
+            f'<span style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;'
+            f'color:{lab_f};font-weight:600;">52-ukers spenn</span>'
+            f'<span style="font-size:11px;color:{val_f};font-variant-numeric:tabular-nums;">'
+            f'{hoy_txt}</span></div>'
+            f'<div style="position:relative;height:8px;border-radius:5px;background:{spor};'
+            f'overflow:hidden;margin-top:2px;">'
+            f'<div style="position:absolute;left:0;top:0;height:100%;width:{pct:.1f}%;'
+            f'background:{bar_f};border-radius:5px;transition:width .3s;"></div>'
+            f'<div style="position:absolute;left:{pct:.1f}%;top:-2px;width:2px;height:12px;'
+            f'background:{val_f};transform:translateX(-1px);"></div></div>'
+            f'<div style="display:flex;justify-content:space-between;font-size:10px;'
+            f'color:{lab_f};font-variant-numeric:tabular-nums;margin-top:1px;">'
+            f'<span>{_lav52:.2f}</span>'
+            f'<span style="color:{bar_f};font-weight:700;">{pct:.0f}%</span>'
+            f'<span>{_hoy52:.2f}</span></div></div>')
 
     if not chips:
         return
@@ -1569,6 +1601,189 @@ def vis_chart_legend(serie: pd.DataFrame, res: dict | None, *,
         + "".join(chips) + "</div>",
         unsafe_allow_html=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# Hover-chart: selvstendig HTML-komponent med mus-følgende legend (eksperimentelt)
+# ---------------------------------------------------------------------------
+# Den vanlige renderLightweightCharts-komponenten er enveis og kan ikke gi oss en
+# legend som følger musepekeren. Her bygger vi i stedet et HELT selvstendig chart
+# via components.html: lightweight-charts lastes fra CDN, og en liten JS-snutt
+# abonnerer på crosshairMove og oppdaterer en legend-boks OPPE I chartet mens du
+# beveger musa. Alt kjører inne i iframen – ingen data sendes tilbake til Python.
+# OPT-IN via en checkbox, så den gamle stien er urørt og lett å rulle tilbake til.
+def lag_chart_hover_html(serie: pd.DataFrame, dager: int = 504, *,
+                         hoyde: int = 520, morkt: bool = False,
+                         tittel: str = "", valuta: str = "",
+                         vis_ma: bool = True) -> str | None:
+    """Bygger et selvstendig lightweight-charts-chart (HTML) med hover-legend."""
+    try:
+        d = indikatorer.legg_til_indikatorer(serie)
+        if d is None or d.empty:
+            return None
+        d = d.tail(max(dager, 30))
+        tider = list(d.index.strftime("%Y-%m-%d"))
+
+        candles, volum = [], []
+        opp_c, ned_c = "#26a69a", "#ef5350"
+        for ti, (_, r) in zip(tider, d.iterrows()):
+            o, h, l, c = r.get("Open"), r.get("High"), r.get("Low"), r.get("Close")
+            if pd.isna(o) or pd.isna(h) or pd.isna(l) or pd.isna(c):
+                continue
+            candles.append({"time": ti, "open": round(float(o), 4), "high": round(float(h), 4),
+                            "low": round(float(l), 4), "close": round(float(c), 4)})
+            vv = r.get("Volume")
+            if pd.notna(vv):
+                volum.append({"time": ti, "value": float(vv),
+                              "color": "rgba(38,166,154,0.5)" if c >= o else "rgba(239,83,80,0.5)"})
+        if len(candles) < 2:
+            return None
+
+        def _linje(kol):
+            ut = []
+            if kol in d.columns:
+                for ti, v in zip(tider, d[kol]):
+                    if pd.notna(v):
+                        ut.append({"time": ti, "value": round(float(v), 4)})
+            return ut
+
+        ma50 = _linje("SMA50") if vis_ma else []
+        ma150 = _linje("SMA150") if vis_ma else []
+        ma200 = _linje("SMA200") if vis_ma else []
+
+        if morkt:
+            bg, tekst, grid = "#131722", "#d1d4dc", "rgba(120,123,134,0.22)"
+            leg_bg, leg_kant = "rgba(19,23,34,0.86)", "rgba(255,255,255,0.10)"
+        else:
+            bg, tekst, grid = "#ffffff", "#333333", "rgba(197,203,206,0.35)"
+            leg_bg, leg_kant = "rgba(255,255,255,0.90)", "rgba(0,0,0,0.10)"
+
+        data = {
+            "candles": candles, "volum": volum,
+            "ma50": ma50, "ma150": ma150, "ma200": ma200,
+            "opp": opp_c, "ned": ned_c, "bg": bg, "tekst": tekst, "grid": grid,
+            "legBg": leg_bg, "legKant": leg_kant, "valuta": valuta, "tittel": tittel,
+            "hoyde": hoyde,
+        }
+        data_json = json.dumps(data)
+
+        html = _HOVER_CHART_MAL.replace("__DATA__", data_json).replace("__HOYDE__", str(hoyde))
+        return html
+    except Exception:
+        return None
+
+
+# JS/HTML-mal for hover-chartet. __DATA__ byttes ut med JSON, __HOYDE__ med px.
+# lightweight-charts v4 (standalone) fra unpkg – samme API som Python-komponenten.
+_HOVER_CHART_MAL = """
+<div id="wrap" style="position:relative;width:100%;height:__HOYDE__px;">
+  <div id="chart" style="width:100%;height:100%;"></div>
+  <div id="legend" style="position:absolute;left:12px;top:10px;z-index:5;
+       font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:12px;
+       line-height:1.5;padding:8px 12px;border-radius:9px;pointer-events:none;
+       backdrop-filter:blur(6px);"></div>
+</div>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+(function(){
+  var D = __DATA__;
+  var el = document.getElementById('chart');
+  var leg = document.getElementById('legend');
+  leg.style.background = D.legBg;
+  leg.style.border = '1px solid ' + D.legKant;
+  leg.style.color = D.tekst;
+  var chart = LightweightCharts.createChart(el, {
+    layout: { background: { type:'solid', color: D.bg }, textColor: D.tekst },
+    grid: { vertLines:{color:D.grid}, horzLines:{color:D.grid} },
+    rightPriceScale: { borderVisible:false, scaleMargins:{top:0.08, bottom:0.26} },
+    timeScale: { borderVisible:false, rightOffset:4 },
+    crosshair: { mode: 0 },
+    autoSize: true
+  });
+  var candle = chart.addCandlestickSeries({
+    upColor:D.opp, downColor:D.ned, borderUpColor:D.opp, borderDownColor:D.ned,
+    wickUpColor:D.opp, wickDownColor:D.ned
+  });
+  candle.setData(D.candles);
+  var vol = chart.addHistogramSeries({
+    priceFormat:{type:'volume'}, priceScaleId:'vol',
+    lastValueVisible:false, priceLineVisible:false
+  });
+  vol.priceScale().applyOptions({ scaleMargins:{top:0.78, bottom:0.0} });
+  vol.setData(D.volum);
+  function mkLine(data, color, w){
+    if(!data || !data.length) return null;
+    var s = chart.addLineSeries({ color:color, lineWidth:w, priceLineVisible:false,
+      lastValueVisible:false, crosshairMarkerVisible:false });
+    s.setData(data); return s;
+  }
+  var s50 = mkLine(D.ma50, '#2196f3', 2);
+  var s150 = mkLine(D.ma150, '#ff9800', 2);
+  var s200 = mkLine(D.ma200, '#e040fb', 2);
+  chart.timeScale().fitContent();
+
+  var val = D.valuta ? (' ' + D.valuta) : '';
+  function fmt(x){ return (x===undefined||x===null)?'–':Number(x).toFixed(2); }
+  function fmtVol(x){
+    if(x===undefined||x===null) return '–';
+    if(x>=1e9) return (x/1e9).toFixed(2)+'B';
+    if(x>=1e6) return (x/1e6).toFixed(2)+'M';
+    if(x>=1e3) return (x/1e3).toFixed(1)+'K';
+    return String(Math.round(x));
+  }
+  function row(label, value, color){
+    return '<span style="color:#8b8f9c;">'+label+'</span> '
+      + '<b style="color:'+(color||D.tekst)+';font-variant-numeric:tabular-nums;">'+value+'</b>';
+  }
+  function render(c, v, m50, m150, m200, prev){
+    var chg = '';
+    if(c && prev && prev.close){
+      var p = (c.close/prev.close - 1)*100;
+      var col = p>=0 ? D.opp : D.ned;
+      chg = ' <span style="color:'+col+';">'+(p>=0?'▲':'▼')+' '+p.toFixed(2)+'%</span>';
+    }
+    var html = '';
+    if(D.tittel) html += '<div style="font-weight:700;font-size:13px;margin-bottom:2px;">'+D.tittel+'</div>';
+    if(c){
+      var ccol = c.close>=c.open ? D.opp : D.ned;
+      html += '<div>'+row('O',fmt(c.open))+'  '+row('H',fmt(c.high))+'  '
+           + row('L',fmt(c.low))+'  '+row('C',fmt(c.close)+val, ccol)+chg+'</div>';
+    }
+    var linjer = [];
+    if(m50!==undefined) linjer.push(row('MA50',fmt(m50),'#2196f3'));
+    if(m150!==undefined) linjer.push(row('MA150',fmt(m150),'#ff9800'));
+    if(m200!==undefined) linjer.push(row('MA200',fmt(m200),'#e040fb'));
+    if(v!==undefined) linjer.push(row('Vol',fmtVol(v)));
+    if(linjer.length) html += '<div>'+linjer.join('  ')+'</div>';
+    leg.innerHTML = html;
+  }
+  // Startverdi = siste bar.
+  var last = D.candles[D.candles.length-1];
+  var lastPrev = D.candles[D.candles.length-2];
+  var lastVol = D.volum.length ? D.volum[D.volum.length-1].value : undefined;
+  var l50 = D.ma50.length ? D.ma50[D.ma50.length-1].value : undefined;
+  var l150 = D.ma150.length ? D.ma150[D.ma150.length-1].value : undefined;
+  var l200 = D.ma200.length ? D.ma200[D.ma200.length-1].value : undefined;
+  render(last, lastVol, l50, l150, l200, lastPrev);
+
+  var cIdx = {}; D.candles.forEach(function(x,i){ cIdx[x.time]=i; });
+  chart.subscribeCrosshairMove(function(param){
+    if(!param || !param.time || param.point===undefined){
+      render(last, lastVol, l50, l150, l200, lastPrev); return;
+    }
+    var c = param.seriesData.get(candle);
+    var v = vol ? param.seriesData.get(vol) : undefined;
+    var m50 = s50 ? param.seriesData.get(s50) : undefined;
+    var m150 = s150 ? param.seriesData.get(s150) : undefined;
+    var m200 = s200 ? param.seriesData.get(s200) : undefined;
+    var idx = cIdx[param.time];
+    var prev = (idx!==undefined && idx>0) ? D.candles[idx-1] : null;
+    render(c, v?v.value:undefined,
+      m50?m50.value:undefined, m150?m150.value:undefined, m200?m200.value:undefined, prev);
+  });
+})();
+</script>
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -2692,6 +2907,11 @@ with fane2:
                                            key="chart_trendscore",
                                            help="Egen rute under chartet: TrendScore-kurven med fargede "
                                                 "soner (grønn ≥ 70, gul 40–70, rød < 40) og referanselinje ved 50.")
+            vis_hover = st.checkbox("⚡ Hover-chart (mus-følgende legend)", value=False,
+                                    key="chart_hover",
+                                    help="Eksperimentelt: tegner et selvstendig chart der en legend "
+                                         "(O/H/L/C, endring, volum, MA) følger musepekeren. Erstatter "
+                                         "hovedchartet – delruter (RS/EPS/TrendScore) vises ikke i denne modusen.")
         serie = datamod.serie_for(last_priser(bors_navn, versjon), valg)
         res = screener.analyser_ticker(serie, valg, konfig.PRESETS[aktiv_preset_navn])
         if res is None:
@@ -2722,35 +2942,51 @@ with fane2:
             _indeks = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark) if vis_indeks else None
             _eps_kw = _eps_chart_kwargs(valg, vis_eps)
             _ts_kw = _trendscore_chart_kwargs(valg, vis_trendscore_c)
-            spec = lag_chart_lwc(serie, res, PERIODER_VALG[periode],
+            if vis_hover:
+                # Eksperimentelt: selvstendig HTML-chart med mus-følgende legend.
+                _html = lag_chart_hover_html(serie, PERIODER_VALG[periode], hoyde=540,
+                                             morkt=MORKT, tittel=valg, valuta=VALUTA, vis_ma=vis_ma)
+                if _html:
+                    components.html(_html, height=560, scrolling=False)
+                    st.caption("⚡ **Hover-chart:** beveg musa over chartet – legenden oppe til "
+                               "venstre viser O/H/L/C, dagsendring, volum og MA for dagen under "
+                               "pekeren. Dra for å panorere, rull for å zoome.")
+                else:
+                    st.info("Klarte ikke bygge hover-chartet for denne aksjen.")
+                vis_vcp_boks(res)
+                fundamenta_seksjon(valg, f"chart_{valg}")
+                st.divider()
+                posisjon_verktoy(res, f"chart_{valg}", VALUTA)
+            else:
+                spec = lag_chart_lwc(serie, res, PERIODER_VALG[periode],
                                  vis_ma=vis_ma, vis_52u=vis_52u, vis_vcp=vis_vcp,
                                  vis_7av7=vis_7av7, vis_hist=vis_hist, vis_golden=vis_golden,
                                  vis_rs_rating=vis_rs_rating, rs_rating=_rs_serie,
                                  vis_indeks=vis_indeks, indeks=_indeks, indeks_navn=BORS.benchmark,
                                  ukentlig=ukentlig, pos=pos, morkt=MORKT, tittel=valg, **_ts_kw, **_eps_kw)
-            if spec is None:
-                st.info("Klarte ikke bygge chartet for denne aksjen.")
-            else:
-                noekkel = f"chart_{valg}_{periode}_{tidsramme}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{vis_golden}{vis_rs_rating}{vis_indeks}{vis_eps}{vis_trendscore_c}{pos_suffix}_{TEMA}"
-                renderLightweightCharts(spec, key=noekkel)
-                st.caption("💡 Dra sidelengs, rull musehjulet for å zoome, dra loddrett på "
+                if spec is None:
+                    st.info("Klarte ikke bygge chartet for denne aksjen.")
+                else:
+                    noekkel = f"chart_{valg}_{periode}_{tidsramme}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{vis_golden}{vis_rs_rating}{vis_indeks}{vis_eps}{vis_trendscore_c}{pos_suffix}_{TEMA}"
+                    renderLightweightCharts(spec, key=noekkel)
+                    st.caption("💡 Dra sidelengs, rull musehjulet for å zoome, dra loddrett på "
                            "prisaksen for å strekke høyden. 🟡 **Kraftig gull = aktiv pivot** · "
                            "🔴 stiplet rød = stop · 🟢/🔴 pil = ble/mistet 7/7. Svake stiplede "
                            "gull-streker = historiske brudd (ubiased).")
-                if vis_eps:
-                    _basis_ord = "kvartalsvis" if _eps_kw.get("graf_basis") == "kvartal" else "årlig"
-                    _val = f" ({_eps_kw.get('graf_valuta')})" if _eps_kw.get("graf_valuta") else ""
-                    if _eps_kw.get("eps_bars") or _eps_kw.get("oms_bars"):
-                        st.caption(f"💰 Nederste rute: {_basis_ord} **omsetning** (blå linje) og "
+                    if vis_eps:
+                        _basis_ord = "kvartalsvis" if _eps_kw.get("graf_basis") == "kvartal" else "årlig"
+                        _val = f" ({_eps_kw.get('graf_valuta')})" if _eps_kw.get("graf_valuta") else ""
+                        if _eps_kw.get("eps_bars") or _eps_kw.get("oms_bars"):
+                            st.caption(f"💰 Nederste rute: {_basis_ord} **omsetning** (blå linje) og "
                                    f"**resultat**{_val} (søyler – grønn overskudd, rød underskudd). "
                                    "Snappet til nærmeste handelsdag.")
-                    else:
-                        st.info(f"💰 Yahoo har ingen regnskapstall for {valg} – ingen EPS-rute å vise "
+                        else:
+                            st.info(f"💰 Yahoo har ingen regnskapstall for {valg} – ingen EPS-rute å vise "
                                 "(vanlig for mindre Growth/Expand-aksjer).")
-                vis_vcp_boks(res)
-                fundamenta_seksjon(valg, f"chart_{valg}")
-                st.divider()
-                posisjon_verktoy(res, f"chart_{valg}", VALUTA)
+                    vis_vcp_boks(res)
+                    fundamenta_seksjon(valg, f"chart_{valg}")
+                    st.divider()
+                    posisjon_verktoy(res, f"chart_{valg}", VALUTA)
 
 # --- Fane 3: Søk ---
 with fane3:
@@ -2802,9 +3038,28 @@ with fane3:
                     vis_trendscore3 = st.checkbox("📈 TrendScore (0–100)", value=False, key="sok_trendscore",
                                                   help="Egen rute: TrendScore-kurven med fargede soner "
                                                        "(grønn ≥ 70, gul 40–70, rød < 40).")
+                    vis_hover3 = st.checkbox("⚡ Hover-chart (mus-følgende legend)", value=False,
+                                             key="sok_hover",
+                                             help="Eksperimentelt: legend (O/H/L/C, endring, volum, MA) "
+                                                  "følger musepekeren. Erstatter hovedchartet.")
                 if not HAR_LWC:
                     st.warning("Chart-komponenten er ikke lastet i dette miljøet ennå.")
                 else:
+                    # Moderne info-stripe over chartet (samme som Chart-fanen). RS/TrendScore
+                    # slås opp i siste skanning hvis aksjen er i universet. Fjern dette kallet
+                    # for å rulle tilbake.
+                    _rsv3 = _tsv3 = None
+                    try:
+                        if resultat is not None and not resultat.empty:
+                            _rad3 = resultat[resultat["ticker"] == sok]
+                            if not _rad3.empty:
+                                if pd.notna(_rad3.iloc[0].get("rs")):
+                                    _rsv3 = int(_rad3.iloc[0]["rs"])
+                                if "trendscore" in _rad3.columns and pd.notna(_rad3.iloc[0].get("trendscore")):
+                                    _tsv3 = float(_rad3.iloc[0]["trendscore"])
+                    except Exception:
+                        pass
+                    vis_chart_legend(serie, res, rs=_rsv3, trendscore=_tsv3, valuta=VALUTA)
                     _init_posisjon_state(res, f"sok_{sok}")
                     pos3, pos_suffix3 = _posisjon_fra_state(f"sok_{sok}")
                     _rs_serie3 = None
@@ -2813,7 +3068,17 @@ with fane3:
                         if sok in _rs_mat3.columns:
                             _rs_serie3 = _rs_mat3[sok].dropna()
                     _indeks3 = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark) if vis_indeks3 else None
-                    spec3 = lag_chart_lwc(serie, res, PERIODER_VALG[periode3],
+                    if vis_hover3:
+                        _html3 = lag_chart_hover_html(serie, PERIODER_VALG[periode3], hoyde=540,
+                                                      morkt=MORKT, tittel=sok, valuta=VALUTA, vis_ma=vis_ma3)
+                        if _html3:
+                            components.html(_html3, height=560, scrolling=False)
+                            st.caption("⚡ **Hover-chart:** beveg musa over chartet for O/H/L/C, "
+                                       "dagsendring, volum og MA under pekeren.")
+                        else:
+                            st.info("Klarte ikke bygge hover-chartet for denne aksjen.")
+                    else:
+                        spec3 = lag_chart_lwc(serie, res, PERIODER_VALG[periode3],
                                           vis_ma=vis_ma3, vis_52u=vis_52u3, vis_vcp=vis_vcp3,
                                           vis_7av7=vis_7av7_3, vis_hist=vis_hist3, vis_golden=vis_golden3,
                                           vis_rs_rating=vis_rs_rating3, rs_rating=_rs_serie3,
@@ -2821,10 +3086,10 @@ with fane3:
                                           ukentlig=ukentlig3, pos=pos3, morkt=MORKT, tittel=sok,
                                           **_trendscore_chart_kwargs(sok, vis_trendscore3),
                                           **_eps_chart_kwargs(sok, vis_eps3))
-                    if spec3 is not None:
-                        renderLightweightCharts(
-                            spec3,
-                            key=f"sok_{sok}_{periode3}_{tidsramme3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{vis_rs_rating3}{vis_indeks3}{vis_eps3}{vis_trendscore3}{pos_suffix3}_{TEMA}")
+                        if spec3 is not None:
+                            renderLightweightCharts(
+                                spec3,
+                                key=f"sok_{sok}_{periode3}_{tidsramme3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{vis_rs_rating3}{vis_indeks3}{vis_eps3}{vis_trendscore3}{pos_suffix3}_{TEMA}")
                 vis_vcp_boks(res)
                 fundamenta_seksjon(sok, f"sok_{sok}")
                 st.divider()
