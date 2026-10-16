@@ -111,6 +111,41 @@ GOLDEN_CROSS_KONVERGENS_DAGER = 10    # gapet skal ha krympet de siste N dagene
 MTF_MIN_DAGER = 100          # trenger minst så mange dager for å bygge ukedata
 MTF_MIN_UKER = 40            # og minst så mange uker (for 40-ukers snitt)
 
+# ---------------------------------------------------------------------------
+# TrendScore (0–100 per dag: hvor sterk og sunn er opptrenden?)
+# ---------------------------------------------------------------------------
+# Scoren blandes av fire byggeklosser, hver skalert til 0–100 og vektet:
+#   Momentum 40 %, Relativ styrke 25 %, Trendstruktur 20 %, ADX 15 %.
+# Vektene og skaleringsgrensene er bevisste valg – endre dem her om du vil tune
+# scoren, men standardverdiene matcher originaloppsettet.
+TRENDSCORE_VEKTER = {
+    "momentum": 0.40,       # viktigst – 12-mnd-avkastning minus siste måned
+    "rel_styrke": 0.25,     # meravkastning mot markedet (3 mnd)
+    "struktur": 0.20,       # glidende snitt på rekke + stigende topper/bunner
+    "adx": 0.15,            # trendstyrke (uansett retning)
+}
+# Handelsdag-perioder (ikke kalenderdager): 12 mnd ≈ 252, 1 mnd ≈ 21, 3 mnd ≈ 63.
+TS_MOM_12M = 252            # 12-måneders momentum-vindu
+TS_MOM_1M = 21             # siste måned som trekkes fra (fjerner kortsiktig støy)
+TS_RS_3M = 63              # relativ styrke måles over 3 måneder
+TS_SMA_HELNING_DAGER = 20  # SMA50 «stigende» = høyere enn for 20 dager siden
+TS_BLOKK_DAGER = 21        # hver av de tre bolkene (topper/bunner) er ~1 måned
+# Momentum skaleres lineært: −20 % → 0 poeng, +60 % → 100 poeng.
+TS_MOM_LAV = -0.20
+TS_MOM_HOY = 0.60
+# Relativ styrke: 0 % forskjell → 50 poeng, +20 % → 100, −20 % → 0 (symmetrisk).
+TS_RS_SPENN = 0.20
+# ADX skaleres lineært: 10 → 0 poeng, 50 → 100 poeng. ADX ≥ 20 = «ekte» trend.
+ADX_PERIODE = 14
+TS_ADX_LAV = 10
+TS_ADX_HOY = 50
+TS_ADX_EKTE = 20
+# Farge-/nivågrenser i lista og subchartet: 🟢 ≥ 70, 🟡 40–69, 🔴 < 40.
+TS_NIVA_GRONN = 70
+TS_NIVA_ROD = 40
+# Minste historikk for å kunne regne full score (de lange snittene + momentum).
+TS_MIN_DAGER = 252
+
 
 # ---------------------------------------------------------------------------
 # Presets (ferdige oppsett du kan velge mellom i nettsiden)

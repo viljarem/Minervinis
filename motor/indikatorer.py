@@ -46,6 +46,37 @@ def _atr(d: pd.DataFrame, periode: int = 14) -> pd.Series:
     return sann_range.rolling(periode).mean()
 
 
+def adx(d: pd.DataFrame, periode: int = 14) -> pd.Series:
+    """ADX = hvor STERK trenden er (uansett opp eller ned). 0–100.
+
+    Klassisk Wilder-ADX: regn +DM/−DM (retningsbevegelse), utjevn dem og True Range
+    med Wilders glidende snitt (EMA med alpha=1/periode – samme som TradingView),
+    lag +DI/−DI, så DX = |+DI − −DI| / (+DI + −DI), og til slutt ADX = utjevnet DX.
+    Lave verdier (< 20) = sidelengs/svak trend, høye (> 25) = sterk trend.
+    Returnerer en pd.Series på linje med indeksen; NaN de første ~2·periode dagene.
+    """
+    high, low, close = d["High"], d["Low"], d["Close"]
+
+    opp = high.diff()
+    ned = -low.diff()
+    pluss_dm = ((opp > ned) & (opp > 0)).astype(float) * opp.clip(lower=0)
+    minus_dm = ((ned > opp) & (ned > 0)).astype(float) * ned.clip(lower=0)
+
+    hoy_lav = high - low
+    hoy_close = (high - close.shift()).abs()
+    lav_close = (low - close.shift()).abs()
+    tr = pd.concat([hoy_lav, hoy_close, lav_close], axis=1).max(axis=1)
+
+    alpha = 1 / periode
+    atr = tr.ewm(alpha=alpha, min_periods=periode, adjust=False).mean()
+    pluss_di = 100 * pluss_dm.ewm(alpha=alpha, min_periods=periode, adjust=False).mean() / atr
+    minus_di = 100 * minus_dm.ewm(alpha=alpha, min_periods=periode, adjust=False).mean() / atr
+
+    sum_di = (pluss_di + minus_di).replace(0, np.nan)
+    dx = 100 * (pluss_di - minus_di).abs() / sum_di
+    return dx.ewm(alpha=alpha, min_periods=periode, adjust=False).mean()
+
+
 # ---------------------------------------------------------------------------
 # Golden cross (SMA50 krysser SMA200)
 # ---------------------------------------------------------------------------

@@ -15,7 +15,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from . import konfig, data as datamod, indikatorer, minervini, vcp
+from . import konfig, data as datamod, indikatorer, minervini, trendscore, vcp
 from .konfig import Preset
 
 
@@ -356,6 +356,68 @@ def screen_golden_cross(priser: pd.DataFrame) -> pd.DataFrame:
     df["_naer"] = df["gap_pct"].abs()
     df = (df.sort_values(["_rang", "_naer"], ascending=[True, True], kind="mergesort")
             .drop(columns=["_rang", "_naer"])
+            .reset_index(drop=True))
+    return df
+
+
+# ---------------------------------------------------------------------------
+# TrendScore – rangerer HELE universet etter trendstyrke (0–100)
+# ---------------------------------------------------------------------------
+def screen_trendscore(priser: pd.DataFrame) -> pd.DataFrame:
+    """Regner TrendScore (0–100) for hele universet og sorterer synkende på score.
+
+    Helt uavhengig av Minervini-templaten. Bruker samme likviditetsfilter og
+    markedsindeksen (benchmark) som sammenligningsgrunnlag for relativ styrke.
+    Returnerer alle aksjer med nok historikk, høyest score øverst.
+    """
+    if priser is None or priser.empty:
+        return pd.DataFrame()
+
+    benchmarks = {b.benchmark for b in konfig.BORSER.values() if b.benchmark}
+    benchmarks.add(konfig.BENCHMARK)
+
+    # Finn markedsindeksen i datasettet (om den finnes) – felles for alle aksjene.
+    indeks_serie = None
+    for bm in benchmarks:
+        kand = datamod.serie_for(priser, bm)
+        if kand is not None and not kand.empty:
+            indeks_serie = kand
+            break
+
+    tickere = [t for t in sorted(priser["Ticker"].unique()) if t not in benchmarks]
+    rader = []
+    for t in tickere:
+        serie = datamod.serie_for(priser, t)
+        if serie is None or len(serie) < konfig.TS_MIN_DAGER:
+            continue
+        ts = trendscore.siste_trendscore(serie, indeks_serie)
+        if ts is None:
+            continue
+        pris = float(serie["Close"].iloc[-1])
+        dagsomsetning = float(
+            (serie["Close"] * serie["Volume"]).rolling(konfig.OMSETNING_VINDU).mean().iloc[-1])
+        rader.append({
+            "ticker": t,
+            "pris": round(pris, 2),
+            "trendscore": ts["score"],
+            "momentum": ts["momentum"],
+            "rel_styrke": ts["rel_styrke"],
+            "struktur": ts["struktur"],
+            "adx": ts["adx"],
+            "over_sma200": ts["over_sma200"],
+            "adx_ok": ts["adx_ok"],
+            "dagsomsetning": dagsomsetning,
+        })
+
+    df = pd.DataFrame(rader)
+    if df.empty:
+        return df
+
+    df = df[df["dagsomsetning"] >= konfig.MIN_DAGSOMSETNING].copy()
+    if df.empty:
+        return df
+
+    df = (df.sort_values("trendscore", ascending=False, kind="mergesort")
             .reset_index(drop=True))
     return df
 

@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from motor import konfig, data as datamod, fundamenta, indikatorer, minervini, posisjon, screener, sektor, univers, vcp, aksjeinfo
+from motor import konfig, data as datamod, fundamenta, indikatorer, minervini, posisjon, screener, sektor, univers, vcp, aksjeinfo, trendscore
 
 # TradingViews lightweight-charts (testfane). Pakket i try/except så appen aldri
 # krasjer om komponenten ikke er installert i miljøet (f.eks. rett etter utrulling).
@@ -64,6 +64,35 @@ def kjor_screening(bors_navn: str, preset_navn: str, versjon: float) -> pd.DataF
 def kjor_golden_cross(bors_navn: str, versjon: float) -> pd.DataFrame:
     priser = datamod.les_priser(konfig.BORSER[bors_navn].priser_fil)
     return screener.screen_golden_cross(priser)
+
+
+@st.cache_data(show_spinner="Regner TrendScore for hele børsen ...")
+def kjor_trendscore(bors_navn: str, versjon: float) -> pd.DataFrame:
+    """TrendScore (0–100) for hele universet, sortert synkende på score.
+
+    getattr-fallback om Streamlit Cloud ennå kjører en gammel, bufret
+    screener-modul uten funksjonen (kan skje det første minuttet etter utrulling).
+    """
+    priser = datamod.les_priser(konfig.BORSER[bors_navn].priser_fil)
+    _fn = getattr(screener, "screen_trendscore", None)
+    return _fn(priser) if _fn is not None else pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False)
+def trendscore_serie_cached(bors_navn: str, ticker: str, versjon: float) -> pd.DataFrame:
+    """Full TrendScore-tidsserie for ÉN aksje (til subchartet). Bufret per ticker.
+
+    Leser priser fra fil, plukker ut aksjen + markedsindeksen (benchmark) og regner
+    hele score-serien. getattr-fallback om Streamlit Cloud kjører en gammel modul.
+    """
+    _fn = getattr(trendscore, "trendscore_serie", None)
+    if _fn is None:
+        return pd.DataFrame()
+    priser = datamod.les_priser(konfig.BORSER[bors_navn].priser_fil)
+    serie = datamod.serie_for(priser, ticker)
+    bm = konfig.BORSER[bors_navn].benchmark or konfig.BENCHMARK
+    indeks = datamod.serie_for(priser, bm)
+    return _fn(serie, indeks)
 
 
 @st.cache_data(show_spinner="Leter etter nye noteringer ...")
@@ -320,6 +349,24 @@ def _eps_chart_kwargs(ticker: str, vis_eps: bool) -> dict:
         }
     except Exception:
         return {"vis_eps": False}
+
+
+def _trendscore_chart_kwargs(ticker: str, vis: bool) -> dict:
+    """Bygger kwargs til lag_chart_lwc for TrendScore-delgrafen.
+
+    Returnerer {"vis_trendscore": False} når ruten er av, ellers {"vis_trendscore":
+    True, "trendscore_df": <serie>}. Felles for alle chart-stedene. Bruker
+    bors_navn/versjon (globale i skript-flyten) via den bufrede serie-henteren.
+    """
+    if not vis:
+        return {"vis_trendscore": False}
+    try:
+        df = trendscore_serie_cached(bors_navn, ticker, versjon)
+        if df is None or df.empty:
+            return {"vis_trendscore": False}
+        return {"vis_trendscore": True, "trendscore_df": df}
+    except Exception:
+        return {"vis_trendscore": False}
 
 
 @st.cache_data(ttl=86400, show_spinner=False)   # sektor endrer seg sjelden – 24 t
@@ -907,7 +954,9 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                   morkt: bool = False, tittel: str = "",
                   vis_eps: bool = False, eps_bars: list | None = None,
                   oms_bars: list | None = None, graf_basis: str = "kvartal",
-                  graf_valuta: str = "") -> list | None:
+                  graf_valuta: str = "",
+                  vis_trendscore: bool = False,
+                  trendscore_df: pd.DataFrame | None = None) -> list | None:
     """Bygger data-spesifikasjonen for lightweight-charts.
 
     Tar med alt det gamle Plotly-chartet hadde: candles, MA50/150/200, 52-ukers
@@ -1338,6 +1387,63 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                         "crosshair": {"mode": 0},
                     }
                     charts.append({"chart": eps_chart, "series": eps_serier})
+            except Exception:
+                pass
+
+        # --- TrendScore (0–100) som egen delgraf ---
+        # Score-kurven med fargede bakgrunnssoner (grønn ≥ 70, gul 40–70, rød < 40)
+        # og en stiplet referanselinje ved 50. trendscore_df er den ferdig beregnede
+        # tidsserien (hele historikken); vi klipper til chartets vindu via t.
+        if vis_trendscore and trendscore_df is not None and not trendscore_df.empty:
+            try:
+                ts_i_vindu = trendscore_df.reindex(d.index)
+                score_data = [{"time": ti, "value": round(float(v), 1)}
+                              for ti, v in zip(t, ts_i_vindu["score"]) if pd.notna(v)]
+                if score_data:
+                    g_lav, g_hoy = konfig.TS_NIVA_ROD, konfig.TS_NIVA_GRONN
+
+                    def _bg(konst, farge):
+                        """Flat bakgrunns-area på konstant nivå – fyller NEDOVER til 0."""
+                        data = [{"time": ti, "value": konst} for ti in t]
+                        return {"type": "Area", "data": data,
+                                "options": {"topColor": farge, "bottomColor": farge,
+                                            "lineColor": "rgba(0,0,0,0)", "lineWidth": 0,
+                                            "priceLineVisible": False, "lastValueVisible": False,
+                                            "crosshairMarkerVisible": False}}
+
+                    # Lag-rekkefølge (senere tegnes oppå): grønn 0–100, gul 0–70, rød 0–40.
+                    # Netto synlige bånd: 0–40 rødt, 40–70 gult, 70–100 grønt.
+                    ts_serier = [
+                        _bg(100, "rgba(38,166,154,0.14)"),
+                        _bg(g_hoy, "rgba(246,195,67,0.16)"),
+                        _bg(g_lav, "rgba(239,83,80,0.14)"),
+                    ]
+                    # Stiplet referanselinje ved 50.
+                    ts_serier.append({
+                        "type": "Line",
+                        "data": [{"time": ti, "value": 50} for ti in t],
+                        "options": {"color": "rgba(120,123,134,0.6)", "lineWidth": 1,
+                                    "lineStyle": 2, "priceLineVisible": False,
+                                    "lastValueVisible": False, "crosshairMarkerVisible": False}})
+                    # Selve score-kurven øverst.
+                    ts_serier.append({
+                        "type": "Line", "data": score_data,
+                        "options": {"color": "#7e57c2", "lineWidth": 2,
+                                    "priceLineVisible": False, "lastValueVisible": True,
+                                    "title": "TrendScore"}})
+                    ts_chart = {
+                        "height": 150,
+                        "layout": {"background": {"type": "solid", "color": bg},
+                                   "textColor": tekstfarge},
+                        "grid": {"vertLines": {"color": grid},
+                                 "horzLines": {"color": grid}},
+                        "rightPriceScale": {"scaleMargins": {"top": 0.08, "bottom": 0.08},
+                                            "borderVisible": False},
+                        "timeScale": {"borderVisible": False, "rightOffset": 4,
+                                      "fixLeftEdge": True, "fixRightEdge": True},
+                        "crosshair": {"mode": 0},
+                    }
+                    charts.append({"chart": ts_chart, "series": ts_serier})
             except Exception:
                 pass
         return charts
@@ -1796,17 +1902,20 @@ visning og rører **aldri** kursdataene screeningen bygger på.
 # --- Sidefelt: filtre ---
 GOLDEN_VALG = "✨ Golden Cross"
 IPO_VALG = "🆕 Nye IPO-er"
+TRENDSCORE_VALG = "📈 TrendScore"
 with st.sidebar:
     st.header("Filtre")
     preset_navn = st.selectbox(
-        "Oppsett", list(konfig.PRESETS.keys()) + [GOLDEN_VALG, IPO_VALG],
+        "Oppsett", list(konfig.PRESETS.keys()) + [GOLDEN_VALG, TRENDSCORE_VALG, IPO_VALG],
         help="Velg hva skanningen skal lete etter: Minervini-template (standard), "
-             "golden cross (SMA50 over SMA200 + aksjer som venter på kryss), eller "
+             "golden cross (SMA50 over SMA200 + aksjer som venter på kryss), TrendScore "
+             "(0–100-rangering av trendstyrke for hele børsen), eller "
              "nye IPO-er (ferske noteringer med for kort historikk til full analyse).")
     er_golden = preset_navn == GOLDEN_VALG
     er_ipo = preset_navn == IPO_VALG
-    # Trygt preset-navn for Minervini-analyser (chart/søk) også i golden-/ipo-modus.
-    aktiv_preset_navn = konfig.STANDARD.navn if (er_golden or er_ipo) else preset_navn
+    er_trendscore = preset_navn == TRENDSCORE_VALG
+    # Trygt preset-navn for Minervini-analyser (chart/søk) også i golden-/ipo-/ts-modus.
+    aktiv_preset_navn = konfig.STANDARD.navn if (er_golden or er_ipo or er_trendscore) else preset_navn
 
     # Standardverdier så variablene finnes uansett modus.
     bruker_dato = None
@@ -1821,6 +1930,10 @@ with st.sidebar:
         st.caption("✨ **Golden cross-modus** – leter etter SMA50 over SMA200 (bekreftet) "
                    "og aksjer rett under som nærmer seg et kryss. Minervini-filtrene under "
                    "er skrudd av i denne modusen.")
+    elif er_trendscore:
+        st.caption("📈 **TrendScore-modus** – rangerer HELE børsen 0–100 etter hvor sterk og "
+                   "sunn opptrenden er (momentum, relativ styrke, trendstruktur og ADX). "
+                   "Høyest score øverst. Minervini-filtrene under er skrudd av.")
     elif er_ipo:
         st.caption("🆕 **Nye IPO-er** – ferske noteringer som ennå har for kort historikk "
                    f"(< {konfig.MIN_HANDELSDAGER} handelsdager) til full Minervini-analyse. "
@@ -1865,13 +1978,21 @@ if er_golden:
     gc_resultat = kjor_golden_cross(bors_navn, versjon) if skannet_na else None
     resultat = None
     ipo_resultat = None
+    ts_resultat = None
+elif er_trendscore:
+    ts_resultat = kjor_trendscore(bors_navn, versjon) if skannet_na else None
+    gc_resultat = None
+    resultat = None
+    ipo_resultat = None
 elif er_ipo:
     ipo_resultat = kjor_nye_ipoer(bors_navn, versjon) if skannet_na else None
     gc_resultat = None
     resultat = None
+    ts_resultat = None
 else:
     gc_resultat = None
     ipo_resultat = None
+    ts_resultat = None
     if bruker_dato:
         resultat = kjor_screening_retrospektiv(bors_navn, preset_navn, pd.Timestamp(bruker_dato), versjon)
     else:
@@ -2021,6 +2142,111 @@ def vis_golden_cross(gc_resultat):
             st.caption("Chart-komponenten er ikke lastet i dette miljøet ennå.")
 
 
+def _ts_niva_bg(val) -> str:
+    """Cellebakgrunn etter TrendScore-nivå: 🟢 ≥ 70, 🟡 40–69, 🔴 < 40."""
+    if pd.isna(val):
+        return ""
+    if val >= konfig.TS_NIVA_GRONN:
+        return "background-color: rgba(38,166,154,0.28)"
+    if val >= konfig.TS_NIVA_ROD:
+        return "background-color: rgba(246,195,67,0.28)"
+    return "background-color: rgba(239,83,80,0.28)"
+
+
+TS_TABELL_HJELP = {
+    "Pris": st.column_config.NumberColumn("Pris", format="%.2f", help="Siste sluttkurs."),
+    "TrendScore": st.column_config.NumberColumn(
+        "TrendScore", format="%.1f",
+        help="0–100: hvor sterk og sunn opptrenden er. 🟢 ≥ 70 · 🟡 40–69 · 🔴 < 40."),
+    "Momentum": st.column_config.NumberColumn(
+        "Momentum", format="%.0f", help="40 % av scoren – 12-mnd-avkastning minus siste måned."),
+    "Rel.styrke": st.column_config.NumberColumn(
+        "Rel.styrke", format="%.0f", help="25 % – meravkastning mot markedsindeksen (3 mnd). 50 = likt."),
+    "Struktur": st.column_config.NumberColumn(
+        "Struktur", format="%.0f", help="20 % – glidende snitt på rekke + stigende topper/bunner."),
+    "ADX": st.column_config.NumberColumn(
+        "ADX", format="%.0f", help="15 % – trendstyrke (14-dagers ADX, skalert)."),
+    ">SMA200": st.column_config.TextColumn(">SMA200", help="Ligger kursen over 200-dagers snittet?"),
+    "ADX≥20": st.column_config.TextColumn("ADX≥20", help="Er ADX minst 20? (ekte trend, ikke sideveis)."),
+}
+
+
+def vis_trendscore(ts_resultat):
+    """Rendrer TrendScore-tabellen (råtall + fargebakgrunn) + chart i Hovedliste-fanen."""
+    st.markdown("### 📈 TrendScore-rangering")
+    st.caption("Rangerer HELE børsen 0–100 etter hvor sterk og sunn opptrenden er – "
+               "momentum (40 %), relativ styrke (25 %), trendstruktur (20 %) og ADX (15 %). "
+               "**Uavhengig av Minervini-templaten.** Høyest score øverst.")
+    if ts_resultat is None:
+        st.info(f"Trykk **🔍 Skann {BORS.navn}** i menyen til venstre for å regne TrendScore "
+                "for hele børsen. (Ingenting skannes automatisk – du velger når.)")
+        return
+    if ts_resultat.empty:
+        st.info("Fant ingen aksjer med nok historikk til å regne TrendScore akkurat nå.")
+        return
+
+    _gronn = int((ts_resultat["trendscore"] >= konfig.TS_NIVA_GRONN).sum())
+    _gul = int(((ts_resultat["trendscore"] >= konfig.TS_NIVA_ROD) &
+                (ts_resultat["trendscore"] < konfig.TS_NIVA_GRONN)).sum())
+    _rod = int((ts_resultat["trendscore"] < konfig.TS_NIVA_ROD).sum())
+    st.markdown(
+        f"**{len(ts_resultat)} aksjer** – 🟢 {_gronn} sterke (≥ {konfig.TS_NIVA_GRONN}) · "
+        f"🟡 {_gul} middels · 🔴 {_rod} svake (< {konfig.TS_NIVA_ROD})."
+    )
+
+    vis = pd.DataFrame()
+    vis["Ticker"] = ts_resultat["ticker"]
+    vis["Pris"] = ts_resultat["pris"]
+    vis["TrendScore"] = ts_resultat["trendscore"]
+    vis["Momentum"] = ts_resultat["momentum"]
+    vis["Rel.styrke"] = ts_resultat["rel_styrke"]
+    vis["Struktur"] = ts_resultat["struktur"]
+    vis["ADX"] = ts_resultat["adx"]
+    vis[">SMA200"] = ts_resultat["over_sma200"].map(lambda b: "✅" if b else "—")
+    vis["ADX≥20"] = ts_resultat["adx_ok"].map(lambda b: "✅" if b else "—")
+
+    # Råtall i cellene, men bakgrunnsfarge etter nivå på selve TrendScore-kolonnen.
+    styled = vis.style.applymap(_ts_niva_bg, subset=["TrendScore"])
+    _ts_tab = st.dataframe(
+        styled, width="stretch", hide_index=True, height=560, column_config=TS_TABELL_HJELP,
+        on_select="rerun", selection_mode="multi-row", key="trendscore_tabell",
+    )
+    st.caption("💡 **Huk av én eller flere rader** for å tegne chart med TrendScore-ruten under.")
+
+    _ts_rader = list(getattr(_ts_tab.selection, "rows", []) or [])
+    _ts_valgte = [ts_resultat.iloc[i]["ticker"] for i in _ts_rader if i < len(ts_resultat)]
+    if not _ts_valgte:
+        st.caption("Ingen rader valgt ennå – huk av i tabellen over for å tegne chart her.")
+        return
+    st.divider()
+    _maks = 15
+    if len(_ts_valgte) > _maks:
+        st.info(f"Viser de {_maks} første av {len(_ts_valgte)} valgte (for fartens skyld).")
+        _ts_valgte = _ts_valgte[:_maks]
+    st.subheader(f"📊 Chart for {len(_ts_valgte)} valgte")
+    _ts_priser = last_priser(bors_navn, versjon)
+    _tsc1, _tsc2 = st.columns([3, 1])
+    with _tsc1:
+        _ts_periode = st.radio("Periode (chart)", list(PERIODER_VALG.keys()), index=3,
+                               horizontal=True, key="ts_periode")
+    with _tsc2:
+        _ts_eps = st.checkbox("💰 EPS", value=False, key="ts_eps",
+                              help="Legg til omsetning/resultat-ruten under chartet.")
+    for _tk in _ts_valgte:
+        _s = datamod.serie_for(_ts_priser, _tk)
+        _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[aktiv_preset_navn])
+        st.markdown(f"**{_tk}**")
+        if HAR_LWC:
+            _spec = lag_chart_lwc(_s, _r, PERIODER_VALG[_ts_periode],
+                                  hoyde=460, morkt=MORKT, tittel=_tk,
+                                  **_trendscore_chart_kwargs(_tk, True),
+                                  **_eps_chart_kwargs(_tk, _ts_eps))
+            if _spec:
+                renderLightweightCharts(_spec, key=f"ts_{_tk}_{_ts_periode}_{_ts_eps}_{TEMA}")
+        else:
+            st.caption("Chart-komponenten er ikke lastet i dette miljøet ennå.")
+
+
 def vis_nye_ipoer(ipo_resultat):
     """Viser ferske noteringer (for kort historikk til full Minervini-analyse).
 
@@ -2097,6 +2323,8 @@ def vis_nye_ipoer(ipo_resultat):
 with fane1:
     if er_golden:
         vis_golden_cross(gc_resultat)
+    elif er_trendscore:
+        vis_trendscore(ts_resultat)
     elif er_ipo:
         vis_nye_ipoer(ipo_resultat)
     elif resultat is None:
@@ -2177,6 +2405,9 @@ with fane1:
             _hl_eps = st.checkbox("💰 Omsetning/resultat (EPS)", value=False, key="hl_eps",
                                   help="Egen rute under hvert chart: kvartalsvis/årlig omsetning "
                                        "(blå linje) og resultat (søyler – grønn/rød).")
+            _hl_trendscore = st.checkbox("📈 TrendScore (0–100)", value=False, key="hl_trendscore",
+                                         help="Egen rute: TrendScore-kurven med fargede soner "
+                                              "(grønn ≥ 70, gul 40–70, rød < 40).")
         # Tunge data hentes kun når lagene faktisk er på.
         _hl_rs_mat = rs_rating_historikk(bors_navn, versjon) if _hl_rs_rating else None
         _hl_indeks_serie = (datamod.serie_for(_priser_alle_hl, BORS.benchmark)
@@ -2230,9 +2461,10 @@ with fane1:
                                           vis_indeks=_hl_indeks, indeks=_hl_indeks_serie,
                                           indeks_navn=BORS.benchmark, ukentlig=_hl_ukentlig,
                                           hoyde=460, morkt=MORKT, tittel=_tk,
+                                          **_trendscore_chart_kwargs(_tk, _hl_trendscore),
                                           **_eps_chart_kwargs(_tk, _hl_eps))
                     if _spec:
-                        renderLightweightCharts(_spec, key=f"hl_{nokkel}_{_tk}_{_hl_periode}_{_hl_tidsramme}_{_hl_eps}_{TEMA}")
+                        renderLightweightCharts(_spec, key=f"hl_{nokkel}_{_tk}_{_hl_periode}_{_hl_tidsramme}_{_hl_eps}_{_hl_trendscore}_{TEMA}")
 
         if del_opp:
             # Fire separate tabeller – én per setup-status, i handlbar rekkefølge.
@@ -2305,6 +2537,10 @@ with fane2:
                                        "omsetning (blå linje) og resultat/bunnlinje (søyler – grønn "
                                        "overskudd, rød underskudd). Minervinis «andre bein»: vokser "
                                        "inntjeningen? Hentes fra Yahoo (små aksjer kan mangle data).")
+            vis_trendscore_c = st.checkbox("📈 TrendScore (0–100)", value=False,
+                                           key="chart_trendscore",
+                                           help="Egen rute under chartet: TrendScore-kurven med fargede "
+                                                "soner (grønn ≥ 70, gul 40–70, rød < 40) og referanselinje ved 50.")
         serie = datamod.serie_for(last_priser(bors_navn, versjon), valg)
         res = screener.analyser_ticker(serie, valg, konfig.PRESETS[aktiv_preset_navn])
         if res is None:
@@ -2330,16 +2566,17 @@ with fane2:
                     _rs_serie = _rs_mat[valg].dropna()
             _indeks = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark) if vis_indeks else None
             _eps_kw = _eps_chart_kwargs(valg, vis_eps)
+            _ts_kw = _trendscore_chart_kwargs(valg, vis_trendscore_c)
             spec = lag_chart_lwc(serie, res, PERIODER_VALG[periode],
                                  vis_ma=vis_ma, vis_52u=vis_52u, vis_vcp=vis_vcp,
                                  vis_7av7=vis_7av7, vis_hist=vis_hist, vis_golden=vis_golden,
                                  vis_rs_rating=vis_rs_rating, rs_rating=_rs_serie,
                                  vis_indeks=vis_indeks, indeks=_indeks, indeks_navn=BORS.benchmark,
-                                 ukentlig=ukentlig, pos=pos, morkt=MORKT, tittel=valg, **_eps_kw)
+                                 ukentlig=ukentlig, pos=pos, morkt=MORKT, tittel=valg, **_ts_kw, **_eps_kw)
             if spec is None:
                 st.info("Klarte ikke bygge chartet for denne aksjen.")
             else:
-                noekkel = f"chart_{valg}_{periode}_{tidsramme}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{vis_golden}{vis_rs_rating}{vis_indeks}{vis_eps}{pos_suffix}_{TEMA}"
+                noekkel = f"chart_{valg}_{periode}_{tidsramme}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{vis_golden}{vis_rs_rating}{vis_indeks}{vis_eps}{vis_trendscore_c}{pos_suffix}_{TEMA}"
                 renderLightweightCharts(spec, key=noekkel)
                 st.caption("💡 Dra sidelengs, rull musehjulet for å zoome, dra loddrett på "
                            "prisaksen for å strekke høyden. 🟡 **Kraftig gull = aktiv pivot** · "
@@ -2407,6 +2644,9 @@ with fane3:
                     vis_eps3 = st.checkbox("💰 Omsetning/resultat (EPS)", value=False, key="sok_eps",
                                            help="Egen rute: kvartalsvis/årlig omsetning (blå linje) og "
                                                 "resultat (søyler – grønn overskudd, rød underskudd).")
+                    vis_trendscore3 = st.checkbox("📈 TrendScore (0–100)", value=False, key="sok_trendscore",
+                                                  help="Egen rute: TrendScore-kurven med fargede soner "
+                                                       "(grønn ≥ 70, gul 40–70, rød < 40).")
                 if not HAR_LWC:
                     st.warning("Chart-komponenten er ikke lastet i dette miljøet ennå.")
                 else:
@@ -2424,11 +2664,12 @@ with fane3:
                                           vis_rs_rating=vis_rs_rating3, rs_rating=_rs_serie3,
                                           vis_indeks=vis_indeks3, indeks=_indeks3, indeks_navn=BORS.benchmark,
                                           ukentlig=ukentlig3, pos=pos3, morkt=MORKT, tittel=sok,
+                                          **_trendscore_chart_kwargs(sok, vis_trendscore3),
                                           **_eps_chart_kwargs(sok, vis_eps3))
                     if spec3 is not None:
                         renderLightweightCharts(
                             spec3,
-                            key=f"sok_{sok}_{periode3}_{tidsramme3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{vis_rs_rating3}{vis_indeks3}{vis_eps3}{pos_suffix3}_{TEMA}")
+                            key=f"sok_{sok}_{periode3}_{tidsramme3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{vis_rs_rating3}{vis_indeks3}{vis_eps3}{vis_trendscore3}{pos_suffix3}_{TEMA}")
                 vis_vcp_boks(res)
                 fundamenta_seksjon(sok, f"sok_{sok}")
                 st.divider()
