@@ -47,7 +47,7 @@ def _er_morkt() -> bool:
 # ---------------------------------------------------------------------------
 # Øk denne når screener-/tabell-logikken endres, så @st.cache_data-bufferet for
 # screening automatisk invalideres (slipper å tømme cache manuelt etter deploy).
-KODE_VERSJON = 3
+KODE_VERSJON = 4
 
 
 def data_versjon(bors: "konfig.Bors" = konfig.OSLO_BORS) -> float:
@@ -1093,6 +1093,8 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                              "priceLineColor": "#787b86"}}
         if rene:
             hoved["markers"] = rene
+        # Legend-tagg (leses kun av hover-rendereren, ignoreres av std-komponenten).
+        hoved["legend"] = {"label": tittel or "Kurs", "kind": "ohlc"}
 
         # Risk/reward-soner (long): grønn gevinstsone inngang→mål, rød risikosone
         # inngang→stop. Lagt BAK candlene (svak farge) så de blir bakteppe, som
@@ -1126,9 +1128,13 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
 
         # Glidende snitt
         if vis_ma:
-            serier += [linje("SMA50", "#2196f3", 2),
-                       linje("SMA150", "#ff9800", 1),
-                       linje("SMA200", "#9c27b0", 1)]
+            _ma50 = linje("SMA50", "#2196f3", 2)
+            _ma150 = linje("SMA150", "#ff9800", 1)
+            _ma200 = linje("SMA200", "#9c27b0", 1)
+            _ma50["legend"] = {"label": "MA50", "color": "#2196f3", "kind": "line"}
+            _ma150["legend"] = {"label": "MA150", "color": "#ff9800", "kind": "line"}
+            _ma200["legend"] = {"label": "MA200", "color": "#9c27b0", "kind": "line"}
+            serier += [_ma50, _ma150, _ma200]
 
         # 52-ukers høy/lav (grå stiplede referanselinjer – kriterium 6 og 7)
         if vis_52u:
@@ -1198,7 +1204,8 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
         # 50-dagers snitt i dagsvisning, 10-ukers (SMA10) i ukevisning.
         serier.append({"type": "Histogram", "data": volum,
                        "options": {"priceFormat": {"type": "volume"}, "priceScaleId": "vol"},
-                       "priceScale": {"scaleMargins": {"top": 0.78, "bottom": 0}}})
+                       "priceScale": {"scaleMargins": {"top": 0.78, "bottom": 0}},
+                       "legend": {"label": "Vol", "kind": "vol"}})
         d["_volsnitt"] = d["Volume"].rolling(vol_vindu, min_periods=max(2, vol_vindu // 5)).mean()
         serier.append(linje("_volsnitt", "#3949ab", 1, skala="vol"))
 
@@ -1604,125 +1611,60 @@ def vis_chart_legend(serie: pd.DataFrame, res: dict | None, *,
 
 
 # ---------------------------------------------------------------------------
-# Hover-chart: selvstendig HTML-komponent med mus-følgende legend (eksperimentelt)
+# Hover-chart: rendrer HELE chart-spec-en (fra lag_chart_lwc) som selvstendig HTML
 # ---------------------------------------------------------------------------
 # Den vanlige renderLightweightCharts-komponenten er enveis og kan ikke gi oss en
-# legend som følger musepekeren. Her bygger vi i stedet et HELT selvstendig chart
-# via components.html: lightweight-charts lastes fra CDN, og en liten JS-snutt
-# abonnerer på crosshairMove og oppdaterer en legend-boks OPPE I chartet mens du
-# beveger musa. Alt kjører inne i iframen – ingen data sendes tilbake til Python.
-# OPT-IN via en checkbox, så den gamle stien er urørt og lett å rulle tilbake til.
-def lag_chart_hover_html(serie: pd.DataFrame, dager: int = 504, *,
-                         hoyde: int = 520, morkt: bool = False,
-                         tittel: str = "", valuta: str = "",
-                         vis_ma: bool = True) -> str | None:
-    """Bygger et selvstendig lightweight-charts-chart (HTML) med hover-legend."""
+# legend som følger musepekeren. Her tegner vi i stedet NØYAKTIG samme spec (alle
+# lag: candles, MA, 52u, pivot/stop, VCP, 7/7-markører, historiske brudd, golden
+# cross, indeks-overlay OG delrutene RS/EPS/TrendScore) via components.html:
+# lightweight-charts lastes fra CDN, JS-en bygger hvert pane, synkroniserer
+# panorering/zoom og oppdaterer en legend-boks mens musa beveger seg. Fordi vi
+# gjenbruker spec-en fra lag_chart_lwc dupliseres ingen analyselogikk – endrer vi
+# hovedchartet, følger hover-chartet automatisk med.
+def lag_chart_hover_fra_spec(charts_spec: list | None, *, morkt: bool = False,
+                             valuta: str = "") -> str | None:
+    """Tar spec-lista fra lag_chart_lwc og bygger selvstendig HTML med hover-legend."""
+    if not charts_spec:
+        return None
     try:
-        d = indikatorer.legg_til_indikatorer(serie)
-        if d is None or d.empty:
-            return None
-        d = d.tail(max(dager, 30))
-        tider = list(d.index.strftime("%Y-%m-%d"))
-
-        candles, volum = [], []
-        opp_c, ned_c = "#26a69a", "#ef5350"
-        for ti, (_, r) in zip(tider, d.iterrows()):
-            o, h, l, c = r.get("Open"), r.get("High"), r.get("Low"), r.get("Close")
-            if pd.isna(o) or pd.isna(h) or pd.isna(l) or pd.isna(c):
-                continue
-            candles.append({"time": ti, "open": round(float(o), 4), "high": round(float(h), 4),
-                            "low": round(float(l), 4), "close": round(float(c), 4)})
-            vv = r.get("Volume")
-            if pd.notna(vv):
-                volum.append({"time": ti, "value": float(vv),
-                              "color": "rgba(38,166,154,0.5)" if c >= o else "rgba(239,83,80,0.5)"})
-        if len(candles) < 2:
-            return None
-
-        def _linje(kol):
-            ut = []
-            if kol in d.columns:
-                for ti, v in zip(tider, d[kol]):
-                    if pd.notna(v):
-                        ut.append({"time": ti, "value": round(float(v), 4)})
-            return ut
-
-        ma50 = _linje("SMA50") if vis_ma else []
-        ma150 = _linje("SMA150") if vis_ma else []
-        ma200 = _linje("SMA200") if vis_ma else []
-
         if morkt:
-            bg, tekst, grid = "#131722", "#d1d4dc", "rgba(120,123,134,0.22)"
             leg_bg, leg_kant = "rgba(19,23,34,0.86)", "rgba(255,255,255,0.10)"
         else:
-            bg, tekst, grid = "#ffffff", "#333333", "rgba(197,203,206,0.35)"
             leg_bg, leg_kant = "rgba(255,255,255,0.90)", "rgba(0,0,0,0.10)"
-
-        data = {
-            "candles": candles, "volum": volum,
-            "ma50": ma50, "ma150": ma150, "ma200": ma200,
-            "opp": opp_c, "ned": ned_c, "bg": bg, "tekst": tekst, "grid": grid,
-            "legBg": leg_bg, "legKant": leg_kant, "valuta": valuta, "tittel": tittel,
-            "hoyde": hoyde,
-        }
+        data = {"charts": charts_spec, "legBg": leg_bg, "legKant": leg_kant,
+                "valuta": valuta, "morkt": morkt}
         data_json = json.dumps(data)
-
-        html = _HOVER_CHART_MAL.replace("__DATA__", data_json).replace("__HOYDE__", str(hoyde))
-        return html
+        return _HOVER_CHART_MAL.replace("__DATA__", data_json)
     except Exception:
         return None
 
 
-# JS/HTML-mal for hover-chartet. __DATA__ byttes ut med JSON, __HOYDE__ med px.
-# lightweight-charts v4 (standalone) fra unpkg – samme API som Python-komponenten.
+def _hover_total_hoyde(charts_spec: list | None) -> int:
+    """Samlet iframe-høyde = sum av alle panes + marginer/slingringsmonn."""
+    if not charts_spec:
+        return 600
+    h = sum(int((c.get("chart") or {}).get("height", 300)) for c in charts_spec)
+    return h + 6 * len(charts_spec) + 12
+
+
+# JS/HTML-mal. __DATA__ byttes ut med JSON. lightweight-charts v4 (standalone) fra
+# unpkg – samme API som Python-komponenten, så spec-en kan gjenbrukes direkte.
 _HOVER_CHART_MAL = """
-<div id="wrap" style="position:relative;width:100%;height:__HOYDE__px;">
-  <div id="chart" style="width:100%;height:100%;"></div>
-  <div id="legend" style="position:absolute;left:12px;top:10px;z-index:5;
-       font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:12px;
-       line-height:1.5;padding:8px 12px;border-radius:9px;pointer-events:none;
-       backdrop-filter:blur(6px);"></div>
+<div id="wrap" style="position:relative;width:100%;">
+  <div id="panes"></div>
 </div>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 (function(){
   var D = __DATA__;
-  var el = document.getElementById('chart');
-  var leg = document.getElementById('legend');
-  leg.style.background = D.legBg;
-  leg.style.border = '1px solid ' + D.legKant;
-  leg.style.color = D.tekst;
-  var chart = LightweightCharts.createChart(el, {
-    layout: { background: { type:'solid', color: D.bg }, textColor: D.tekst },
-    grid: { vertLines:{color:D.grid}, horzLines:{color:D.grid} },
-    rightPriceScale: { borderVisible:false, scaleMargins:{top:0.08, bottom:0.26} },
-    timeScale: { borderVisible:false, rightOffset:4 },
-    crosshair: { mode: 0 },
-    autoSize: true
-  });
-  var candle = chart.addCandlestickSeries({
-    upColor:D.opp, downColor:D.ned, borderUpColor:D.opp, borderDownColor:D.ned,
-    wickUpColor:D.opp, wickDownColor:D.ned
-  });
-  candle.setData(D.candles);
-  var vol = chart.addHistogramSeries({
-    priceFormat:{type:'volume'}, priceScaleId:'vol',
-    lastValueVisible:false, priceLineVisible:false
-  });
-  vol.priceScale().applyOptions({ scaleMargins:{top:0.78, bottom:0.0} });
-  vol.setData(D.volum);
-  function mkLine(data, color, w){
-    if(!data || !data.length) return null;
-    var s = chart.addLineSeries({ color:color, lineWidth:w, priceLineVisible:false,
-      lastValueVisible:false, crosshairMarkerVisible:false });
-    s.setData(data); return s;
-  }
-  var s50 = mkLine(D.ma50, '#2196f3', 2);
-  var s150 = mkLine(D.ma150, '#ff9800', 2);
-  var s200 = mkLine(D.ma200, '#e040fb', 2);
-  chart.timeScale().fitContent();
-
+  var panesEl = document.getElementById('panes');
   var val = D.valuta ? (' ' + D.valuta) : '';
+
+  function tkey(t){
+    if(t==null) return null;
+    if(typeof t === 'object') return t.year+'-'+String(t.month).padStart(2,'0')+'-'+String(t.day).padStart(2,'0');
+    return String(t);
+  }
   function fmt(x){ return (x===undefined||x===null)?'–':Number(x).toFixed(2); }
   function fmtVol(x){
     if(x===undefined||x===null) return '–';
@@ -1731,56 +1673,129 @@ _HOVER_CHART_MAL = """
     if(x>=1e3) return (x/1e3).toFixed(1)+'K';
     return String(Math.round(x));
   }
+  function addSeries(chart, f){
+    var s;
+    var o = f.options || {};
+    switch(f.type){
+      case 'Candlestick': s = chart.addCandlestickSeries(o); break;
+      case 'Line':        s = chart.addLineSeries(o); break;
+      case 'Histogram':   s = chart.addHistogramSeries(o); break;
+      case 'Area':        s = chart.addAreaSeries(o); break;
+      case 'Baseline':    s = chart.addBaselineSeries(o); break;
+      case 'Bar':         s = chart.addBarSeries(o); break;
+      default: return null;
+    }
+    if(f.priceScale){ chart.priceScale((o.priceScaleId)||'').applyOptions(f.priceScale); }
+    if(f.data){ s.setData(f.data); }
+    if(f.markers){ s.setMarkers(f.markers); }
+    return s;
+  }
+
+  var allCharts = [];
+  var mainLegendItems = [];   // {series, label, color, kind} for pane 0
+  var mainCandles = null;     // candle-data for endrings-% i legenden
+  var tekstfarge = D.morkt ? '#d1d4dc' : '#333333';
+
+  D.charts.forEach(function(spec, ci){
+    var copt = JSON.parse(JSON.stringify(spec.chart || {}));
+    copt.autoSize = true;
+    // La iframe-høyden styres av 'height' fra spec-en.
+    var h = copt.height || 300;
+    var box = document.createElement('div');
+    box.style.position = 'relative';
+    box.style.width = '100%';
+    box.style.height = h + 'px';
+    box.style.marginBottom = '6px';
+    var cdiv = document.createElement('div');
+    cdiv.style.width = '100%'; cdiv.style.height = '100%';
+    box.appendChild(cdiv);
+    panesEl.appendChild(box);
+
+    var chart = LightweightCharts.createChart(cdiv, copt);
+    allCharts.push(chart);
+
+    (spec.series || []).forEach(function(f){
+      var s = addSeries(chart, f);
+      if(s && ci === 0 && f.legend){
+        if(f.legend.kind === 'ohlc'){
+          mainCandles = f.data;
+          mainLegendItems.push({series:s, label:f.legend.label, kind:'ohlc'});
+        } else {
+          mainLegendItems.push({series:s, label:f.legend.label,
+                                color:f.legend.color, kind:f.legend.kind});
+        }
+      }
+    });
+    chart.timeScale().fitContent();
+  });
+
+  // Legend-boks kun på pane 0 (hovedchartet).
+  var leg = document.createElement('div');
+  leg.style.cssText = 'position:absolute;left:12px;top:10px;z-index:5;'
+    + 'font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:12px;'
+    + 'line-height:1.55;padding:8px 12px;border-radius:9px;pointer-events:none;'
+    + 'backdrop-filter:blur(6px);background:'+D.legBg+';border:1px solid '+D.legKant+';color:'+tekstfarge+';';
+  if(panesEl.firstChild){ panesEl.firstChild.appendChild(leg); }
+
+  var candleIdx = {};
+  if(mainCandles){ mainCandles.forEach(function(x,i){ candleIdx[tkey(x.time)] = i; }); }
+
   function row(label, value, color){
     return '<span style="color:#8b8f9c;">'+label+'</span> '
-      + '<b style="color:'+(color||D.tekst)+';font-variant-numeric:tabular-nums;">'+value+'</b>';
+      + '<b style="color:'+(color||tekstfarge)+';font-variant-numeric:tabular-nums;">'+value+'</b>';
   }
-  function render(c, v, m50, m150, m200, prev){
-    var chg = '';
-    if(c && prev && prev.close){
-      var p = (c.close/prev.close - 1)*100;
-      var col = p>=0 ? D.opp : D.ned;
-      chg = ' <span style="color:'+col+';">'+(p>=0?'▲':'▼')+' '+p.toFixed(2)+'%</span>';
-    }
+  function renderLegend(param){
     var html = '';
-    if(D.tittel) html += '<div style="font-weight:700;font-size:13px;margin-bottom:2px;">'+D.tittel+'</div>';
-    if(c){
-      var ccol = c.close>=c.open ? D.opp : D.ned;
-      html += '<div>'+row('O',fmt(c.open))+'  '+row('H',fmt(c.high))+'  '
-           + row('L',fmt(c.low))+'  '+row('C',fmt(c.close)+val, ccol)+chg+'</div>';
-    }
-    var linjer = [];
-    if(m50!==undefined) linjer.push(row('MA50',fmt(m50),'#2196f3'));
-    if(m150!==undefined) linjer.push(row('MA150',fmt(m150),'#ff9800'));
-    if(m200!==undefined) linjer.push(row('MA200',fmt(m200),'#e040fb'));
-    if(v!==undefined) linjer.push(row('Vol',fmtVol(v)));
-    if(linjer.length) html += '<div>'+linjer.join('  ')+'</div>';
+    var topLinje = [];
+    var midtLinje = [];
+    mainLegendItems.forEach(function(it){
+      var v = (param && param.seriesData) ? param.seriesData.get(it.series) : undefined;
+      if(it.kind === 'ohlc'){
+        var c = v;
+        if(!c){ c = mainCandles ? mainCandles[mainCandles.length-1] : null; }
+        if(c){
+          var ccol = c.close>=c.open ? '#26a69a' : '#ef5350';
+          var chg = '';
+          var idx = (param && param.time!=null) ? candleIdx[tkey(param.time)]
+                    : (mainCandles ? mainCandles.length-1 : undefined);
+          var prev = (idx!==undefined && idx>0) ? mainCandles[idx-1] : null;
+          if(prev && prev.close){
+            var p = (c.close/prev.close - 1)*100;
+            var pc = p>=0 ? '#26a69a' : '#ef5350';
+            chg = ' <span style="color:'+pc+';">'+(p>=0?'▲':'▼')+' '+p.toFixed(2)+'%</span>';
+          }
+          if(it.label) html += '<div style="font-weight:700;font-size:13px;margin-bottom:2px;">'+it.label+'</div>';
+          topLinje.push(row('O',fmt(c.open))+'  '+row('H',fmt(c.high))+'  '
+            + row('L',fmt(c.low))+'  '+row('C',fmt(c.close)+val, ccol)+chg);
+        }
+      } else if(it.kind === 'vol'){
+        var vv = v ? (v.value!==undefined ? v.value : v) : undefined;
+        if(vv!==undefined) midtLinje.push(row('Vol', fmtVol(vv)));
+      } else {
+        var lv = v ? (v.value!==undefined ? v.value : v) : undefined;
+        if(lv!==undefined) midtLinje.push(row(it.label, fmt(lv), it.color));
+      }
+    });
+    if(topLinje.length) html += '<div>'+topLinje.join('')+'</div>';
+    if(midtLinje.length) html += '<div>'+midtLinje.join('  ')+'</div>';
     leg.innerHTML = html;
   }
-  // Startverdi = siste bar.
-  var last = D.candles[D.candles.length-1];
-  var lastPrev = D.candles[D.candles.length-2];
-  var lastVol = D.volum.length ? D.volum[D.volum.length-1].value : undefined;
-  var l50 = D.ma50.length ? D.ma50[D.ma50.length-1].value : undefined;
-  var l150 = D.ma150.length ? D.ma150[D.ma150.length-1].value : undefined;
-  var l200 = D.ma200.length ? D.ma200[D.ma200.length-1].value : undefined;
-  render(last, lastVol, l50, l150, l200, lastPrev);
+  renderLegend(null);
+  if(allCharts.length){
+    allCharts[0].subscribeCrosshairMove(function(param){ renderLegend(param); });
+  }
 
-  var cIdx = {}; D.candles.forEach(function(x,i){ cIdx[x.time]=i; });
-  chart.subscribeCrosshairMove(function(param){
-    if(!param || !param.time || param.point===undefined){
-      render(last, lastVol, l50, l150, l200, lastPrev); return;
-    }
-    var c = param.seriesData.get(candle);
-    var v = vol ? param.seriesData.get(vol) : undefined;
-    var m50 = s50 ? param.seriesData.get(s50) : undefined;
-    var m150 = s150 ? param.seriesData.get(s150) : undefined;
-    var m200 = s200 ? param.seriesData.get(s200) : undefined;
-    var idx = cIdx[param.time];
-    var prev = (idx!==undefined && idx>0) ? D.candles[idx-1] : null;
-    render(c, v?v.value:undefined,
-      m50?m50.value:undefined, m150?m150.value:undefined, m200?m200.value:undefined, prev);
-  });
+  // Synkroniser panorering/zoom på tvers av alle panes (som std-komponenten gjør).
+  if(allCharts.length > 1){
+    allCharts.forEach(function(ch){
+      ch.timeScale().subscribeVisibleLogicalRangeChange(function(range){
+        if(!range) return;
+        allCharts.filter(function(o){ return o !== ch; }).forEach(function(o){
+          o.timeScale().setVisibleLogicalRange({from:range.from, to:range.to});
+        });
+      });
+    });
+  }
 })();
 </script>
 """
@@ -2907,11 +2922,10 @@ with fane2:
                                            key="chart_trendscore",
                                            help="Egen rute under chartet: TrendScore-kurven med fargede "
                                                 "soner (grønn ≥ 70, gul 40–70, rød < 40) og referanselinje ved 50.")
-            vis_hover = st.checkbox("⚡ Hover-chart (mus-følgende legend)", value=False,
-                                    key="chart_hover",
-                                    help="Eksperimentelt: tegner et selvstendig chart der en legend "
-                                         "(O/H/L/C, endring, volum, MA) følger musepekeren. Erstatter "
-                                         "hovedchartet – delruter (RS/EPS/TrendScore) vises ikke i denne modusen.")
+            vis_klassisk = st.checkbox("🧩 Klassisk chart (uten hover-legend)", value=False,
+                                       key="chart_klassisk",
+                                       help="Faller tilbake til den innebygde chart-komponenten uten "
+                                            "den mus-følgende legenden. Standard er hover-chartet.")
         serie = datamod.serie_for(last_priser(bors_navn, versjon), valg)
         res = screener.analyser_ticker(serie, valg, konfig.PRESETS[aktiv_preset_navn])
         if res is None:
@@ -2942,30 +2956,22 @@ with fane2:
             _indeks = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark) if vis_indeks else None
             _eps_kw = _eps_chart_kwargs(valg, vis_eps)
             _ts_kw = _trendscore_chart_kwargs(valg, vis_trendscore_c)
-            if vis_hover:
-                # Eksperimentelt: selvstendig HTML-chart med mus-følgende legend.
-                _html = lag_chart_hover_html(serie, PERIODER_VALG[periode], hoyde=540,
-                                             morkt=MORKT, tittel=valg, valuta=VALUTA, vis_ma=vis_ma)
-                if _html:
-                    components.html(_html, height=560, scrolling=False)
-                    st.caption("⚡ **Hover-chart:** beveg musa over chartet – legenden oppe til "
-                               "venstre viser O/H/L/C, dagsendring, volum og MA for dagen under "
-                               "pekeren. Dra for å panorere, rull for å zoome.")
-                else:
-                    st.info("Klarte ikke bygge hover-chartet for denne aksjen.")
-                vis_vcp_boks(res)
-                fundamenta_seksjon(valg, f"chart_{valg}")
-                st.divider()
-                posisjon_verktoy(res, f"chart_{valg}", VALUTA)
-            else:
-                spec = lag_chart_lwc(serie, res, PERIODER_VALG[periode],
+            spec = lag_chart_lwc(serie, res, PERIODER_VALG[periode],
                                  vis_ma=vis_ma, vis_52u=vis_52u, vis_vcp=vis_vcp,
                                  vis_7av7=vis_7av7, vis_hist=vis_hist, vis_golden=vis_golden,
                                  vis_rs_rating=vis_rs_rating, rs_rating=_rs_serie,
                                  vis_indeks=vis_indeks, indeks=_indeks, indeks_navn=BORS.benchmark,
                                  ukentlig=ukentlig, pos=pos, morkt=MORKT, tittel=valg, **_ts_kw, **_eps_kw)
-                if spec is None:
-                    st.info("Klarte ikke bygge chartet for denne aksjen.")
+            if spec is None:
+                st.info("Klarte ikke bygge chartet for denne aksjen.")
+            else:
+                _html = None if vis_klassisk else lag_chart_hover_fra_spec(spec, morkt=MORKT, valuta=VALUTA)
+                if _html:
+                    components.html(_html, height=_hover_total_hoyde(spec), scrolling=False)
+                    st.caption("⚡ Beveg musa over chartet – legenden viser O/H/L/C, dagsendring, "
+                               "volum og MA for dagen under pekeren. 🟡 **Kraftig gull = aktiv pivot** · "
+                               "🔴 stiplet rød = stop · 🟢/🔴 pil = ble/mistet 7/7. Dra for å panorere, "
+                               "rull for å zoome.")
                 else:
                     noekkel = f"chart_{valg}_{periode}_{tidsramme}_{vis_ma}{vis_52u}{vis_vcp}{vis_7av7}{vis_hist}{vis_golden}{vis_rs_rating}{vis_indeks}{vis_eps}{vis_trendscore_c}{pos_suffix}_{TEMA}"
                     renderLightweightCharts(spec, key=noekkel)
@@ -2973,20 +2979,20 @@ with fane2:
                            "prisaksen for å strekke høyden. 🟡 **Kraftig gull = aktiv pivot** · "
                            "🔴 stiplet rød = stop · 🟢/🔴 pil = ble/mistet 7/7. Svake stiplede "
                            "gull-streker = historiske brudd (ubiased).")
-                    if vis_eps:
-                        _basis_ord = "kvartalsvis" if _eps_kw.get("graf_basis") == "kvartal" else "årlig"
-                        _val = f" ({_eps_kw.get('graf_valuta')})" if _eps_kw.get("graf_valuta") else ""
-                        if _eps_kw.get("eps_bars") or _eps_kw.get("oms_bars"):
-                            st.caption(f"💰 Nederste rute: {_basis_ord} **omsetning** (blå linje) og "
+                if vis_eps:
+                    _basis_ord = "kvartalsvis" if _eps_kw.get("graf_basis") == "kvartal" else "årlig"
+                    _val = f" ({_eps_kw.get('graf_valuta')})" if _eps_kw.get("graf_valuta") else ""
+                    if _eps_kw.get("eps_bars") or _eps_kw.get("oms_bars"):
+                        st.caption(f"💰 Nederste rute: {_basis_ord} **omsetning** (blå linje) og "
                                    f"**resultat**{_val} (søyler – grønn overskudd, rød underskudd). "
                                    "Snappet til nærmeste handelsdag.")
-                        else:
-                            st.info(f"💰 Yahoo har ingen regnskapstall for {valg} – ingen EPS-rute å vise "
+                    else:
+                        st.info(f"💰 Yahoo har ingen regnskapstall for {valg} – ingen EPS-rute å vise "
                                 "(vanlig for mindre Growth/Expand-aksjer).")
-                    vis_vcp_boks(res)
-                    fundamenta_seksjon(valg, f"chart_{valg}")
-                    st.divider()
-                    posisjon_verktoy(res, f"chart_{valg}", VALUTA)
+                vis_vcp_boks(res)
+                fundamenta_seksjon(valg, f"chart_{valg}")
+                st.divider()
+                posisjon_verktoy(res, f"chart_{valg}", VALUTA)
 
 # --- Fane 3: Søk ---
 with fane3:
@@ -3038,10 +3044,10 @@ with fane3:
                     vis_trendscore3 = st.checkbox("📈 TrendScore (0–100)", value=False, key="sok_trendscore",
                                                   help="Egen rute: TrendScore-kurven med fargede soner "
                                                        "(grønn ≥ 70, gul 40–70, rød < 40).")
-                    vis_hover3 = st.checkbox("⚡ Hover-chart (mus-følgende legend)", value=False,
-                                             key="sok_hover",
-                                             help="Eksperimentelt: legend (O/H/L/C, endring, volum, MA) "
-                                                  "følger musepekeren. Erstatter hovedchartet.")
+                    vis_klassisk3 = st.checkbox("🧩 Klassisk chart (uten hover-legend)", value=False,
+                                                key="sok_klassisk",
+                                                help="Faller tilbake til den innebygde komponenten. "
+                                                     "Standard er hover-chartet.")
                 if not HAR_LWC:
                     st.warning("Chart-komponenten er ikke lastet i dette miljøet ennå.")
                 else:
@@ -3068,17 +3074,7 @@ with fane3:
                         if sok in _rs_mat3.columns:
                             _rs_serie3 = _rs_mat3[sok].dropna()
                     _indeks3 = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark) if vis_indeks3 else None
-                    if vis_hover3:
-                        _html3 = lag_chart_hover_html(serie, PERIODER_VALG[periode3], hoyde=540,
-                                                      morkt=MORKT, tittel=sok, valuta=VALUTA, vis_ma=vis_ma3)
-                        if _html3:
-                            components.html(_html3, height=560, scrolling=False)
-                            st.caption("⚡ **Hover-chart:** beveg musa over chartet for O/H/L/C, "
-                                       "dagsendring, volum og MA under pekeren.")
-                        else:
-                            st.info("Klarte ikke bygge hover-chartet for denne aksjen.")
-                    else:
-                        spec3 = lag_chart_lwc(serie, res, PERIODER_VALG[periode3],
+                    spec3 = lag_chart_lwc(serie, res, PERIODER_VALG[periode3],
                                           vis_ma=vis_ma3, vis_52u=vis_52u3, vis_vcp=vis_vcp3,
                                           vis_7av7=vis_7av7_3, vis_hist=vis_hist3, vis_golden=vis_golden3,
                                           vis_rs_rating=vis_rs_rating3, rs_rating=_rs_serie3,
@@ -3086,7 +3082,15 @@ with fane3:
                                           ukentlig=ukentlig3, pos=pos3, morkt=MORKT, tittel=sok,
                                           **_trendscore_chart_kwargs(sok, vis_trendscore3),
                                           **_eps_chart_kwargs(sok, vis_eps3))
-                        if spec3 is not None:
+                    if spec3 is None:
+                        st.info("Klarte ikke bygge chartet for denne aksjen.")
+                    else:
+                        _html3 = None if vis_klassisk3 else lag_chart_hover_fra_spec(spec3, morkt=MORKT, valuta=VALUTA)
+                        if _html3:
+                            components.html(_html3, height=_hover_total_hoyde(spec3), scrolling=False)
+                            st.caption("⚡ Beveg musa over chartet for O/H/L/C, dagsendring, volum og "
+                                       "MA under pekeren. Dra for å panorere, rull for å zoome.")
+                        else:
                             renderLightweightCharts(
                                 spec3,
                                 key=f"sok_{sok}_{periode3}_{tidsramme3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{vis_rs_rating3}{vis_indeks3}{vis_eps3}{vis_trendscore3}{pos_suffix3}_{TEMA}")
