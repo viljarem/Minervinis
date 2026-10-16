@@ -214,24 +214,24 @@ PERIODER_VALG = {"3 mnd": 63, "6 mnd": 126, "1 år": 252, "2 år": 504,
 # Chart-lag som kan slås av/på med pills. (etikett: standard-på?)  Rekkefølgen her
 # styrer rekkefølgen på pillene. Hjelpetekstene vises i caption under pillene.
 CHART_LAG = {
-    "📈 MA 50/150/200": True,
-    "📏 52u høy/lav":    True,
-    "🟡 VCP":            True,
-    "🎯 7/7-markører":   True,
-    "🕯️ Hist. volum":   False,
-    "✚ Golden cross":   False,
-    "📉 Indeks":         False,
-    "💪 RS-rating":      False,
-    "💰 EPS/omsetning":  False,
-    "🔥 TrendScore":     False,
+    "MA 50/150/200":    True,
+    "52u høy/lav":      True,
+    "VCP":              True,
+    "7/7-markører":     True,
+    "Historiske brudd": False,
+    "Golden cross":     False,
+    "Indeks":           False,
+    "RS-rating":        False,
+    "EPS/omsetning":    False,
+    "TrendScore":       False,
 }
 # Oversetter pille-etikett → det interne vis_*-flagget.
 _LAG_FLAGG = {
-    "📈 MA 50/150/200": "vis_ma",     "📏 52u høy/lav": "vis_52u",
-    "🟡 VCP":           "vis_vcp",    "🎯 7/7-markører": "vis_7av7",
-    "🕯️ Hist. volum":  "vis_hist",   "✚ Golden cross": "vis_golden",
-    "📉 Indeks":        "vis_indeks", "💪 RS-rating":    "vis_rs_rating",
-    "💰 EPS/omsetning": "vis_eps",    "🔥 TrendScore":   "vis_trendscore",
+    "MA 50/150/200":    "vis_ma",     "52u høy/lav":  "vis_52u",
+    "VCP":              "vis_vcp",    "7/7-markører": "vis_7av7",
+    "Historiske brudd": "vis_hist",   "Golden cross": "vis_golden",
+    "Indeks":           "vis_indeks", "RS-rating":    "vis_rs_rating",
+    "EPS/omsetning":    "vis_eps",    "TrendScore":   "vis_trendscore",
 }
 
 
@@ -260,14 +260,14 @@ def chart_kontroller(prefix: str) -> dict:
                       default=standard, key=f"{prefix}_lag",
                       help="Klikk for å slå lag av/på. Færre lag = renere bilde.")
     valgte = set(valgte or [])
-    st.caption("🕯️ Hist. volum = tidligere volumbrudd · ✚ Golden cross = SMA50×SMA200 · "
-               "📉 Indeks = benchmark oppå chartet · 💪 RS / 🔥 TrendScore / 💰 EPS = egne ruter under.")
+    st.caption("Historiske brudd = tidligere volumbrudd · Golden cross = SMA50×SMA200 · "
+               "Indeks = benchmark oppå chartet · RS / TrendScore / EPS = egne ruter under.")
 
     resultat = {flagg: (lag in valgte) for lag, flagg in _LAG_FLAGG.items()}
     resultat["periode"] = periode
     resultat["ukentlig"] = tf == "Uke"
     resultat["klassisk"] = st.toggle(
-        "🧩 Klassisk chart", value=False, key=f"{prefix}_klassisk",
+        "Klassisk chart", value=False, key=f"{prefix}_klassisk",
         help="Faller tilbake til den innebygde chart-komponenten uten den mus-følgende "
              "legenden. Standard er hover-chartet.")
     return resultat
