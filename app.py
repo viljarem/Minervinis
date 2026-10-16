@@ -47,7 +47,7 @@ def _er_morkt() -> bool:
 # ---------------------------------------------------------------------------
 # Øk denne når screener-/tabell-logikken endres, så @st.cache_data-bufferet for
 # screening automatisk invalideres (slipper å tømme cache manuelt etter deploy).
-KODE_VERSJON = 4
+KODE_VERSJON = 5
 
 
 def data_versjon(bors: "konfig.Bors" = konfig.OSLO_BORS) -> float:
@@ -1218,13 +1218,15 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                            "data": [{"time": ti, "value": res["pivot"]} for ti in t],
                            "options": {"color": "#f6c343", "lineWidth": 3, "lineStyle": 0,
                                        "priceLineVisible": False, "lastValueVisible": True,
-                                       "title": "Pivot"}})
+                                       "title": "Pivot"},
+                           "legend": {"label": "Pivot", "color": "#f6c343", "kind": "level"}})
         if res and res.get("stop") and not posn:
             serier.append({"type": "Line",
                            "data": [{"time": ti, "value": res["stop"]} for ti in t],
                            "options": {"color": "#ef5350", "lineWidth": 1, "lineStyle": 2,
                                        "priceLineVisible": False, "lastValueVisible": True,
-                                       "title": "Stop"}})
+                                       "title": "Stop"},
+                           "legend": {"label": "Stop", "color": "#ef5350", "kind": "level"}})
 
         # Posisjon (long): inngang (blå solid), stop (rød stiplet) og mål (grønn
         # stiplet) som tydelige nivålinjer med pris-etikett til høyre.
@@ -1238,7 +1240,8 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                                "data": [{"time": ti, "value": verdi} for ti in t],
                                "options": {"color": farge, "lineWidth": bredde, "lineStyle": stil,
                                            "priceLineVisible": False, "lastValueVisible": True,
-                                           "title": tittel}})
+                                           "title": tittel},
+                               "legend": {"label": tittel, "color": farge, "kind": "level"}})
 
         # Farger som følger app-temaet: mørk bakgrunn + lys tekst i dark mode,
         # ellers hvitt med mørk tekst. Candle-, MA- og pivotfargene funker i begge.
@@ -1291,6 +1294,8 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                             "bottomFillColor2": "rgba(239,83,80,0.28)",
                             "lineWidth": 2, "priceLineVisible": False,
                             "lastValueVisible": True, "title": "RS-rating"},
+                        "legend": {"label": "RS", "color": "#26a69a", "kind": "extra",
+                                   "pane": 1, "fmt": "int"},
                     }]
                     rs_chart = {
                         "height": 150,
@@ -1397,8 +1402,7 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                                  "horzLines": {"color": grid}},
                         "rightPriceScale": {"scaleMargins": {"top": 0.12, "bottom": 0.08},
                                             "borderVisible": False},
-                        "timeScale": {"borderVisible": False, "rightOffset": 4,
-                                      "fixLeftEdge": True, "fixRightEdge": True},
+                        "timeScale": {"borderVisible": False, "rightOffset": 4},
                         "crosshair": {"mode": 0},
                     }
                     charts.append({"chart": eps_chart, "series": eps_serier})
@@ -1453,7 +1457,9 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                         "type": "Line", "data": score_data,
                         "options": {"color": "#7e57c2", "lineWidth": 2,
                                     "priceLineVisible": False, "lastValueVisible": True,
-                                    "title": "TrendScore"}})
+                                    "title": "TrendScore"},
+                        "legend": {"label": "TrendScore", "color": "#7e57c2",
+                                   "kind": "extra", "fmt": "one"}})
                     ts_chart = {
                         "height": 150,
                         "layout": {"background": {"type": "solid", "color": bg},
@@ -1462,8 +1468,7 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                                  "horzLines": {"color": grid}},
                         "rightPriceScale": {"scaleMargins": {"top": 0.08, "bottom": 0.08},
                                             "borderVisible": False},
-                        "timeScale": {"borderVisible": False, "rightOffset": 4,
-                                      "fixLeftEdge": True, "fixRightEdge": True},
+                        "timeScale": {"borderVisible": False, "rightOffset": 4},
                         "crosshair": {"mode": 0},
                     }
                     charts.append({"chart": ts_chart, "series": ts_serier})
@@ -1693,6 +1698,8 @@ _HOVER_CHART_MAL = """
 
   var allCharts = [];
   var mainLegendItems = [];   // {series, label, color, kind} for pane 0
+  var levelItems = [];        // pivot/stop/innganger (pane 0, konstante nivåer)
+  var extraItems = [];        // delrute-serier (RS/TrendScore) – tid-indeksert
   var mainCandles = null;     // candle-data for endrings-% i legenden
   var tekstfarge = D.morkt ? '#d1d4dc' : '#333333';
 
@@ -1716,14 +1723,26 @@ _HOVER_CHART_MAL = """
 
     (spec.series || []).forEach(function(f){
       var s = addSeries(chart, f);
-      if(s && ci === 0 && f.legend){
-        if(f.legend.kind === 'ohlc'){
-          mainCandles = f.data;
-          mainLegendItems.push({series:s, label:f.legend.label, kind:'ohlc'});
-        } else {
-          mainLegendItems.push({series:s, label:f.legend.label,
-                                color:f.legend.color, kind:f.legend.kind});
-        }
+      if(!s || !f.legend) return;
+      var lg = f.legend;
+      if(lg.kind === 'extra'){
+        // Delrute-serie på et annet panel: bygg tid→verdi-indeks så vi kan slå
+        // opp verdien under musepekeren (crosshair-eventet gjelder kun pane 0).
+        var m = {};
+        (f.data || []).forEach(function(x){
+          if(x && x.value!==undefined) m[tkey(x.time)] = x.value;
+        });
+        extraItems.push({label:lg.label, color:lg.color, fmt:lg.fmt||'two', index:m});
+        return;
+      }
+      if(ci !== 0) return;
+      if(lg.kind === 'ohlc'){
+        mainCandles = f.data;
+        mainLegendItems.push({series:s, label:lg.label, kind:'ohlc'});
+      } else if(lg.kind === 'level'){
+        levelItems.push({series:s, label:lg.label, color:lg.color});
+      } else {
+        mainLegendItems.push({series:s, label:lg.label, color:lg.color, kind:lg.kind});
       }
     });
     chart.timeScale().fitContent();
@@ -1740,6 +1759,12 @@ _HOVER_CHART_MAL = """
   var candleIdx = {};
   if(mainCandles){ mainCandles.forEach(function(x,i){ candleIdx[tkey(x.time)] = i; }); }
 
+  function fmtKind(x, kind){
+    if(x===undefined||x===null) return '–';
+    if(kind==='int') return String(Math.round(x));
+    if(kind==='one') return Number(x).toFixed(1);
+    return Number(x).toFixed(2);
+  }
   function row(label, value, color){
     return '<span style="color:#8b8f9c;">'+label+'</span> '
       + '<b style="color:'+(color||tekstfarge)+';font-variant-numeric:tabular-nums;">'+value+'</b>';
@@ -1748,6 +1773,8 @@ _HOVER_CHART_MAL = """
     var html = '';
     var topLinje = [];
     var midtLinje = [];
+    var nivaLinje = [];
+    var ekstraLinje = [];
     mainLegendItems.forEach(function(it){
       var v = (param && param.seriesData) ? param.seriesData.get(it.series) : undefined;
       if(it.kind === 'ohlc'){
@@ -1776,8 +1803,27 @@ _HOVER_CHART_MAL = """
         if(lv!==undefined) midtLinje.push(row(it.label, fmt(lv), it.color));
       }
     });
+    // Pivot/stop/innganger = konstante nivåer (les direkte fra serien).
+    levelItems.forEach(function(it){
+      var v = (param && param.seriesData) ? param.seriesData.get(it.series) : undefined;
+      var lv = v ? (v.value!==undefined ? v.value : v) : undefined;
+      if(lv!==undefined) nivaLinje.push(row(it.label, fmt(lv), it.color));
+    });
+    // Delrute-verdier (RS/TrendScore) slås opp via tid under musepekeren.
+    var tnow = (param && param.time!=null) ? tkey(param.time) : null;
+    extraItems.forEach(function(it){
+      var val2 = tnow!=null ? it.index[tnow] : undefined;
+      if(val2===undefined){
+        // Fall tilbake til siste kjente verdi når musa er utenfor data.
+        var ks = Object.keys(it.index);
+        if(ks.length) val2 = it.index[ks[ks.length-1]];
+      }
+      if(val2!==undefined) ekstraLinje.push(row(it.label, fmtKind(val2, it.fmt), it.color));
+    });
     if(topLinje.length) html += '<div>'+topLinje.join('')+'</div>';
     if(midtLinje.length) html += '<div>'+midtLinje.join('  ')+'</div>';
+    if(nivaLinje.length) html += '<div style="margin-top:2px;">'+nivaLinje.join('  ')+'</div>';
+    if(ekstraLinje.length) html += '<div style="margin-top:2px;">'+ekstraLinje.join('  ')+'</div>';
     leg.innerHTML = html;
   }
   renderLegend(null);
