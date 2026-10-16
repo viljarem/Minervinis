@@ -1466,6 +1466,112 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
 
 
 # ---------------------------------------------------------------------------
+# Chart-legend: moderne info-stripe over chartet
+# ---------------------------------------------------------------------------
+# Enveis-komponenten (renderLightweightCharts) kan ikke sende crosshair-events
+# tilbake til Python, så vi kan ikke lage en legend som følger musepekeren uten en
+# egen JS-komponent. I stedet viser vi en kompakt, moderne «chip»-stripe med dagens
+# nøkkeltall rett over chartet. ALT ligger i denne ene funksjonen + ett kall i
+# Chart-fanen, så det er trivielt å rulle tilbake (fjern kallet).
+def vis_chart_legend(serie: pd.DataFrame, res: dict | None, *,
+                     rs=None, trendscore=None, valuta: str = "") -> None:
+    """Rendrer en elegant info-stripe (kurs, endring, RVol, RS, TrendScore, ADX, 52u)."""
+    if res is None or serie is None or serie.empty:
+        return
+    morkt = _er_morkt()
+    if morkt:
+        chip_bg, chip_kant = "rgba(255,255,255,0.04)", "rgba(255,255,255,0.09)"
+        lab_f, val_f = "#8b8f9c", "#e8eaed"
+    else:
+        chip_bg, chip_kant = "rgba(0,0,0,0.03)", "rgba(0,0,0,0.09)"
+        lab_f, val_f = "#6b7280", "#1f2937"
+    opp, ned, gul = "#26a69a", "#ef5350", "#f6c343"
+
+    # Dagens kursendring (siste vs forrige sluttkurs).
+    pris = res.get("pris")
+    endr = None
+    try:
+        c = serie["Close"].dropna()
+        if len(c) >= 2 and c.iloc[-2]:
+            endr = (float(c.iloc[-1]) / float(c.iloc[-2]) - 1) * 100
+    except Exception:
+        endr = None
+
+    chips = []
+
+    def _chip(label, value, farge=None):
+        vf = farge or val_f
+        chips.append(
+            f'<div style="display:flex;flex-direction:column;gap:1px;padding:6px 12px;'
+            f'background:{chip_bg};border:1px solid {chip_kant};border-radius:9px;">'
+            f'<span style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;'
+            f'color:{lab_f};font-weight:600;">{label}</span>'
+            f'<span style="font-size:15px;font-weight:700;color:{vf};'
+            f'font-variant-numeric:tabular-nums;">{value}</span></div>')
+
+    # Kurs + dagsendring.
+    if pris is not None:
+        kurs_txt = f"{pris:.2f}"
+        if valuta:
+            kurs_txt += f" {valuta}"
+        if endr is not None:
+            pil = "▲" if endr >= 0 else "▼"
+            kurs_txt += (f' <span style="font-size:12px;color:'
+                         f'{opp if endr >= 0 else ned};">{pil} {endr:+.2f}%</span>')
+        _chip("Kurs", kurs_txt)
+
+    # RVol.
+    rv = res.get("rel_volum")
+    if rv is not None and pd.notna(rv):
+        rv_f = opp if rv >= konfig.BRUDD_VOLUM_FAKTOR else (val_f if rv >= 1.0 else ned)
+        _chip("RVol", f"{rv:.2f}×", rv_f)
+
+    # RS-rating.
+    if rs is not None and pd.notna(rs):
+        rs_i = int(rs)
+        rs_f = opp if rs_i >= konfig.RS_MIN else (gul if rs_i >= 50 else ned)
+        _chip("RS", f"{rs_i}/99", rs_f)
+
+    # TrendScore.
+    if trendscore is not None and pd.notna(trendscore):
+        ts_v = float(trendscore)
+        ts_f = (opp if ts_v >= konfig.TS_NIVA_GRONN
+                else (gul if ts_v >= konfig.TS_NIVA_ROD else ned))
+        _chip("TrendScore", f"{ts_v:.0f}", ts_f)
+
+    # ADX (trendstyrke) – hentes fra siste indikatorrad om tilgjengelig.
+    try:
+        d_ind = indikatorer.legg_til_indikatorer(serie)
+        if "ADX" in d_ind.columns:
+            adx_v = d_ind["ADX"].iloc[-1]
+            if pd.notna(adx_v):
+                adx_f = opp if adx_v >= 20 else lab_f
+                _chip("ADX", f"{adx_v:.0f}", adx_f)
+    except Exception:
+        pass
+
+    # Avstand fra 52-ukers høy.
+    fra_h = res.get("pct_fra_52h")
+    if fra_h is not None and pd.notna(fra_h):
+        fh_f = opp if fra_h >= -5 else (val_f if fra_h >= -25 else ned)
+        _chip("Fra 52u høy", f"{fra_h:+.1f}%", fh_f)
+
+    # Trendstatus (emoji + kort tekst).
+    status = res.get("status")
+    statustekst = res.get("statustekst")
+    if status:
+        _chip("Status", f'{status} {statustekst or ""}'.strip())
+
+    if not chips:
+        return
+    st.markdown(
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 10px 0;">'
+        + "".join(chips) + "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Hovedtabell
 # ---------------------------------------------------------------------------
 def _til_pivot_tekst(avstand_pivot) -> str:
@@ -2593,15 +2699,19 @@ with fane2:
         else:
             # RS-rating (1–99) fra skanningen for nettopp denne aksjen.
             _rs_rad = resultat[resultat["ticker"] == valg]
+            _rsv = None
             if not _rs_rad.empty and pd.notna(_rs_rad.iloc[0].get("rs")):
                 _rsv = int(_rs_rad.iloc[0]["rs"])
-                _cR, _ = st.columns([1, 3])
-                _cR.metric("RS-rating", f"{_rsv}/99",
-                           help="IBD-vektet relativ styrke (40 % siste 3 mnd + 20 % hver "
-                                "av 6/9/12 mnd), rangert som persentil mot alle aksjene i "
-                                f"DETTE universet ({BORS.navn}) – ikke mot hele verdensmarkedet "
-                                "slik IBD-tallet i avisen er. 70+ = sterkere enn 70 % av "
-                                "aksjene her. Huk av «RS-rating over tid» i ⚙️ for forløpet.")
+            # TrendScore for denne aksjen (samme tall som i tabell/rute).
+            _tsv = None
+            if not _rs_rad.empty and "trendscore" in _rs_rad.columns:
+                _tcand = _rs_rad.iloc[0].get("trendscore")
+                if pd.notna(_tcand):
+                    _tsv = float(_tcand)
+            # Moderne info-stripe over chartet (kurs, endring, RVol, RS, TrendScore,
+            # ADX, 52u, status). Ligger i vis_chart_legend – fjern dette kallet for å
+            # rulle tilbake til den gamle enkle RS-metrikken.
+            vis_chart_legend(serie, res, rs=_rsv, trendscore=_tsv, valuta=VALUTA)
             _init_posisjon_state(res, f"chart_{valg}")
             pos, pos_suffix = _posisjon_fra_state(f"chart_{valg}")
             _rs_serie = None
