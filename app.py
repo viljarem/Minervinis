@@ -43,10 +43,16 @@ def _er_morkt() -> bool:
 # ---------------------------------------------------------------------------
 # Data-innlasting (bufres/caches så siden blir rask)
 # ---------------------------------------------------------------------------
+# Øk denne når screener-/tabell-logikken endres, så @st.cache_data-bufferet for
+# screening automatisk invalideres (slipper å tømme cache manuelt etter deploy).
+KODE_VERSJON = 2
+
+
 def data_versjon(bors: "konfig.Bors" = konfig.OSLO_BORS) -> float:
     """Endres når datafila for valgt børs oppdateres – frisker opp bufferet."""
     sti = bors.priser_fil
-    return os.path.getmtime(sti) if os.path.exists(sti) else 0.0
+    mtime = os.path.getmtime(sti) if os.path.exists(sti) else 0.0
+    return mtime + KODE_VERSJON
 
 
 @st.cache_data(show_spinner=False)
