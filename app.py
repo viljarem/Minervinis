@@ -2206,7 +2206,11 @@ def vis_trendscore(ts_resultat):
     vis["ADX≥20"] = ts_resultat["adx_ok"].map(lambda b: "✅" if b else "—")
 
     # Råtall i cellene, men bakgrunnsfarge etter nivå på selve TrendScore-kolonnen.
-    styled = vis.style.applymap(_ts_niva_bg, subset=["TrendScore"])
+    # pandas 3.0 fjernet Styler.applymap til fordel for Styler.map – bruk .map når den
+    # finnes, ellers fall tilbake til applymap (eldre pandas på Streamlit Cloud).
+    _styler = vis.style
+    _map_fn = getattr(_styler, "map", None) or _styler.applymap
+    styled = _map_fn(_ts_niva_bg, subset=["TrendScore"])
     _ts_tab = st.dataframe(
         styled, width="stretch", hide_index=True, height=560, column_config=TS_TABELL_HJELP,
         on_select="rerun", selection_mode="multi-row", key="trendscore_tabell",
