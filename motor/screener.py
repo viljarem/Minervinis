@@ -205,6 +205,37 @@ def rs_rating_historikk(priser: pd.DataFrame) -> pd.DataFrame:
     return (rang * 98 + 1).round()
 
 
+def _finn_indeks(priser: pd.DataFrame):
+    """Finn markedsindeksen (benchmark) i datasettet – felles for alle aksjene."""
+    benchmarks = {b.benchmark for b in konfig.BORSER.values() if b.benchmark}
+    benchmarks.add(konfig.BENCHMARK)
+    for bm in benchmarks:
+        kand = datamod.serie_for(priser, bm)
+        if kand is not None and not kand.empty:
+            return kand
+    return None
+
+
+def _trendscore_oppslag(priser: pd.DataFrame, tickere, indeks_serie=None) -> dict:
+    """{ticker: TrendScore (0–100)} for de oppgitte tickerne – felles benchmark.
+
+    Brukes til å henge på en TrendScore-kolonne i de andre tabellene (Minervini,
+    golden cross) uten å duplisere beregningen. Hopper over aksjer med for kort
+    historikk eller manglende score.
+    """
+    if indeks_serie is None:
+        indeks_serie = _finn_indeks(priser)
+    ut = {}
+    for t in tickere:
+        serie = datamod.serie_for(priser, t)
+        if serie is None or len(serie) < konfig.TS_MIN_DAGER:
+            continue
+        ts = trendscore.siste_trendscore(serie, indeks_serie)
+        if ts is not None:
+            ut[t] = ts["score"]
+    return ut
+
+
 def screen(priser: pd.DataFrame, preset: Preset = konfig.STANDARD) -> pd.DataFrame:
     """Kjører analysen for alle tickere i prisdataene og returnerer én stor tabell."""
     if priser is None or priser.empty:
@@ -233,6 +264,9 @@ def screen(priser: pd.DataFrame, preset: Preset = konfig.STANDARD) -> pd.DataFra
     # RS-rating (1–99) på tvers av universet
     df["rs"] = _persentil(df["rs_avkastning"])
     df["rs"] = df["rs"].astype("Int64")
+
+    # TrendScore (0–100) som ekstra kolonne – samme tall som i TrendScore-fanen.
+    df["trendscore"] = df["ticker"].map(_trendscore_oppslag(priser, df["ticker"].tolist()))
 
     # Oppfyller valgt preset? (evt. med RS-krav)
     df["oppfyller"] = df["score"] >= preset.krev_antall
@@ -350,6 +384,9 @@ def screen_golden_cross(priser: pd.DataFrame) -> pd.DataFrame:
     df["rs"] = _persentil(df["rs_avkastning"])
     df["rs"] = df["rs"].astype("Int64")
 
+    # TrendScore (0–100) som ekstra kolonne – samme tall som i TrendScore-fanen.
+    df["trendscore"] = df["ticker"].map(_trendscore_oppslag(priser, df["ticker"].tolist()))
+
     # Ferske kryss øverst, så ventende (nærmest kryss først = minst negativt gap),
     # så etablerte. Innen hver gruppe: ferske nærmest krysset, ventende nærmest 0.
     df["_rang"] = df["gc_status"].map(_GC_RANG).fillna(3).astype(int)
@@ -377,12 +414,7 @@ def screen_trendscore(priser: pd.DataFrame) -> pd.DataFrame:
     benchmarks.add(konfig.BENCHMARK)
 
     # Finn markedsindeksen i datasettet (om den finnes) – felles for alle aksjene.
-    indeks_serie = None
-    for bm in benchmarks:
-        kand = datamod.serie_for(priser, bm)
-        if kand is not None and not kand.empty:
-            indeks_serie = kand
-            break
+    indeks_serie = _finn_indeks(priser)
 
     tickere = [t for t in sorted(priser["Ticker"].unique()) if t not in benchmarks]
     rader = []
@@ -393,9 +425,15 @@ def screen_trendscore(priser: pd.DataFrame) -> pd.DataFrame:
         ts = trendscore.siste_trendscore(serie, indeks_serie)
         if ts is None:
             continue
-        pris = float(serie["Close"].iloc[-1])
+        d = indikatorer.legg_til_indikatorer(serie)
+        pris = float(d["Close"].iloc[-1])
         dagsomsetning = float(
-            (serie["Close"] * serie["Volume"]).rolling(konfig.OMSETNING_VINDU).mean().iloc[-1])
+            (d["Close"] * d["Volume"]).rolling(konfig.OMSETNING_VINDU).mean().iloc[-1])
+        # Avstand til 52-ukers høy/lav (som i de andre tabellene).
+        fra_52h, over_52l = _avstand_52u(d, pris)
+        # Relativt volum: siste dags volum / 50-dagers snittvolum (før i dag).
+        vol_snitt50 = d["Volume"].rolling(50, min_periods=10).mean().shift(1).iloc[-1]
+        rel_volum = float(d["Volume"].iloc[-1] / vol_snitt50) if vol_snitt50 and vol_snitt50 > 0 else np.nan
         rader.append({
             "ticker": t,
             "pris": round(pris, 2),
@@ -406,6 +444,9 @@ def screen_trendscore(priser: pd.DataFrame) -> pd.DataFrame:
             "adx": ts["adx"],
             "over_sma200": ts["over_sma200"],
             "adx_ok": ts["adx_ok"],
+            "pct_fra_52h": None if pd.isna(fra_52h) else round(float(fra_52h), 1),
+            "pct_over_52l": None if pd.isna(over_52l) else round(float(over_52l), 1),
+            "rel_volum": None if pd.isna(rel_volum) else round(rel_volum, 2),
             "dagsomsetning": dagsomsetning,
         })
 

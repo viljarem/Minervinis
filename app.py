@@ -1413,7 +1413,15 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
 
                     # Lag-rekkefølge (senere tegnes oppå): grønn 0–100, gul 0–70, rød 0–40.
                     # Netto synlige bånd: 0–40 rødt, 40–70 gult, 70–100 grønt.
+                    # Anker-serie først: «whitespace»-punkter (tid uten verdi) for HELE
+                    # vinduet, så delgrafens LOGISKE tidsakse spenner nøyaktig samme antall
+                    # punkter som hovedchartet. Chart-komponenten synkroniserer panorering/
+                    # zoom på logisk område – uten identisk punktantall glir rutene ut av takt.
                     ts_serier = [
+                        {"type": "Line", "data": [{"time": ti} for ti in t],
+                         "options": {"lastValueVisible": False, "priceLineVisible": False,
+                                     "crosshairMarkerVisible": False,
+                                     "color": "rgba(0,0,0,0)", "lineWidth": 1}},
                         _bg(100, "rgba(38,166,154,0.14)"),
                         _bg(g_hoy, "rgba(246,195,67,0.16)"),
                         _bg(g_lav, "rgba(239,83,80,0.14)"),
@@ -1540,6 +1548,8 @@ def formater_tabell(df: pd.DataFrame, live: dict | None = None, naa_oslo=None, r
     vis["Volum ±2"] = (df["volum_signatur"].map(_signatur_kort)
                        if "volum_signatur" in df.columns else "—")
     vis["RS"] = df["rs"]
+    if "trendscore" in df.columns:
+        vis["TS"] = df["trendscore"]
     vis["Fra 52u høy"] = (df["pct_fra_52h"].map(lambda p: f"{p:+.1f}%" if pd.notna(p) else "—")
                           if "pct_fra_52h" in df.columns else "—")
     vis["Over 52u lav"] = (df["pct_over_52l"].map(lambda p: f"{p:+.0f}%" if pd.notna(p) else "—")
@@ -1761,6 +1771,10 @@ TABELL_HJELP = {
         "«–» = dag mangler ennå, «—» = ikke brutt pivot ennå."),
     "RS": st.column_config.NumberColumn(
         "RS", help="Relativ styrke 1–99 (99 = sterkest momentum i universet)."),
+    "TS": st.column_config.NumberColumn(
+        "TS", format="%.0f",
+        help="TrendScore 0–100: hvor sterk og sunn opptrenden er (momentum, relativ styrke, "
+        "struktur og ADX). Samme tall som i TrendScore-fanen. 🟢 ≥ 70 · 🟡 40–69 · 🔴 < 40."),
     "Fra 52u høy": st.column_config.TextColumn(
         "Fra 52u høy", help="Hvor langt under 52-ukers høyeste kurs aksjen er (negativt = under "
         "toppen). Minervini vil se kursen innen 25 % av toppen (kriterium 7)."),
@@ -2030,6 +2044,8 @@ def _formater_golden_cross_tabell(df: pd.DataFrame) -> pd.DataFrame:
     vis["Over 52u lav"] = df["pct_over_52l"].map(
         lambda p: f"{p:+.0f}%" if pd.notna(p) else "—") if "pct_over_52l" in df.columns else "—"
     vis["RS"] = df["rs"]
+    if "trendscore" in df.columns:
+        vis["TS"] = df["trendscore"]
     return vis
 
 
@@ -2050,6 +2066,10 @@ GC_TABELL_HJELP = {
     "Over 52u lav": st.column_config.TextColumn(
         "Over 52u lav", help="Hvor langt over 52-ukers laveste kurs aksjen er."),
     "RS": st.column_config.NumberColumn("RS", help="Relativ styrke 1–99 (99 = sterkest i universet)."),
+    "TS": st.column_config.NumberColumn(
+        "TS", format="%.0f",
+        help="TrendScore 0–100: hvor sterk og sunn opptrenden er. Samme tall som i TrendScore-fanen. "
+        "🟢 ≥ 70 · 🟡 40–69 · 🔴 < 40."),
 }
 
 
@@ -2168,6 +2188,13 @@ TS_TABELL_HJELP = {
         "ADX", format="%.0f", help="15 % – trendstyrke (14-dagers ADX, skalert)."),
     ">SMA200": st.column_config.TextColumn(">SMA200", help="Ligger kursen over 200-dagers snittet?"),
     "ADX≥20": st.column_config.TextColumn("ADX≥20", help="Er ADX minst 20? (ekte trend, ikke sideveis)."),
+    "Fra 52u høy": st.column_config.TextColumn(
+        "Fra 52u høy", help="Hvor langt under 52-ukers høy kursen er (0 % = på ny topp)."),
+    "Over 52u lav": st.column_config.TextColumn(
+        "Over 52u lav", help="Hvor langt over 52-ukers lav kursen er."),
+    "RVol": st.column_config.NumberColumn(
+        "RVol", format="%.2f",
+        help="Relativt volum: siste dags volum / 50-dagers snittvolum. 1,0 = normalt."),
 }
 
 
@@ -2204,6 +2231,14 @@ def vis_trendscore(ts_resultat):
     vis["ADX"] = ts_resultat["adx"]
     vis[">SMA200"] = ts_resultat["over_sma200"].map(lambda b: "✅" if b else "—")
     vis["ADX≥20"] = ts_resultat["adx_ok"].map(lambda b: "✅" if b else "—")
+    if "pct_fra_52h" in ts_resultat.columns:
+        vis["Fra 52u høy"] = ts_resultat["pct_fra_52h"].map(
+            lambda p: f"{p:+.1f}%" if pd.notna(p) else "—")
+    if "pct_over_52l" in ts_resultat.columns:
+        vis["Over 52u lav"] = ts_resultat["pct_over_52l"].map(
+            lambda p: f"{p:+.0f}%" if pd.notna(p) else "—")
+    if "rel_volum" in ts_resultat.columns:
+        vis["RVol"] = ts_resultat["rel_volum"]
 
     # Råtall i cellene, men bakgrunnsfarge etter nivå på selve TrendScore-kolonnen.
     # pandas 3.0 fjernet Styler.applymap til fordel for Styler.map – bruk .map når den
