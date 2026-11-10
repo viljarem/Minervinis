@@ -346,6 +346,7 @@ def vis_vcp_boks(res: dict) -> None:
 @st.cache_data(ttl=43200, show_spinner=False)   # caches i 12 timer per ticker
 def hent_fundamenta_cached(ticker: str) -> dict:
     """Bufret innpakning – henter fundamentaltall bare én gang per aksje per 12 t."""
+    # v2: inkluderer verdsettelse (P/E, ROE). Endret kildekode = ny cache-nøkkel.
     return fundamenta.hent_fundamenta(ticker)
 
 
@@ -370,7 +371,7 @@ def hent_fundamenta_rikt(ticker: str) -> dict:
         gyldig svar via .clear()+varming er ikke mulig per nøkkel, så vi lagrer det
         gode svaret i vår egen session-buffer som alltid sjekkes først.
     """
-    god = st.session_state.setdefault("fund_rik", {})
+    god = st.session_state.setdefault("fund_rik_v2", {})
     if ticker in god:                      # kun GYLDIGE svar havner her
         return god[ticker]
 
@@ -872,25 +873,186 @@ def _vis_vekst_trend(fund: dict) -> None:
     st.caption(f"{akse['merke']} **Vekst-trend (salg YoY):** {akse['tekst']}  ·  {periode_ord}: {spor}")
 
 
+def _vekst_svg(serie: list, farger: dict, morkt: bool, terskel: float = 25.0,
+               aarlig: bool = False) -> str:
+    """Små søyler for YoY-vekst per periode (eldst → nyest) som inline SVG.
+
+    Stigende søyler = akselererende vekst, det Minervini ser etter. Stiplet linje
+    ved `terskel` (25 %) viser hans mål. Negative søyler går under nullinjen.
+    """
+    if not serie:
+        return ""
+    verdier = [float(v) for _, v in serie]
+    navn = [(_aar_navn(d) if aarlig else _kvartal_navn(d)) if d else "" for d, _ in serie]
+    b, h, pad_top, pad_bunn = 300, 92, 14, 16
+    topp = max(max(verdier), terskel * 1.15, 10)
+    bunn = min(min(verdier), 0)
+    spenn = topp - bunn or 1
+    def y(v):
+        return pad_top + (topp - v) / spenn * (h - pad_top - pad_bunn)
+    n = len(verdier)
+    slot = b / n
+    bw = min(34, slot * 0.6)
+    tekst = farger["dim"]
+    deler = [f'<line x1="0" x2="{b}" y1="{y(0):.1f}" y2="{y(0):.1f}" '
+             f'stroke="{farger["kant"]}" stroke-width="1"/>',
+             f'<line x1="0" x2="{b}" y1="{y(terskel):.1f}" y2="{y(terskel):.1f}" '
+             f'stroke="{farger["opp"]}" stroke-width="1" stroke-dasharray="3 3" opacity="0.6"/>']
+    for i, v in enumerate(verdier):
+        x = i * slot + (slot - bw) / 2
+        y0, y1 = sorted((y(0), y(v)))
+        f = farger["opp"] if v >= terskel else (farger["gul"] if v >= 0 else farger["ned"])
+        siste = i == n - 1
+        deler.append(f'<rect x="{x:.1f}" y="{y0:.1f}" width="{bw:.1f}" '
+                     f'height="{max(y1 - y0, 1.5):.1f}" rx="3" fill="{f}" '
+                     f'opacity="{1 if siste else 0.75}"/>')
+        ty = y(v) - 4 if v >= 0 else y(v) + 11
+        deler.append(f'<text x="{x + bw / 2:.1f}" y="{ty:.1f}" text-anchor="middle" '
+                     f'font-size="10" font-weight="{700 if siste else 500}" '
+                     f'fill="{farger["txt"] if siste else tekst}">{v:+.0f}%</text>')
+        deler.append(f'<text x="{x + bw / 2:.1f}" y="{h - 3}" text-anchor="middle" '
+                     f'font-size="9" fill="{tekst}">{navn[i]}</text>')
+    return (f'<svg viewBox="0 0 {b} {h}" width="100%" '
+            f'style="display:block;overflow:visible;max-height:{h * 1.4:.0f}px;">'
+            + "".join(deler) + "</svg>")
+
+
+def _fund_kort(fund: dict, score: dict, ticker: str) -> None:
+    """Minervini-vennlig fundamentalkort: score, nøkkelfliser og vekst-søyler.
+
+    Bevisst lite støy: bare det Minervini faktisk ser på – vekst i salg og
+    inntjening (helst ≥ 25 % og akselererende), marginer som utvider seg, ROE og
+    free float. P/E vises nøytralt (ingen farge) siden ledere ofte har høy P/E.
+    """
+    morkt = _er_morkt()
+    F = ({"bg": "rgba(255,255,255,0.03)", "kant": "rgba(255,255,255,0.10)",
+          "txt": "#e8eaed", "dim": "#8b8f9c", "flis": "rgba(255,255,255,0.04)"}
+         if morkt else
+         {"bg": "#ffffff", "kant": "rgba(0,0,0,0.09)", "txt": "#1f2937",
+          "dim": "#6b7280", "flis": "rgba(0,0,0,0.025)"})
+    F.update(opp="#26a69a", gul="#e0a800", ned="#ef5350", noy=F["kant"])
+
+    kv = fund.get("kvartal") or {}
+    aar = fund.get("aar") or {}
+    ver = fund.get("verdsettelse") or {}
+    s = fund.get("struktur") or {}
+
+    def _status(v, gronn, gul=0.0):
+        if v is None or pd.isna(v):
+            return F["noy"]
+        return F["opp"] if v >= gronn else (F["gul"] if v >= gul else F["ned"])
+
+    def flis(label, verdi, sub, kant):
+        return (f'<div style="background:{F["flis"]};border:1px solid {F["kant"]};'
+                f'border-left:3px solid {kant};border-radius:9px;padding:8px 11px;">'
+                f'<div style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;'
+                f'color:{F["dim"]};font-weight:600;">{label}</div>'
+                f'<div style="font-size:18px;font-weight:700;color:{F["txt"]};'
+                f'font-variant-numeric:tabular-nums;line-height:1.3;">{verdi}</div>'
+                f'<div style="font-size:10.5px;color:{F["dim"]};">{sub}</div></div>')
+
+    def pct(v, enhet="%"):
+        return "—" if v is None or pd.isna(v) else f"{v:+.0f}{enhet}"
+
+    marg = kv.get("drift_margin_endring")
+    marg_navn = "Driftsmargin"
+    if marg is None:
+        marg, marg_navn = kv.get("netto_margin_endring"), "Nettomargin"
+    marg_niva = kv.get("drift_margin") if marg_navn == "Driftsmargin" else kv.get("netto_margin")
+
+    pe, fpe = ver.get("pe"), ver.get("forward_pe")
+    pe_sub = f"forventet {fpe:.1f}" if fpe else "siste 12 mnd"
+    if pe and fpe:
+        pe_sub += " ↓ vekst ventet" if fpe < pe * 0.9 else ""
+    roe = ver.get("roe")
+    fl = s.get("float_pct")
+
+    fliser = [
+        flis("Salg · kvartal", pct(kv.get("omsetning_vekst")), "YoY · mål ≥ 25 %",
+             _status(kv.get("omsetning_vekst"), 25)),
+        flis("Resultat · kvartal", pct(kv.get("resultat_vekst")), "YoY · mål ≥ 25 %",
+             _status(kv.get("resultat_vekst"), 25)),
+        flis(marg_navn, pct(marg, " pp"),
+             (f"nivå {marg_niva:.1f} % · " if marg_niva is not None else "") + "vs i fjor",
+             _status(marg, 0.01, 0.0) if marg is not None and marg != 0 else F["noy"]),
+        flis("Salg · år", pct(aar.get("omsetning_vekst")), "YoY · mål ≥ 15 %",
+             _status(aar.get("omsetning_vekst"), 15)),
+        flis("Resultat · år", pct(aar.get("resultat_vekst")), "YoY · mål ≥ 15 %",
+             _status(aar.get("resultat_vekst"), 15)),
+        flis("P/E", f"{pe:.1f}" if pe else ("neg." if fpe or s.get("utestaende") else "—"),
+             pe_sub, F["noy"]),
+        flis("ROE", "—" if roe is None else f"{roe:.0f} %", "mål ≥ 17 %",
+             _status(roe, 17, 0)),
+        flis("Free float", "—" if fl is None else f"{fl:.0f} %",
+             _stor_tall(s.get("float")) + " aksjer" if s.get("float") else "andel frie aksjer",
+             F["noy"]),
+    ]
+
+    # Topp: score + akselerasjon.
+    p = score.get("poeng") or 0
+    sc_f = F["opp"] if p >= 4 else (F["gul"] if p >= 2 else F["ned"])
+    sc_tekst = "Sterk" if p >= 4 else "Godkjent" if p >= 2 else "Svak"
+    akse = fund.get("akselerasjon")
+    akse_html = ""
+    if akse:
+        af = {"akselererer": F["opp"], "avtar": F["ned"]}.get(akse["retning"], F["dim"])
+        akse_html = (f'<span style="font-size:12px;font-weight:600;color:{af};'
+                     f'border:1px solid {af};border-radius:999px;padding:2px 10px;">'
+                     f'{akse["tekst"]}</span>')
+    prikker = "".join(
+        f'<span style="display:inline-block;width:9px;height:9px;border-radius:50%;'
+        f'margin-right:3px;background:{sc_f if i < p else F["kant"]};"></span>'
+        for i in range(5))
+    topp = (f'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;'
+            f'margin-bottom:12px;">'
+            f'<div style="font-size:26px;font-weight:800;color:{sc_f};line-height:1;">{p}/5</div>'
+            f'<div><div style="font-size:12px;font-weight:700;color:{F["txt"]};">'
+            f'Fundamental Minervini-score · {sc_tekst}</div><div style="margin-top:3px;">{prikker}</div></div>'
+            f'<div style="flex:1;"></div>{akse_html}</div>')
+
+    # Vekst-søyler (akselererer veksten?).
+    basis = fund.get("akse_basis", "kvartal")
+    graf = ""
+    sv = _vekst_svg(fund.get("vekst_oms_serie") or [], F, morkt, aarlig=basis == "år")
+    ev = _vekst_svg(fund.get("vekst_eps_serie") or [], F, morkt, aarlig=basis == "år")
+    if sv or ev:
+        def boks(tittel, svg):
+            return (f'<div style="flex:1 1 260px;min-width:240px;">'
+                    f'<div style="font-size:10px;letter-spacing:.06em;text-transform:uppercase;'
+                    f'color:{F["dim"]};font-weight:600;margin-bottom:4px;">{tittel}</div>'
+                    f'{svg or "<div style=font-size:11px;color:" + F["dim"] + ">Ikke nok data</div>"}</div>')
+        per = "per kvartal" if basis == "kvartal" else "per år"
+        graf = (f'<div style="display:flex;gap:22px;flex-wrap:wrap;margin-top:14px;">'
+                + boks(f"Salgsvekst YoY {per}", sv) + boks(f"Resultatvekst YoY {per}", ev)
+                + "</div>")
+
+    valuta = fund.get("valuta")
+    st.markdown(
+        f'<div style="background:{F["bg"]};border:1px solid {F["kant"]};border-radius:12px;'
+        f'padding:14px 16px;margin:6px 0 4px 0;font-family:-apple-system,Segoe UI,Roboto,sans-serif;">'
+        + topp
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px;">'
+        + "".join(fliser) + "</div>" + graf + "</div>",
+        unsafe_allow_html=True)
+    st.caption(f"{ticker} · Yahoo Finance{f' · rapporteres i {valuta}' if valuta else ''}. "
+               "Grønn kant = møter Minervinis krav · gul = positiv, men under · rød = negativ. "
+               "Stiplet linje i søylene = 25 %. P/E er bare orientering – ledere har ofte høy P/E.")
+
+
 def fundamenta_seksjon(ticker: str, nokkel: str) -> None:
-    """Henter alltid fundamental score (cached, rask etter første gang) og viser merke.
+    """Fundamentalkort (score, nøkkeltall, vekst-søyler) + detaljer bak en ekspander.
     Scoren lagres i session_state så tabellen kan vise Fund-kolonnen gradvis.
-    Detaljert tabell bak toggle for de som vil dykke dypere.
     """
     fund = hent_fundamenta_rikt(ticker)
     score = fundamenta.fund_score(fund)
     st.session_state.setdefault("fund_scores", {})[ticker] = score
-    _vis_fund_merke(score, ticker)
-    _vis_vekst_trend(fund)
-    vis = st.toggle("📊 Vis detaljerte fundamentale tall (vekst, marginer, aksjestruktur)",
-                    value=False, key=f"fund_{nokkel}")
-    if not vis:
-        return
     if not fund.get("tilgjengelig"):
-        st.info(f"Yahoo har ingen fundamentaldata for {ticker}. Det er vanlig for mindre "
-                "aksjer på Euronext Growth/Expand.")
+        st.caption(f"Fundamentaldata: Yahoo har ingen tall for **{ticker}** "
+                   "(vanlig for mindre Growth/Expand-aksjer).")
         return
-    _tegn_fundamenta(fund)
+    _fund_kort(fund, score, ticker)
+    with st.expander("Detaljer – beløp, marginer og eierskap"):
+        _tegn_fundamenta(fund)
 
 
 def _kr(x) -> str:

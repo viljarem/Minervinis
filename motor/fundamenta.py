@@ -298,6 +298,42 @@ def bygg_struktur(info: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Verdsettelse & kvalitet (P/E, PEG, ROE, gjeld) – rent regnestykke fra info
+# ---------------------------------------------------------------------------
+def bygg_verdsettelse(info: dict) -> dict:
+    """P/E (siste 12 mnd + forventet), PEG, ROE og gjeldsgrad fra Yahoos info.
+
+    Minervini bruker IKKE lav P/E som kjøpskriterium – markedsledere har ofte høy
+    P/E. Tallet er med som orientering (og for å se om forventet P/E er lavere enn
+    dagens = analytikerne venter inntjeningsvekst). ROE ≥ 17 % er hans kvalitetsmål.
+    Negative/meningsløse verdier blir None.
+    """
+    def _f(*navn):
+        for n in navn:
+            v = info.get(n)
+            try:
+                v = None if v is None else float(v)
+            except (TypeError, ValueError):
+                v = None
+            if v is not None and not pd.isna(v):
+                return v
+        return None
+
+    pe = _f("trailingPE")
+    fpe = _f("forwardPE")
+    peg = _f("trailingPegRatio", "pegRatio")
+    roe = _f("returnOnEquity")
+    gjeld = _f("debtToEquity")
+    return {
+        "pe": round(pe, 1) if pe and 0 < pe < 2000 else None,
+        "forward_pe": round(fpe, 1) if fpe and 0 < fpe < 2000 else None,
+        "peg": round(peg, 2) if peg and 0 < peg < 50 else None,
+        "roe": round(roe * 100, 1) if roe is not None else None,
+        "gjeld_ek": round(gjeld / 100, 2) if gjeld is not None and gjeld >= 0 else None,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Fundamental Minervini-score (rent regnestykke, ingen nettverk)
 # ---------------------------------------------------------------------------
 def fund_score(fund: dict) -> dict:
@@ -502,6 +538,7 @@ def hent_fundamenta(ticker: str) -> dict:
         "kvartal": kvartal,
         "aar": aar,
         "struktur": struktur,
+        "verdsettelse": bygg_verdsettelse(info),
         "vekst_oms_serie": oms_serie,
         "vekst_eps_serie": eps_serie,
         "akselerasjon": akselerasjon,

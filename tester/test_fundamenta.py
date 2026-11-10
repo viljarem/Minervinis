@@ -281,3 +281,11 @@ def test_belop_serie_manglende_rad_gir_tom():
     df = pd.DataFrame([[1, 2]], index=["Noe Annet"],
                       columns=[pd.Timestamp("2025-03-31"), pd.Timestamp("2025-06-30")])
     assert fu.belop_serie(df, ["Total Revenue"]) == []
+
+
+def test_bygg_verdsettelse():
+    from motor.fundamenta import bygg_verdsettelse
+    v = bygg_verdsettelse({"trailingPE": 31.24, "forwardPE": 22.0, "returnOnEquity": 0.21, "debtToEquity": 45.0})
+    assert v["pe"] == 31.2 and v["forward_pe"] == 22.0 and v["roe"] == 21.0 and v["gjeld_ek"] == 0.45
+    assert bygg_verdsettelse({"trailingPE": -5})["pe"] is None
+    assert bygg_verdsettelse({})["roe"] is None
