@@ -676,14 +676,15 @@ def lag_chart(wb, google: bool = False):
     if google:
         ws["B5"] = "Børs"; ws["B5"].font = FET
         ws["C5"] = "OSL"; ws["C5"].font = INN_FET
-        dv = DataValidation(type="list", formula1='"OSL,NASDAQ,NYSE,NYSEARCA,STO,CPH"',
+        dv = DataValidation(type="list", formula1='"OSL,USA"',
                             allow_blank=True, showErrorMessage=False)
         ws.add_data_validation(dv); dv.add("C5")
-        ws["AF5"] = '=IF(ISNUMBER(SEARCH(":",$AF$4)),$AF$4,IF($C$5="","OSL",$C$5)&":"&$AF$4)'
-        ws["E3"] = ("Velg ticker fra listen (Oslo Børs) eller skriv selv. «.OL» fjernes automatisk. "
-                    "Kursene hentes med GOOGLEFINANCE.")
-        ws["E4"] = ('=IFERROR("Henter: "&$AF$5&"  –  "&GOOGLEFINANCE($AF$5,"name"),'
-                    '"Fant ikke "&$AF$5&" – sjekk ticker i arket Tickere")')
+        # Yahoo-symbol: Oslo = EQNR.OL, USA = NVDA
+        ws["AF5"] = '=IF($C$5="USA",$AF$4,$AF$4&".OL")'
+        ws["E3"] = ("Velg ticker fra listen (Oslo Børs) eller skriv selv. Kursene hentes fra Yahoo Finance "
+                    "via skriptet journal_yahoo.gs (Utvidelser → Apps Script – se arket Tickere).")
+        ws["E4"] = ('=IFERROR("Henter: "&$AF$5&"  –  "&YAHOONAVN($AF$5),'
+                    '"Fant ikke "&$AF$5&" – er Apps Script-koden installert? Sjekk ticker i Tickere")')
         ws["E5"] = ("▲ grønn = kjøp, ▼ rød = salg (fra Trades). Lysestake-alternativ: marker X6:AB"
                     f"{6 + CHART_N} → Sett inn → Diagram → Lysestake (uten markører).")
         ws["E5"].font = DIM
@@ -702,11 +703,10 @@ def lag_chart(wb, google: bool = False):
 
     # Kursdata R:V (Google: GOOGLEFINANCE spres fra R6 inkl. overskrift)
     if google:
-        ws["R5"] = "Kursdata (GOOGLEFINANCE – ikke skriv her)"; ws["R5"].font = DIM
+        ws["R5"] = "Kursdata (Yahoo – ikke skriv her)"; ws["R5"].font = DIM
         slutt = 'IF($C$4="",TODAY(),$C$4)'
-        tk = "$AF$5"
-        ws["R6"] = (f'=IFERROR(GOOGLEFINANCE({tk},"all",{slutt}-{CHART_N * 2},{slutt}+1,"DAILY"),'
-                    f'"Fant ikke kurser – sjekk ticker/børs")')
+        ws["R6"] = (f'=IFERROR(YAHOOKURS($AF$5,{slutt}-{CHART_N * 2},{slutt}),'
+                    f'"Fant ikke kurser – sjekk ticker / Apps Script")')
         ws.column_dimensions["W"].width = 3
     else:
         ws["R5"] = "LIM INN KURSDATA HER"; ws["R5"].font = SEKSJON
@@ -839,20 +839,26 @@ def _chart_trades(ws):
 def lag_tickere(wb, google: bool):
     ws = wb.create_sheet("Tickere")
     hode(ws, 1, 1, "Ticker (Oslo Børs)")
-    hode(ws, 1, 2, "Google-symbol")
-    hode(ws, 1, 3, "Navn" if google else "Navn (kun i Google Sheets)")
+    hode(ws, 1, 2, "Yahoo-symbol")
     ws.column_dimensions["A"].width = 14
     ws.column_dimensions["B"].width = 16
-    ws.column_dimensions["C"].width = 40
     for i, t in enumerate(OSLO, start=2):
         ws[f"A{i}"] = t
-        ws[f"B{i}"] = f'="OSL:"&A{i}'
-        if google:
-            ws[f"C{i}"] = f'=IFERROR(GOOGLEFINANCE(B{i},"name"),"(ikke i Google Finance)")'
+        ws[f"B{i}"] = f"{t}.OL"
     ws.freeze_panes = "A2"
-    ws.auto_filter.ref = f"A1:C{len(OSLO) + 1}"
-    ws["E1"] = "Bruk Ctrl/Cmd+F for å søke på navn. Ticker skrives uten .OL i journalen."
-    ws["E1"].font = DIM
+    ws.auto_filter.ref = f"A1:B{len(OSLO) + 1}"
+    ws["D1"] = "Ticker skrives uten .OL i journalen. Usikker? Søk på finance.yahoo.com – symbolet der (f.eks. EQNR.OL) uten .OL er riktig."
+    ws["D1"].font = DIM
+    if google:
+        ws["D3"] = "Installer kurshenting (én gang):"; ws["D3"].font = SEKSJON
+        for j, t in enumerate((
+            "1. Utvidelser → Apps Script.",
+            "2. Slett alt i Kode.gs og lim inn hele innholdet i verktoy/journal_yahoo.gs.",
+            "3. Klikk Lagre (diskett-ikonet) og lukk fanen.",
+            "4. Gå til Chart-arket. Første gang ber Google om tillatelse – godta.",
+            "Test: skriv =YAHOONAVN(\"EQNR.OL\") i en tom celle → skal vise Equinor ASA.",
+        ), start=4):
+            ws[f"D{j}"] = t
 
 
 def lag_lists(wb):
