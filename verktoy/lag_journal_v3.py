@@ -8,8 +8,10 @@ Alt spores tilbake til en analyse via Analyse-ID.
 
 Ark: Dashboard · Analyse · Watchlist · Trades · Weekly · Monthly · Chart · Lists
 
-Laget for Google Sheets (Chart-arket bruker GOOGLEFINANCE/SPARKLINE), men alt
-annet virker også i Excel. Blå tekst = input, svarte tall på grå bakgrunn = formler.
+Laget for Excel (kun klassiske funksjoner + MAXIFS/MINIFS/ISOWEEKNUM fra Excel 2019/365).
+Blå tekst = input, svarte tall på grå bakgrunn = formler.
+
+Time Value (TV) = avkastning i % / antall dager holdt (min. 1). Høyere = bedre.
 """
 from __future__ import annotations
 
@@ -17,7 +19,10 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from openpyxl import Workbook
-from openpyxl.chart import LineChart, Reference
+from openpyxl.chart import LineChart, Reference, StockChart
+from openpyxl.chart.axis import ChartLines
+from openpyxl.chart.shapes import GraphicalProperties
+from openpyxl.chart.updown_bars import UpDownBars
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -54,6 +59,14 @@ KR = '#,##0.00;[Red]-#,##0.00'
 KR0 = '#,##0;[Red]-#,##0'
 PST = '0%'
 R_FMT = '0.00"R";[Red]-0.00"R"'
+TV_FMT = '0.00;[Red]-0.00'
+# Watchlist-grupper: (status, antall rader, farge, forklaring)
+WL_GRUPPER = [
+    ("Ready", 15, "FFF3C4", "klar – venter på entry"),
+    ("Triggered", 10, "DCE8F8", "entry trigget / i posisjon"),
+    ("Watching", 25, "E5E7EB", "følger med – ikke klar ennå"),
+]
+WL_HJELP = {"Ready": "U", "Triggered": "V", "Watching": "W"}
 
 LISTS = {
     "Direction": ["Long", "Short"],
@@ -153,7 +166,9 @@ def lag_analyse(wb):
         ("Notater / Plan", 32, None, None, None),
         ("Trades", 7, '0', f'=IF(C{{r}}="","",COUNTIF({TB},A{{r}}))', None),
         ("P&L fra trades", 11, KR0, f'=IF(OR(C{{r}}="",S{{r}}=0),"",SUMIFS({TP},{TB},A{{r}}))', None),
-        ("Ready-nr (hjelp)", 8, '0', '=IF(P{r}="Ready",COUNTIF(P$2:P{r},"Ready"),"")', None),
+    ] + [
+        (f"{s}-nr (hjelp)", 8, '0', f'=IF(P{{r}}="{s}",COUNTIF(P$2:P{{r}},"{s}"),"")', None)
+        for s, *_ in WL_GRUPPER
     ]
     tabell(ws, kol, forste_rad=2, antall=N_ANALYSE, hode_rad=1)
     for r in range(2, A_END + 1):
@@ -161,7 +176,8 @@ def lag_analyse(wb):
         c.value, c.font, c.fill = f"A-{r - 1:03d}", Font(color="374151"), FORMEL_FILL
         for k in "GHQR":
             ws[f"{k}{r}"].alignment = Alignment(wrap_text=True, vertical="top")
-    ws.column_dimensions["U"].hidden = True
+    for L in WL_HJELP.values():
+        ws.column_dimensions[L].hidden = True
     ws.freeze_panes = "D2"
     p = f"P2:P{A_END}"
     cf(ws, p, 'P2="Ready"', GUL)
@@ -211,34 +227,53 @@ LINK_WL = ('=IF(B{r}="","",HYPERLINK("https://www.tradingview.com/chart/?symbol=
 
 def lag_watchlist(wb):
     ws = wb.create_sheet("Watchlist")
-    AUTO_FRA, AUTO_N = 3, 30
-    ws["A1"] = "Fra Analyse – alle med Status = Ready (fylles automatisk)"
+    ws["A1"] = "Fra Analyse – gruppert etter status (fylles automatisk når du endrer Status i Analyse)"
     ws["A1"].font = SEKSJON
     for i, (navn, bredde, fmt, _) in enumerate(WL, start=1):
         hode(ws, 2, i, navn)
         ws.column_dimensions[get_column_letter(i)].width = bredde
-    for r in range(AUTO_FRA, AUTO_FRA + AUTO_N):
-        k = r - AUTO_FRA + 1
-        for i, (navn, _, fmt, akol) in enumerate(WL, start=1):
-            L = get_column_letter(i)
-            c = ws[f"{L}{r}"]
-            if L == "A":
-                c.value = (f'=IFERROR(INDEX(Analyse!$A$2:$A${A_END},'
-                           f'MATCH({k},Analyse!$U$2:$U${A_END},0)),"")')
-            elif navn == "R:R":
-                c.value = RR_WL.replace("{r}", str(r))
-            elif navn == "Link":
-                c.value = LINK_WL.replace("{r}", str(r))
-            else:
-                c.value = "=" + fra_analyse(akol, f"$A{r}")
-            c.fill, c.border = FORMEL_FILL, KANT
-            if fmt:
-                c.number_format = fmt
+    siste_kol = get_column_letter(len(WL))
+    r = 3
+    for status, antall, farge, forklaring in WL_GRUPPER:
+        fill = PatternFill("solid", fgColor=farge)
+        ws[f"A{r}"] = (f'="{status.upper()}  ({forklaring})  –  "&'
+                       f'COUNTIF(Analyse!$P$2:$P${A_END},"{status}")&" stk"')
+        ws[f"A{r}"].font = Font(bold=True, color=MORK)
+        for i in range(1, len(WL) + 1):
+            ws.cell(row=r, column=i).fill = fill
+        ws.merge_cells(f"A{r}:{siste_kol}{r}")
+        ws.row_dimensions[r].height = 20
+        r += 1
+        hjelp = WL_HJELP[status]
+        for k in range(1, antall + 1):
+            for i, (navn, _, fmt, akol) in enumerate(WL, start=1):
+                L = get_column_letter(i)
+                c = ws[f"{L}{r}"]
+                if L == "A":
+                    c.value = (f'=IFERROR(INDEX(Analyse!$A$2:$A${A_END},'
+                               f'MATCH({k},Analyse!${hjelp}$2:${hjelp}${A_END},0)),"")')
+                elif navn == "R:R":
+                    c.value = RR_WL.replace("{r}", str(r))
+                elif navn == "Link":
+                    c.value = LINK_WL.replace("{r}", str(r))
+                else:
+                    c.value = "=" + fra_analyse(akol, f"$A{r}")
+                c.fill, c.border = FORMEL_FILL, KANT
+                if fmt:
+                    c.number_format = fmt
+            r += 1
+        r += 1
 
-    MAN_TITTEL = AUTO_FRA + AUTO_N + 1
+    MAN_TITTEL = r
     MAN_HODE, MAN_FRA, MAN_N = MAN_TITTEL + 1, MAN_TITTEL + 2, 50
-    ws[f"A{MAN_TITTEL}"] = "Manuelt – skriv inn selv (Analyse-ID er valgfritt)"
+    ws[f"A{MAN_TITTEL}"] = ("Manuelt – skriv inn selv (Analyse-ID er valgfritt). "
+                            "Bruk filterpilen på Status for å sortere/gruppere.")
     ws[f"A{MAN_TITTEL}"].font = SEKSJON
+    ws.auto_filter.ref = f"A{MAN_TITTEL + 1}:{siste_kol}{MAN_TITTEL + 51}"
+    st = f"K{MAN_TITTEL + 2}:K{MAN_TITTEL + 51}"
+    for status, _, farge, _ in WL_GRUPPER:
+        cf(ws, st, f'K{MAN_TITTEL + 2}="{status}"', PatternFill("solid", fgColor=farge))
+    cf(ws, st, f'K{MAN_TITTEL + 2}="Traded"', GRONN)
     kol = []
     for navn, bredde, fmt, _ in WL:
         formel = RR_WL if navn == "R:R" else LINK_WL if navn == "Link" else None
@@ -286,14 +321,16 @@ def lag_trades(wb):
         ("Emotion", 11, None, None, "Emotion"),
         ("Mistake", 15, None, None, "Mistake"),
         ("Duration (dager)", 9, '0', '=IF(OR(C{r}="",D{r}=""),"",D{r}-C{r})', None),
+        ("Avkastning %", 9, '0.0%;[Red]-0.0%',
+         '=IF(OR(P{r}="",J{r}="",J{r}=0),"",IF(F{r}="Short",J{r}-O{r},O{r}-J{r})/J{r})', None),
+        ("Time Value (%/dag)", 9, TV_FMT, '=IF(OR(W{r}="",V{r}=""),"",W{r}*100/MAX(V{r},1))', None),
         ("Notes / Lesson", 40, None, None, None),
         ("Uke (hjelp)", 10, DATO, '=IF(OR(R{r}="",D{r}=""),"",D{r}-WEEKDAY(D{r},2)+1)', None),
         ("Måned (hjelp)", 10, DATO, '=IF(OR(R{r}="",D{r}=""),"",DATE(YEAR(D{r}),MONTH(D{r}),1))', None),
         ("Lukket (hjelp)", 7, '0', '=IF(R{r}="","",1)', None),
         ("Kum. P&L (hjelp)", 10, KR0, '=IF(P{r}="","",SUM(P$2:P{r}))', None),
-        ("Chart-treff (hjelp)", 7, '0',
-         '=IF(E{r}="",0,IF(OR(E{r}=Chart!$C$3,RIGHT(Chart!$C$3,LEN(E{r})+1)=":"&E{r}),1,0))', None),
-        ("Chart-nr (hjelp)", 7, '0', '=IF(AB{r}=1,SUM(AB$2:AB{r}),"")', None),
+        ("Chart-treff (hjelp)", 7, '0', '=IF(OR(E{r}="",Chart!$C$3=""),0,IF(E{r}=Chart!$C$3,1,0))', None),
+        ("Chart-nr (hjelp)", 7, '0', '=IF(AD{r}=1,SUM(AD$2:AD{r}),"")', None),
     ]
     tabell(ws, kol, forste_rad=2, antall=N_TRADES, hode_rad=1)
     dv = DataValidation(type="list", formula1=f"=Analyse!$A$2:$A${A_END}", allow_blank=True)
@@ -302,12 +339,14 @@ def lag_trades(wb):
     for r in range(2, T_END + 1):
         c = ws[f"A{r}"]
         c.value, c.font, c.fill = f"T-{r - 1:03d}", Font(color="374151"), FORMEL_FILL
-        ws[f"W{r}"].alignment = Alignment(wrap_text=True, vertical="top")
-    for L in ("X", "Y", "Z", "AA", "AB", "AC"):
+        ws[f"Y{r}"].alignment = Alignment(wrap_text=True, vertical="top")
+    for L in ("Z", "AA", "AB", "AC", "AD", "AE"):
         ws.column_dimensions[L].hidden = True
     ws.freeze_panes = "F2"
     gronn_rod(ws, f"P2:P{T_END}")
     gronn_rod(ws, f"Q2:Q{T_END}")
+    gronn_rod(ws, f"W2:W{T_END}")
+    gronn_rod(ws, f"X2:X{T_END}")
     cf(ws, f"R2:R{T_END}", 'R2="Win"', GRONN)
     cf(ws, f"R2:R{T_END}", 'R2="Loss"', ROD)
     cf(ws, f"R2:R{T_END}", 'R2="BE"', GRA)
@@ -323,7 +362,7 @@ def lag_trades(wb):
          "EKSEMPEL – åpen trade"),
     ]
     for i, e in enumerate(eks, start=2):
-        for k, v in zip("BCDFJKLMNOSTUW", e):
+        for k, v in zip("BCDFJKLMNOSTUY", e):
             if v in (None, ""):
                 continue
             ws[f"{k}{i}"] = _d(v) if k in "CD" else v
@@ -340,9 +379,9 @@ def lag_dashboard(wb):
     ws = wb.active
     ws.title = "Dashboard"
     ws.sheet_view.showGridLines = False
-    for k, b in zip("ABCDEFGHIJKLM", (2, 24, 13, 3, 16, 10, 10, 10, 12, 3, 3, 3, 3)):
+    for k, b in zip("ABCDEFGHIJKLM", (2, 24, 13, 3, 16, 10, 10, 10, 12, 10, 3, 3, 3)):
         ws.column_dimensions[k].width = b
-    P, Q, R, Z, G, V = TR("P"), TR("Q"), TR("R"), TR("Z"), TR("G"), TR("V")
+    P, Q, R, Z, G, V, TV = TR("P"), TR("Q"), TR("R"), TR("AB"), TR("G"), TR("V"), TR("X")
     ws["B1"] = "Tradingjournal"; ws["B1"].font = TITTEL
     ws["B2"] = ("Analyse = planen (før) · Trades = utførelsen + review (etter). "
                 "Blå tekst = det du skriver · grå celler = formler.")
@@ -364,13 +403,14 @@ def lag_dashboard(wb):
         ("Beste R", f'=IF(C5=0,"",MAX({Q}))', R_FMT),                                # 15
         ("Dårligste R", f'=IF(C5=0,"",MIN({Q}))', R_FMT),                            # 16
         ("Åpne trades", f'=COUNTIFS({TR("C")},"<>",{TR("O")},"")', '0'),             # 17
+        ("Avg Time Value (%/dag)", f'=IFERROR(AVERAGE({TV}),"")', TV_FMT),          # 18
     ]
     for i, (navn, formel, fmt) in enumerate(rader, start=5):
         ws[f"B{i}"] = navn
         c = ws[f"C{i}"]; c.value = formel; c.number_format = fmt; c.font = FET
         c.alignment = Alignment(horizontal="right")
         ws[f"B{i}"].border = ws[f"C{i}"].border = KANT
-    for celle in ("C10", "C14"):
+    for celle in ("C10", "C14", "C18"):
         cf(ws, celle, f"AND(ISNUMBER({celle}),{celle}>0)", GRONN)
         cf(ws, celle, f"AND(ISNUMBER({celle}),{celle}<0)", ROD)
     cf(ws, "C13", "AND(ISNUMBER(C13),C13>=1.5)", GRONN)
@@ -378,8 +418,8 @@ def lag_dashboard(wb):
 
     # Performance per setup
     ws["E4"] = "Performance per Setup"; ws["E4"].font = SEKSJON
-    for k, t in zip("EFGH", ("Setup", "Antall", "Winrate", "Avg R")):
-        hode(ws, 5, " EFGH".index(k) + 4, t)
+    for i, t in enumerate(("Setup", "Antall", "Winrate", "Avg R", "Avg TV")):
+        hode(ws, 5, 5 + i, t)
     for j in range(len(LISTS["Setup"])):
         r = 6 + j
         s = f"Lists!${LK['Setup']}${j + 2}"
@@ -387,15 +427,17 @@ def lag_dashboard(wb):
         ws[f"F{r}"] = f"=SUMIFS({Z},{G},{s})"
         ws[f"G{r}"] = f'=IFERROR(COUNTIFS({G},{s},{R},"Win")/F{r},"")'
         ws[f"H{r}"] = f'=IFERROR(AVERAGEIFS({TR("Q")},{G},{s}),"")'
+        ws[f"I{r}"] = f'=IFERROR(AVERAGEIFS({TV},{G},{s}),"")'
         ws[f"F{r}"].number_format, ws[f"G{r}"].number_format, ws[f"H{r}"].number_format = '0', PST, R_FMT
-        for k in "EFGH":
+        ws[f"I{r}"].number_format = TV_FMT
+        for k in "EFGHI":
             ws[f"{k}{r}"].border = KANT
-        gronn_rod(ws, f"H{r}:H{r}")
+        gronn_rod(ws, f"H{r}:I{r}")
 
     # Holdetid vs resultat
     h0 = 6 + len(LISTS["Setup"]) + 2
     ws[f"E{h0}"] = "Holdetid vs Resultat"; ws[f"E{h0}"].font = SEKSJON
-    for i, t in enumerate(("Holdetid", "Antall", "Winrate", "Avg R", "Total P&L")):
+    for i, t in enumerate(("Holdetid", "Antall", "Winrate", "Avg R", "Total P&L", "Avg TV")):
         hode(ws, h0 + 1, 5 + i, t)
     for j, (navn, lo, hi) in enumerate((("0–1 dag", 0, 1), ("2–3 dager", 2, 3),
                                         ("4–7 dager", 4, 7), ("8+ dager", 8, 100000))):
@@ -406,11 +448,12 @@ def lag_dashboard(wb):
         ws[f"G{r}"] = f'=IFERROR(COUNTIFS({R},"Win",{kr})/F{r},"")'
         ws[f"H{r}"] = f'=IFERROR(AVERAGEIFS({TR("Q")},{kr}),"")'
         ws[f"I{r}"] = f"=SUMIFS({P},{kr})"
-        for k, fmt in zip("FGHI", ('0', PST, R_FMT, KR0)):
+        ws[f"J{r}"] = f'=IFERROR(AVERAGEIFS({TV},{kr}),"")'
+        for k, fmt in zip("FGHIJ", ('0', PST, R_FMT, KR0, TV_FMT)):
             ws[f"{k}{r}"].number_format = fmt
-        for k in "EFGHI":
+        for k in "EFGHIJ":
             ws[f"{k}{r}"].border = KANT
-        gronn_rod(ws, f"H{r}:I{r}")
+        gronn_rod(ws, f"H{r}:J{r}")
 
     # Siste trades
     s0 = 20
@@ -445,7 +488,8 @@ def lag_dashboard(wb):
     ws[f"B{b0}"] = "Slik bruker du journalen"; ws[f"B{b0}"].font = SEKSJON
     tekst = [
         "1. Analyse – fyll ut planen først: nivåer, enkel TA, entry/stop/targets, konfidens og thesis.",
-        "2. Når planen er klar: sett Status = Ready → den dukker automatisk opp øverst i Watchlist.",
+        "2. Status i Analyse styrer Watchlist: Ready / Triggered / Watching vises gruppert automatisk.",
+        "Time Value = avkastning % / dager holdt (min. 1). 10 % på 3 dager = 3,33. Høyere er bedre.",
         "3. Tar du traden: ny rad i Trades, velg Analyse-ID → ticker, setup og planned entry hentes fra planen.",
         "4. Etter traden: fyll inn exit, Plan Followed, Emotion, Mistake og lærdom. Sett analysen til Traded.",
         "5. Hver helg: Weekly (velg uke, skriv refleksjon i loggen). Hver måned: Monthly.",
@@ -463,8 +507,8 @@ def lag_periode(wb, *, maned: bool):
     navn = "Monthly" if maned else "Weekly"
     ws = wb.create_sheet(navn)
     ws.sheet_view.showGridLines = False
-    hjelp = TR("Y" if maned else "X")
-    P, Q, R, Z, S = TR("P"), TR("Q"), TR("R"), TR("Z"), TR("S")
+    hjelp = TR("AA" if maned else "Z")
+    P, Q, R, Z, S, TV = TR("P"), TR("Q"), TR("R"), TR("AB"), TR("S"), TR("X")
     i_dag = date(2026, 11, 10)
     forste = date(2026, 11, 1) if maned else date(2026, 11, 2)
     valgt = forste
@@ -487,6 +531,7 @@ def lag_periode(wb, *, maned: bool):
             ("Winrate", "=IFERROR({w}/{t},\"\")", PST),
             ("Total P&L", f"=SUMIFS({P},{k})", KR0),
             ("Avg R", f'=IFERROR(AVERAGEIFS({Q},{k}),"")', R_FMT),
+            ("Avg TV", f'=IFERROR(AVERAGEIFS({TV},{k}),"")', TV_FMT),
             ("Beste R", f'=IF({{t}}=0,"",MAXIFS({Q},{k}))', R_FMT),
             ("Dårligste R", f'=IF({{t}}=0,"",MINIFS({Q},{k}))', R_FMT),
         ]
@@ -506,7 +551,7 @@ def lag_periode(wb, *, maned: bool):
         c.value = f.replace("{w}", f"C{rad0 + 1}").replace("{t}", f"C{rad0}")
         c.number_format, c.font = fmt, FET
         ws[f"B{r}"].border = ws[f"C{r}"].border = KANT
-    for r in (rad0 + 4, rad0 + 5):
+    for r in (rad0 + 4, rad0 + 5, rad0 + 6):
         cf(ws, f"C{r}", f"AND(ISNUMBER(C{r}),C{r}>0)", GRONN)
         cf(ws, f"C{r}", f"AND(ISNUMBER(C{r}),C{r}<0)", ROD)
 
@@ -515,7 +560,7 @@ def lag_periode(wb, *, maned: bool):
     logg_hode = rad0 + len(stat(hjelp, "$C$3")) + 3
     ws[f"B{logg_hode - 1}"] = "Logg – én rad per " + ("måned" if maned else "uke"); ws[f"B{logg_hode - 1}"].font = SEKSJON
     statkol = [("Trades", '0'), ("Wins", '0'), ("Losses", '0'), ("Winrate", PST),
-               ("P&L", KR0), ("Avg R", R_FMT)]
+               ("P&L", KR0), ("Avg R", R_FMT), ("Avg TV", TV_FMT)]
     if maned:
         statkol += [("Profit Factor", '0.00'), ("% Plan Followed", PST)]
     refl = (["Månedens lærdom", "Gjør mer av", "Gjør mindre av", "Prosessmål neste måned"]
@@ -569,7 +614,9 @@ def lag_periode(wb, *, maned: bool):
     cf(ws, f"{kum_kol}{forste_logg}:{kum_kol}{siste_logg}",
        f"ISERROR({kum_kol}{forste_logg})", PatternFill(fill_type=None), Font(color="FFFFFF"))
     pl_i = [s for s, _ in statkol].index("P&L")
-    for L in (get_column_letter(3 + pl_i), get_column_letter(3 + pl_i + 1), kum_kol):
+    for L in (get_column_letter(3 + pl_i + d) for d in range(3)):
+        gronn_rod(ws, f"{L}{forste_logg}:{L}{siste_logg}")
+    for L in (kum_kol,):
         gronn_rod(ws, f"{L}{forste_logg}:{L}{siste_logg}")
     ws.freeze_panes = f"C{forste_logg}"
 
@@ -579,6 +626,8 @@ def lag_periode(wb, *, maned: bool):
     ch.height, ch.width = 7.5, 16
     ch.legend = None
     ch.y_axis.numFmt = '#,##0'
+    ch.x_axis.delete = False
+    ch.y_axis.delete = False
     data = Reference(ws, min_col=3 + len(statkol), min_row=logg_hode, max_row=siste_logg)
     kat = Reference(ws, min_col=2, min_row=forste_logg, max_row=siste_logg)
     ch.add_data(data, titles_from_data=True)
@@ -588,70 +637,106 @@ def lag_periode(wb, *, maned: bool):
 
 
 # ---------------------------------------------------------------------------
-# Chart (Google Sheets – GOOGLEFINANCE)
+# Chart (Excel – lim inn kursdata, candlestick-diagram oppdateres selv)
 # ---------------------------------------------------------------------------
+CHART_N = 120          # antall handelsdager i diagrammet
+RA_FRA, RA_TIL = 7, 1006
+
+
 def lag_chart(wb):
     ws = wb.create_sheet("Chart")
     ws.sheet_view.showGridLines = False
     ws["B1"] = "Chart"; ws["B1"].font = TITTEL
-    for r, (navn, verdi, fmt) in enumerate((("Ticker (GOOGLEFINANCE-format)", "NASDAQ:NVDA", None),
-                                            ("Start dato", _d("2026-05-01"), DATO),
-                                            ("Slutt dato", "=TODAY()", DATO)), start=3):
-        ws[f"B{r}"] = navn; ws[f"B{r}"].font = FET
-        c = ws[f"C{r}"]; c.value = verdi; c.font = INN_FET
-        if fmt:
-            c.number_format = fmt
-    ws["B3"] = "Ticker (f.eks. NASDAQ:NVDA, OSL:EQNR)"
-    ws["C3"].number_format = "@"
-    ws["E3"] = "Fungerer kun i Google Sheets (GOOGLEFINANCE). Oslo: OSL:EQNR · USA: NASDAQ:NVDA / NYSE:KO"
-    ws["E3"].font = DIM
-    ws["E4"] = ("Candlestick: marker S6:W i prisdataene → Sett inn → Diagram → Lysestake. "
-                "Diagrammet følger ticker/datoer automatisk.")
-    ws["E4"].font = DIM
-    for k, b in zip("ABCDEFGHIJKLMNOPQRSTUVW",
-                    (2, 30, 14, 3, 11, 11, 11, 11, 11, 11, 11, 11, 3, 3, 3, 3, 3, 3, 11, 9, 9, 9, 9)):
+    ws["B3"] = "Ticker (som i Trades)"; ws["B3"].font = FET
+    ws["C3"] = "NVDA"; ws["C3"].font = INN_FET
+    ws["B4"] = "Slutt dato (tom = siste)"; ws["B4"].font = FET
+    ws["C4"].font = INN_FET; ws["C4"].number_format = DATO
+    ws["E3"] = ("1) Last ned kurser (f.eks. Yahoo Finance → Historical Data → Download, daglig). "
+                "2) Lim inn Date, Open, High, Low, Close i kolonne R–V fra rad 7 (eldste øverst).")
+    ws["E4"] = (f"Diagrammet viser de siste {CHART_N} handelsdagene fram til slutt dato. "
+                "Trades på tickeren listes under diagrammet.")
+    ws["E3"].font = ws["E4"].font = DIM
+    for k, b in zip("ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+                    (2, 24, 12, 3, 11, 11, 11, 11, 11, 11, 11, 40, 3, 3, 3, 3, 3,
+                     11, 9, 9, 9, 9, 3, 11, 9, 9)):
         ws.column_dimensions[k].width = b
 
-    # Rådata fra GOOGLEFINANCE (spres ut fra Y6: Date, Open, High, Low, Close, Volume)
-    ws["Y5"] = "Rådata (GOOGLEFINANCE)"; ws["Y5"].font = DIM
-    ws["Y6"] = '=IFERROR(GOOGLEFINANCE($C$3,"all",$C$4,$C$5,"DAILY"),"Ingen data – sjekk ticker")'
-    # Candlestick-rekkefølge for Google Sheets: Dato, Low, Open, Close, High
-    for i, t in enumerate(("Dato", "Low", "Open", "Close", "High")):
-        hode(ws, 6, 19 + i, t)
-    kilde = {"S": "Y", "T": "AB", "U": "Z", "V": "AC", "W": "AA"}
-    for r in range(7, 520):
-        for k, src in kilde.items():
-            ws[f"{k}{r}"] = f'=IF(ISNUMBER(${src}{r}),{src}{r},"")' if k != "S" else f'=IF(ISNUMBER(Y{r}),Y{r},"")'
-            ws[f"{k}{r}"].number_format = DATO if k == "S" else KR
-    ws["B7"] = "Kursutvikling (Close)"; ws["B7"].font = SEKSJON
-    ws["B8"] = '=IFERROR(SPARKLINE(V7:V519,{"charttype","line";"linewidth",2;"color","#1f4fd8"}),"")'
-    ws.merge_cells("B8:L22")
-    ws["B23"] = '=IFERROR("Siste: "&TEXT(INDEX(V7:V519,COUNT(V7:V519)),"0.00")&"   ·   Høy: "&TEXT(MAX(W7:W519),"0.00")&"   ·   Lav: "&TEXT(MIN(T7:T519),"0.00"),"")'
-    ws["B23"].font = DIM
+    # Innlimingsområde R:V
+    ws["R5"] = "LIM INN KURSDATA HER"; ws["R5"].font = SEKSJON
+    for i, t in enumerate(("Date", "Open", "High", "Low", "Close")):
+        hode(ws, 6, 18 + i, t)
+    for r in range(RA_FRA, RA_TIL + 1):
+        ws[f"R{r}"].number_format = DATO
+        for k in "STUV":
+            ws[f"{k}{r}"].number_format = KR
+        for k in "RSTUV":
+            ws[f"{k}{r}"].font = INN
+
+    # Hjelpeområde X:AB – siste CHART_N rader fram til slutt dato
+    rd = f"$R${RA_FRA}:$R${RA_TIL}"
+    ws["AD2"] = "Siste rad (hjelp)"; ws["AD2"].font = DIM
+    ws["AD3"] = f'=IF(COUNT({rd})=0,0,IF($C$4="",COUNT({rd}),IFERROR(MATCH($C$4,{rd},1),0)))'
+    ws["X5"] = "Chart-data (formler)"; ws["X5"].font = DIM
+    for i, t in enumerate(("Date", "Open", "High", "Low", "Close")):
+        hode(ws, 6, 24 + i, t)
+    forste_h, siste_h = 7, 6 + CHART_N
+    for k in range(1, CHART_N + 1):
+        r = 6 + k
+        idx = f"($AD$3-{CHART_N}+{k})"
+        ws[f"X{r}"] = f'=IF({idx}<1,"",INDEX({rd},{idx}))'
+        ws[f"X{r}"].number_format = "DD.MM.YY"
+        for src, dst in zip("STUV", ("Y", "Z", "AA", "AB")):
+            ws[f"{dst}{r}"] = f"=IF({idx}<1,NA(),INDEX(${src}${RA_FRA}:${src}${RA_TIL},{idx}))"
+            ws[f"{dst}{r}"].number_format = KR
+        for dst in ("X", "Y", "Z", "AA", "AB"):
+            ws[f"{dst}{r}"].fill = FORMEL_FILL
+
+    ch = StockChart()
+    ch.title = None
+    ch.height, ch.width = 10, 27
+    ch.legend = None
+    data = Reference(ws, min_col=25, max_col=28, min_row=6, max_row=siste_h)
+    ch.add_data(data, titles_from_data=True)
+    ch.set_categories(Reference(ws, min_col=24, min_row=forste_h, max_row=siste_h))
+    for s in ch.series:
+        s.graphicalProperties.line.noFill = True
+    ch.hiLowLines = ChartLines()
+    ch.upDownBars = UpDownBars(
+        gapWidth=60,
+        upBars=ChartLines(spPr=GraphicalProperties(solidFill="26A69A")),
+        downBars=ChartLines(spPr=GraphicalProperties(solidFill="EF5350")),
+    )
+    ch.y_axis.numFmt = "#,##0.00"
+    ch.y_axis.majorGridlines = ChartLines()
+    ch.x_axis.number_format = "DD.MM"
+    ch.x_axis.delete = False
+    ch.y_axis.delete = False
+    ws.add_chart(ch, "B6")
 
     # Mine trades på valgt ticker
-    t0 = 25
-    ws[f"B{t0}"] = "Mine trades på denne tickeren"; ws[f"B{t0}"].font = SEKSJON
+    t0 = 28
+    ws[f"B{t0}"] = '="Mine trades på "&$C$3'; ws[f"B{t0}"].font = SEKSJON
     kol = [("TradeID", "A", None), ("Entry Date", "C", DATO), ("Exit Date", "D", DATO),
            ("Direction", "F", None), ("Actual Entry", "J", KR), ("Exit Price", "O", KR),
-           ("P&L", "P", KR0), ("R", "Q", R_FMT), ("Result", "R", None), ("Lesson", "W", None)]
+           ("P&L", "P", KR0), ("R", "Q", R_FMT), ("TV", "X", TV_FMT), ("Result", "R", None),
+           ("Lesson", "Y", None)]
     for i, (t, _, _) in enumerate(kol):
         hode(ws, t0 + 1, 2 + i, t)
     for n in range(1, 21):
         r = t0 + 1 + n
-        m = f"MATCH({n},{TR('AC')},0)"
+        m = f"MATCH({n},{TR('AE')},0)"
         for i, (t, tk, fmt) in enumerate(kol):
             c = ws.cell(row=r, column=2 + i)
             c.value = f'=IFERROR(INDEX({TR(tk)},{m}){"&\"\"" if fmt is None else ""},"")'
             if fmt:
                 c.number_format = fmt
             c.border = KANT
-        L_pl, L_res = get_column_letter(2 + 6), get_column_letter(2 + 8)
+        L_pl, L_res = get_column_letter(2 + 6), get_column_letter(2 + 9)
         cf(ws, f"{L_pl}{r}", f"AND(ISNUMBER({L_pl}{r}),{L_pl}{r}>0)", GRONN)
         cf(ws, f"{L_pl}{r}", f"AND(ISNUMBER({L_pl}{r}),{L_pl}{r}<0)", ROD)
         cf(ws, f"{L_res}{r}", f'{L_res}{r}="Win"', GRONN)
         cf(ws, f"{L_res}{r}", f'{L_res}{r}="Loss"', ROD)
-    ws.column_dimensions["K"].width = 40
+    ws.column_dimensions["L"].width = 40
 
 
 def lag_lists(wb):
