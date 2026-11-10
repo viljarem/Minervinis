@@ -15,3 +15,6 @@ env/
 
 # Test-rester
 .pytest_cache/
+
+# Personlig tradingjournal (genereres med verktoy/lag_journal.py)
+journal/
