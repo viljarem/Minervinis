@@ -643,41 +643,64 @@ CHART_N = 120          # antall handelsdager i diagrammet
 RA_FRA, RA_TIL = 7, 1006
 
 
-def lag_chart(wb):
+def lag_chart(wb, google: bool = False):
     ws = wb.create_sheet("Chart")
     ws.sheet_view.showGridLines = False
     ws["B1"] = "Chart"; ws["B1"].font = TITTEL
     ws["B3"] = "Ticker (som i Trades)"; ws["B3"].font = FET
     ws["C3"] = "NVDA"; ws["C3"].font = INN_FET
-    ws["B4"] = "Slutt dato (tom = siste)"; ws["B4"].font = FET
+    ws["B4"] = "Slutt dato (tom = i dag)" if google else "Slutt dato (tom = siste)"; ws["B4"].font = FET
     ws["C4"].font = INN_FET; ws["C4"].number_format = DATO
-    ws["E3"] = ("1) Last ned kurser (f.eks. Yahoo Finance → Historical Data → Download, daglig). "
-                "2) Lim inn Date, Open, High, Low, Close i kolonne R–V fra rad 7 (eldste øverst).")
-    ws["E4"] = (f"Diagrammet viser de siste {CHART_N} handelsdagene fram til slutt dato. "
-                "Trades på tickeren listes under diagrammet.")
+    if google:
+        ws["B5"] = "Børs (NASDAQ, NYSE, OSL …)"; ws["B5"].font = FET
+        ws["C5"] = "NASDAQ"; ws["C5"].font = INN_FET
+        dv = DataValidation(type="list", formula1='"NASDAQ,NYSE,NYSEARCA,OSL,STO,CPH"',
+                            allow_blank=True, showErrorMessage=False)
+        ws.add_data_validation(dv); dv.add("C5")
+        ws["E3"] = ("Kursene hentes automatisk med GOOGLEFINANCE. Skriv ticker + velg børs "
+                    "(Oslo = OSL, f.eks. EQNR + OSL).")
+        ws["E4"] = ("Første gang: marker X6:AB" + str(6 + CHART_N) + " → Sett inn → Diagram → "
+                    "Lysestake. Diagrammet følger ticker/dato automatisk etterpå.")
+    else:
+        ws["E3"] = ("1) Last ned kurser (f.eks. Yahoo Finance → Historical Data → Download, daglig). "
+                    "2) Lim inn Date, Open, High, Low, Close i kolonne R–V fra rad 7 (eldste øverst).")
+        ws["E4"] = (f"Diagrammet viser de siste {CHART_N} handelsdagene fram til slutt dato. "
+                    "Trades på tickeren listes under diagrammet.")
     ws["E3"].font = ws["E4"].font = DIM
     for k, b in zip("ABCDEFGHIJKLMNOPQRSTUVWXYZ",
                     (2, 24, 12, 3, 11, 11, 11, 11, 11, 11, 11, 40, 3, 3, 3, 3, 3,
                      11, 9, 9, 9, 9, 3, 11, 9, 9)):
         ws.column_dimensions[k].width = b
 
-    # Innlimingsområde R:V
-    ws["R5"] = "LIM INN KURSDATA HER"; ws["R5"].font = SEKSJON
-    for i, t in enumerate(("Date", "Open", "High", "Low", "Close")):
-        hode(ws, 6, 18 + i, t)
+    # Kursdata R:V (Google: GOOGLEFINANCE spres fra R6 inkl. overskrift)
+    if google:
+        ws["R5"] = "Kursdata (GOOGLEFINANCE – ikke skriv her)"; ws["R5"].font = DIM
+        slutt = 'IF($C$4="",TODAY(),$C$4)'
+        tk = 'IF($C$5="",$C$3,$C$5&":"&$C$3)'
+        ws["R6"] = (f'=IFERROR(GOOGLEFINANCE({tk},"all",{slutt}-{CHART_N * 2},{slutt}+1,"DAILY"),'
+                    f'"Fant ikke kurser – sjekk ticker/børs")')
+        ws.column_dimensions["W"].width = 3
+    else:
+        ws["R5"] = "LIM INN KURSDATA HER"; ws["R5"].font = SEKSJON
+        for i, t in enumerate(("Date", "Open", "High", "Low", "Close")):
+            hode(ws, 6, 18 + i, t)
     for r in range(RA_FRA, RA_TIL + 1):
         ws[f"R{r}"].number_format = DATO
         for k in "STUV":
             ws[f"{k}{r}"].number_format = KR
-        for k in "RSTUV":
-            ws[f"{k}{r}"].font = INN
+        if not google:
+            for k in "RSTUV":
+                ws[f"{k}{r}"].font = INN
 
     # Hjelpeområde X:AB – siste CHART_N rader fram til slutt dato
     rd = f"$R${RA_FRA}:$R${RA_TIL}"
     ws["AD2"] = "Siste rad (hjelp)"; ws["AD2"].font = DIM
     ws["AD3"] = f'=IF(COUNT({rd})=0,0,IF($C$4="",COUNT({rd}),IFERROR(MATCH($C$4,{rd},1),0)))'
     ws["X5"] = "Chart-data (formler)"; ws["X5"].font = DIM
-    for i, t in enumerate(("Date", "Open", "High", "Low", "Close")):
+    # Google lysestake vil ha Dato, Low, Open, Close, High – Excel vil ha O, H, L, C
+    rekkefølge = (("Low", "U"), ("Open", "S"), ("Close", "V"), ("High", "T")) if google else \
+        (("Open", "S"), ("High", "T"), ("Low", "U"), ("Close", "V"))
+    for i, t in enumerate(("Date",) + tuple(n for n, _ in rekkefølge)):
         hode(ws, 6, 24 + i, t)
     forste_h, siste_h = 7, 6 + CHART_N
     for k in range(1, CHART_N + 1):
@@ -685,12 +708,26 @@ def lag_chart(wb):
         idx = f"($AD$3-{CHART_N}+{k})"
         ws[f"X{r}"] = f'=IF({idx}<1,"",INDEX({rd},{idx}))'
         ws[f"X{r}"].number_format = "DD.MM.YY"
-        for src, dst in zip("STUV", ("Y", "Z", "AA", "AB")):
+        for (_, src), dst in zip(rekkefølge, ("Y", "Z", "AA", "AB")):
             ws[f"{dst}{r}"] = f"=IF({idx}<1,NA(),INDEX(${src}${RA_FRA}:${src}${RA_TIL},{idx}))"
             ws[f"{dst}{r}"].number_format = KR
         for dst in ("X", "Y", "Z", "AA", "AB"):
             ws[f"{dst}{r}"].fill = FORMEL_FILL
 
+    if google:
+        ws["B7"] = '=IFERROR(SPARKLINE(AA7:AA' + str(siste_h) + ',{"charttype","line";"linewidth",2;"color","#1f4fd8"}),"")'
+        ws.merge_cells("B7:L25")
+        ws["B26"] = ("(Linjen over er en rask forhåndsvisning. Sett inn Lysestake-diagram fra X6:AB"
+                     f"{siste_h} og legg det over denne.)")
+        ws["B26"].font = DIM
+    else:
+        _excel_lysestake(ws, forste_h, siste_h)
+
+    # Mine trades på valgt ticker
+    _chart_trades(ws)
+
+
+def _excel_lysestake(ws, forste_h, siste_h):
     ch = StockChart()
     ch.title = None
     ch.height, ch.width = 10, 27
@@ -713,7 +750,8 @@ def lag_chart(wb):
     ch.y_axis.delete = False
     ws.add_chart(ch, "B6")
 
-    # Mine trades på valgt ticker
+
+def _chart_trades(ws):
     t0 = 28
     ws[f"B{t0}"] = '="Mine trades på "&$C$3'; ws[f"B{t0}"].font = SEKSJON
     kol = [("TradeID", "A", None), ("Entry Date", "C", DATO), ("Exit Date", "D", DATO),
@@ -763,7 +801,7 @@ def _xlfn(wb):
                     c.value = v
 
 
-def main():
+def lag(google: bool):
     wb = Workbook()
     lag_dashboard(wb)
     lag_analyse(wb)
@@ -771,12 +809,18 @@ def main():
     lag_trades(wb)
     lag_periode(wb, maned=False)
     lag_periode(wb, maned=True)
-    lag_chart(wb)
+    lag_chart(wb, google=google)
     lag_lists(wb)
     _xlfn(wb)
-    UT.parent.mkdir(parents=True, exist_ok=True)
-    wb.save(UT)
-    print(f"Lagret: {UT}")
+    ut = UT.with_name("Tradingjournal_v3_google.xlsx") if google else UT
+    ut.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(ut)
+    print(f"Lagret: {ut}")
+
+
+def main():
+    lag(google=False)
+    lag(google=True)
 
 
 if __name__ == "__main__":
