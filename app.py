@@ -1768,15 +1768,24 @@ LAG_ID = {"vis_ma": "ma", "vis_52u": "52u", "vis_vcp": "vcp", "vis_7av7": "7av7"
 def chart_interaktiv(serie: pd.DataFrame, res: dict | None, ticker: str, *,
                      pos: dict | None = None, rs_serie: pd.Series | None = None,
                      indeks: pd.DataFrame | None = None, morkt: bool = False,
-                     valuta: str = "") -> bool:
-    """Tegner chartet med innebygde kontroller. Returnerer False hvis det feilet."""
+                     valuta: str = "", hoyde: int = 620, kontekst: str = "hoved",
+                     standard: dict | None = None, minervini_lag: bool = True) -> bool:
+    """Tegner chartet med innebygde kontroller. Returnerer False hvis det feilet.
+
+    kontekst = egen localStorage-nøkkel (så f.eks. golden cross-tabellen husker sine
+    egne valg), standard = overstyrer hvilke lag som er på første gang (lag-id → bool),
+    minervini_lag=False dropper pivot/VCP/7-7 (ferske noteringer uten analyse).
+    """
     try:
+        if not minervini_lag:
+            res = None
         felles = dict(vis_ma=True, vis_52u=True, vis_vcp=True, vis_7av7=True,
-                      vis_hist=True, vis_golden=True,
+                      vis_hist=minervini_lag, vis_golden=True,
                       vis_rs_rating=rs_serie is not None and not rs_serie.empty,
                       rs_rating=rs_serie,
                       vis_indeks=indeks is not None and not indeks.empty, indeks=indeks,
                       indeks_navn=BORS.benchmark, pos=pos, morkt=morkt, tittel=ticker,
+                      hoyde=hoyde,
                       **_trendscore_chart_kwargs(ticker, True),
                       **_eps_chart_kwargs(ticker, True))
         dag = lag_chart_lwc(serie, res, 100_000, ukentlig=False, **felles)
@@ -1787,18 +1796,40 @@ def chart_interaktiv(serie: pd.DataFrame, res: dict | None, ticker: str, *,
             leg_bg, leg_kant = "rgba(19,23,34,0.86)", "rgba(255,255,255,0.10)"
         else:
             leg_bg, leg_kant = "rgba(255,255,255,0.90)", "rgba(0,0,0,0.10)"
-        lag = [{"id": LAG_ID[_LAG_FLAGG[navn]], "label": navn, "paa": paa}
+        _std = standard or {}
+        lag = [{"id": LAG_ID[_LAG_FLAGG[navn]], "label": navn,
+                "paa": _std.get(LAG_ID[_LAG_FLAGG[navn]], paa)}
                for navn, paa in CHART_LAG.items()]
         data = {"specs": {"dag": dag, "uke": uke}, "perioder": PERIODER_VALG,
                 "standardPeriode": "2 år", "lag": lag, "legBg": leg_bg,
+                "kontekst": kontekst,
                 "legKant": leg_kant, "valuta": valuta, "morkt": morkt}
         html = _INTERAKTIV_CHART_MAL.replace("__DATA__", json.dumps(data))
         # Starthøyde = verktøylinje + hovedrute; JS justerer når delruter slås på.
-        start_h = 46 + int(dag[0]["chart"].get("height", 620)) + 12
+        start_h = 46 + int(dag[0]["chart"].get("height", hoyde)) + 12
         components.html(html, height=start_h, scrolling=False)
         return True
     except Exception:
         return False
+
+
+def tabell_chart(serie: pd.DataFrame, res: dict | None, ticker: str, *,
+                 kontekst: str, hoyde: int = 460, standard: dict | None = None,
+                 minervini_lag: bool = True) -> bool:
+    """Interaktivt chart for tabellene (Hovedliste, TrendScore, Golden cross, IPO,
+    Markedshelse). Henter RS-historikk og indeks selv (begge bufret)."""
+    try:
+        _rs_mat = rs_rating_historikk(bors_navn, versjon)
+        _rs = _rs_mat[ticker].dropna() if ticker in _rs_mat.columns else None
+    except Exception:
+        _rs = None
+    try:
+        _idx = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark)
+    except Exception:
+        _idx = None
+    return chart_interaktiv(serie, res, ticker, rs_serie=_rs, indeks=_idx, morkt=MORKT,
+                            valuta=VALUTA, hoyde=hoyde, kontekst=kontekst,
+                            standard=standard, minervini_lag=minervini_lag)
 
 
 _INTERAKTIV_CHART_MAL = """
@@ -1840,7 +1871,7 @@ _INTERAKTIV_CHART_MAL = """
   ['per','tf'].forEach(function(id){ document.getElementById(id).style.background = C.grp; });
 
   // ---------- Tilstand (huskes i nettleseren) ----------
-  var NOKKEL = 'minervini_chart_v1';
+  var NOKKEL = 'minervini_chart_v1_' + (D.kontekst || 'hoved');
   var state = null;
   try { state = JSON.parse(localStorage.getItem(NOKKEL) || 'null'); } catch(e) {}
   if(!state || typeof state !== 'object') state = {};
@@ -2950,6 +2981,17 @@ def vis_golden_cross(gc_resultat):
         _gc_valgte = _gc_valgte[:_maks]
     st.subheader(f"📊 Chart for {len(_gc_valgte)} valgte")
     _gc_priser = last_priser(bors_navn, versjon)
+    _gc_klassisk = st.toggle("Klassisk chart", value=False, key="gc_klassisk",
+                             help="Gamle kontroller over chartene i stedet for inne i chartet.")
+    if not _gc_klassisk:
+        for _tk in _gc_valgte:
+            _s = datamod.serie_for(_gc_priser, _tk)
+            _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[aktiv_preset_navn])
+            st.markdown(f"**{_tk}**")
+            if not tabell_chart(_s, _r, _tk, kontekst="gc",
+                                standard={"golden": True, "vcp": False, "7av7": False}):
+                st.caption("Klarte ikke tegne chart for denne aksjen.")
+        return
     _gcc1, _gcc2 = st.columns([3, 1])
     with _gcc1:
         _gc_periode = st.radio("Periode (chart)", list(PERIODER_VALG.keys()), index=3,
@@ -3100,6 +3142,16 @@ def vis_trendscore(ts_resultat):
         _ts_valgte = _ts_valgte[:_maks]
     st.subheader(f"📊 Chart for {len(_ts_valgte)} valgte")
     _ts_priser = last_priser(bors_navn, versjon)
+    _ts_klassisk = st.toggle("Klassisk chart", value=False, key="ts_klassisk",
+                             help="Gamle kontroller over chartene i stedet for inne i chartet.")
+    if not _ts_klassisk:
+        for _tk in _ts_valgte:
+            _s = datamod.serie_for(_ts_priser, _tk)
+            _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[aktiv_preset_navn])
+            st.markdown(f"**{_tk}**")
+            if not tabell_chart(_s, _r, _tk, kontekst="ts", standard={"ts": True}):
+                st.caption("Klarte ikke tegne chart for denne aksjen.")
+        return
     _tsc1, _tsc2 = st.columns([3, 1])
     with _tsc1:
         _ts_periode = st.radio("Periode (chart)", list(PERIODER_VALG.keys()), index=3,
@@ -3180,7 +3232,16 @@ def vis_nye_ipoer(ipo_resultat):
         _s = datamod.serie_for(_ipo_priser, _tk)
         st.markdown(f"**{_tk}**")
         if HAR_LWC:
-            # Fersk notering: ingen pivot/VCP/7-7 (krever lang historikk). Vis bare
+            # Fersk notering: ingen pivot/VCP/7-7 (krever lang historikk).
+            _r_ipo = None
+            try:
+                _r_ipo = screener.analyser_ticker(_s, _tk, konfig.PRESETS[aktiv_preset_navn])
+            except Exception:
+                pass
+            if tabell_chart(_s, _r_ipo, _tk, kontekst="ipo", hoyde=420, minervini_lag=False,
+                            standard={"52u": False}):
+                continue
+            # Fallback: vis bare
             # candles + volum + MA så langt det rekker, med hele historikken.
             _dager = len(_s.dropna(subset=["Close"])) if _s is not None else 0
             _spec = lag_chart_lwc(_s, None, max(_dager, 30),
@@ -3251,16 +3312,25 @@ with fane1:
         # Lastes én gang her, så hver tabell-gruppe kan tegne chart uten å laste på nytt.
         _priser_alle_hl = last_priser(bors_navn, versjon)
 
-        # Felles chart-innstillinger for alle tabell-chartene (samme som Chart-fanen).
-        _ch1, _ch2 = st.columns([3, 1])
-        with _ch1:
-            _hl_periode = st.radio("Periode (chart)", list(PERIODER_VALG.keys()), index=3,
-                                   horizontal=True, key="hl_periode")
-        with _ch2:
-            _hl_tidsramme = st.radio("Tidsramme", ["Dag", "Uke"], horizontal=True, key="hl_tf",
-                                     help="Uke = ukentlige barer (SMA50 = 50 uker, volum SMA10).")
+        # Felles chart-innstillinger for alle tabell-chartene. Standard: kontrollene
+        # ligger INNE i hvert chart (tabell_chart). «Klassisk chart» gir de gamle.
+        _hl_klassisk = st.toggle("Klassisk chart", value=False, key="hl_klassisk",
+                                 help="Gamle kontroller over chartene i stedet for inne i chartet.")
+        _hl_periode, _hl_tidsramme, _hl_ukentlig = "2 år", "Dag", False
+        _hl_ma = _hl_52u = _hl_vcp = _hl_7av7 = True
+        _hl_hist = _hl_golden = _hl_indeks = _hl_rs_rating = _hl_eps = _hl_trendscore = False
+        _ch1, _ch2 = (st.columns([3, 1]) if _hl_klassisk else (None, None))
+        with (_ch1 or st.empty()):
+            if _hl_klassisk:
+                _hl_periode = st.radio("Periode (chart)", list(PERIODER_VALG.keys()), index=3,
+                                       horizontal=True, key="hl_periode")
+        with (_ch2 or st.empty()):
+            if _hl_klassisk:
+                _hl_tidsramme = st.radio("Tidsramme", ["Dag", "Uke"], horizontal=True, key="hl_tf",
+                                         help="Uke = ukentlige barer (SMA50 = 50 uker, volum SMA10).")
         _hl_ukentlig = _hl_tidsramme == "Uke"
-        with st.popover("⚙️ Tilpass tabell-chartene"):
+        with (st.popover("⚙️ Tilpass tabell-chartene") if _hl_klassisk else st.empty()):
+          if _hl_klassisk:
             st.caption("Gjelder alle chartene som tegnes når du huker av rader. Færre lag = renere bilde.")
             _hl_ma = st.checkbox("Glidende snitt (MA50/150/200)", value=True, key="hl_ma")
             _hl_52u = st.checkbox("52-ukers høy/lav (grå stiplet)", value=True, key="hl_52u")
@@ -3326,6 +3396,10 @@ with fane1:
                     st.caption("For lite historikk til å tegne chart.")
                     continue
                 st.markdown(f"**{_tk}** — {_r['status']} {_r['statustekst']}{_live_txt}")
+                if HAR_LWC and not _hl_klassisk:
+                    if not tabell_chart(_s, _r, _tk, kontekst="hl"):
+                        st.caption("Klarte ikke tegne chart for denne aksjen.")
+                    continue
                 if HAR_LWC:
                     _rs_serie_hl = None
                     if _hl_rs_mat is not None and _tk in _hl_rs_mat.columns:
@@ -3749,6 +3823,8 @@ with fane4:
                                     _r = screener.analyser_ticker(
                                         _s, _tk, konfig.PRESETS[aktiv_preset_navn])
                                     st.markdown(f"**{_tk}**")
+                                    if tabell_chart(_s, _r, _tk, kontekst="mh", hoyde=420):
+                                        continue
                                     _spec = lag_chart_lwc(_s, _r, PERIODER_VALG["2 år"],
                                                           hoyde=420, morkt=MORKT, tittel=_tk)
                                     if _spec:
