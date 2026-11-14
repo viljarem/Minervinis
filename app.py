@@ -18,6 +18,7 @@ import streamlit.components.v1 as components
 import json
 
 from motor import konfig, data as datamod, fundamenta, indikatorer, minervini, posisjon, screener, sektor, univers, vcp, aksjeinfo, trendscore
+import journal_ui
 
 # TradingViews lightweight-charts (testfane). Pakket i try/except så appen aldri
 # krasjer om komponenten ikke er installert i miljøet (f.eks. rett etter utrulling).
@@ -3015,6 +3016,9 @@ with st.sidebar:
     if _sh is not None:
         st.caption(f"🕔 Sist hentet: {_sh:%d.%m.%Y kl. %H:%M} (norsk tid)")
 
+    # Journalens passordlås (påvirker ikke screeneren).
+    journal_ui.sidebar_las()
+
 # Hva skal skanningen lete etter? Styres av «Oppsett»-dropdownen.
 if er_golden:
     gc_resultat = kjor_golden_cross(bors_navn, versjon) if skannet_na else None
@@ -3040,7 +3044,10 @@ else:
     else:
         resultat = kjor_screening(bors_navn, preset_navn, versjon) if skannet_na else None
 
-fane1, fane2, fane3, fane4 = st.tabs(["📋 Hovedliste", "📊 Chart", "🔎 Søk", "🌡️ Markedshelse"])
+fane1, fane2, fane3, fane4, fane5 = st.tabs(["📋 Hovedliste", "📊 Chart", "🔎 Søk", "🌡️ Markedshelse", "⭐ Mine lister"])
+
+# Gjør valgt børs tilgjengelig for journal-dagboka.
+st.session_state["bors_navn"] = bors_navn
 
 # Følg app-temaet i chartet (mørk bakgrunn i dark mode). Legges i chart-nøklene
 # lenger nede så bildet tegnes på nytt når du bytter tema.
@@ -3542,6 +3549,8 @@ with fane1:
             if not _valgte:
                 st.caption("Ingen rader valgt ennå – huk av i tabellen over for å tegne chart her.")
                 return
+            # Følg valgte aksjer (legger dem på en av dine lister i journalen).
+            journal_ui.folg_knapp(_valgte, bors_navn, key=f"hl_{nokkel}")
             st.divider()
             _maks = 15
             if len(_valgte) > _maks:
@@ -3992,3 +4001,12 @@ with fane4:
                                     if _spec:
                                         render_chart_spec(_spec, key=f"mh_{_tk}_{TEMA}",
                                                           morkt=MORKT, valuta=VALUTA)
+
+
+# ---------------------------------------------------------------------------
+# Fane 5: Mine lister (journal). Egen datalagring i Supabase – rører ALDRI
+# screeneren. «resultat» er siste Minervini-skanning og brukes til live-kolonner.
+# ---------------------------------------------------------------------------
+with fane5:
+    journal_ui.vis_mine_lister(bors_navn, resultat)
+
