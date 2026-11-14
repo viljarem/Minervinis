@@ -1184,7 +1184,8 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                   oms_bars: list | None = None, graf_basis: str = "kvartal",
                   graf_valuta: str = "",
                   vis_trendscore: bool = False,
-                  trendscore_df: pd.DataFrame | None = None) -> list | None:
+                  trendscore_df: pd.DataFrame | None = None,
+                  handel_markorer: list | None = None) -> list | None:
     """Bygger data-spesifikasjonen for lightweight-charts.
 
     Tar med alt det gamle Plotly-chartet hadde: candles, MA50/150/200, 52-ukers
@@ -1307,6 +1308,23 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
             if nk not in sett:
                 sett.add(nk)
                 rene.append(m)
+
+        # Dine egne kjøp/salg fra journalen – snappes til nærmeste synlige dato.
+        if handel_markorer:
+            ekstra = []
+            for hm in handel_markorer:
+                try:
+                    dato = str(hm.get("time"))[:10]
+                    if dato not in t_sett:
+                        passe = [ti for ti in t if ti >= dato]
+                        if not passe:
+                            continue
+                        dato = passe[0]
+                    ekstra.append({**hm, "time": dato})
+                except Exception:
+                    pass
+            if ekstra:
+                rene = sorted(rene + ekstra, key=lambda x: x["time"])
 
         hoved = {"type": "Candlestick", "data": candles,
                  "options": {"upColor": "#26a69a", "downColor": "#ef5350",
@@ -1932,7 +1950,8 @@ def chart_interaktiv(serie: pd.DataFrame, res: dict | None, ticker: str, *,
                      pos: dict | None = None, rs_serie: pd.Series | None = None,
                      indeks: pd.DataFrame | None = None, morkt: bool = False,
                      valuta: str = "", hoyde: int = 620, kontekst: str = "hoved",
-                     standard: dict | None = None, minervini_lag: bool = True) -> bool:
+                     standard: dict | None = None, minervini_lag: bool = True,
+                     handel_markorer: list | None = None) -> bool:
     """Tegner chartet med innebygde kontroller. Returnerer False hvis det feilet.
 
     kontekst = egen localStorage-nøkkel (så f.eks. golden cross-tabellen husker sine
@@ -1949,6 +1968,7 @@ def chart_interaktiv(serie: pd.DataFrame, res: dict | None, ticker: str, *,
                       vis_indeks=indeks is not None and not indeks.empty, indeks=indeks,
                       indeks_navn=BORS.benchmark, pos=pos, morkt=morkt, tittel=ticker,
                       hoyde=hoyde,
+                      handel_markorer=handel_markorer,
                       **_trendscore_chart_kwargs(ticker, True),
                       **_eps_chart_kwargs(ticker, True))
         dag = lag_chart_lwc(serie, res, 100_000, ukentlig=False, **felles)
@@ -3055,12 +3075,14 @@ MORKT = _er_morkt()
 TEMA = "d" if MORKT else "l"
 
 
-def vis_ticker_detalj(sok: str, *, kontekst: str = "sok") -> dict | None:
+def vis_ticker_detalj(sok: str, *, kontekst: str = "sok", handel_data: dict | None = None) -> dict | None:
     """Felles aksjevisning: chart + all Minervini-info + fundamenta + posisjonsverktøy.
 
     Brukes både i Søk-fanen og i journalens ticker-side, så du får samme bilde
     uansett hvor du kommer fra. `kontekst` gjør Streamlit-nøklene unike (så søk
-    og journal ikke kolliderer). Returnerer analyse-dicten (res) eller None.
+    og journal ikke kolliderer). `handel_data` (valgfritt) = {'pos': {entry,stop,mal},
+    'markorer': [...]} fra dine egne trades, så chartet viser kjøp/salg-piler og
+    dine faktiske inngang/stop/mål-linjer. Returnerer analyse-dicten (res) eller None.
     """
     sok = (sok or "").strip().upper()
     if not sok:
@@ -3112,6 +3134,13 @@ def vis_ticker_detalj(sok: str, *, kontekst: str = "sok") -> dict | None:
         vis_chart_legend(serie, res, rs=_rsv3, trendscore=_tsv3, valuta=VALUTA)
         _init_posisjon_state(res, f"{kontekst}_{sok}")
         pos3, pos_suffix3 = _posisjon_fra_state(f"{kontekst}_{sok}")
+        # Dine egne trades overstyrer: faktisk inngang/stop/mål + kjøp/salg-piler.
+        _handel_mark = None
+        if handel_data:
+            if handel_data.get("pos"):
+                pos3 = handel_data["pos"]
+                pos_suffix3 = "_handel"
+            _handel_mark = handel_data.get("markorer")
         _rs_serie3 = None
         if vis_rs_rating3:
             _rs_mat3 = rs_rating_historikk(bors_navn, versjon)
@@ -3125,13 +3154,14 @@ def vis_ticker_detalj(sok: str, *, kontekst: str = "sok") -> dict | None:
                 serie, res, sok, pos=pos3,
                 rs_serie=_rs_mat_s[sok].dropna() if sok in _rs_mat_s.columns else None,
                 indeks=datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark),
-                morkt=MORKT, valuta=VALUTA)
+                morkt=MORKT, valuta=VALUTA, handel_markorer=_handel_mark)
         spec3 = None if _ok3 else lag_chart_lwc(serie, res, PERIODER_VALG[periode3],
                               vis_ma=vis_ma3, vis_52u=vis_52u3, vis_vcp=vis_vcp3,
                               vis_7av7=vis_7av7_3, vis_hist=vis_hist3, vis_golden=vis_golden3,
                               vis_rs_rating=vis_rs_rating3, rs_rating=_rs_serie3,
                               vis_indeks=vis_indeks3, indeks=_indeks3, indeks_navn=BORS.benchmark,
                               ukentlig=ukentlig3, pos=pos3, morkt=MORKT, tittel=sok,
+                              handel_markorer=_handel_mark,
                               **_trendscore_chart_kwargs(sok, vis_trendscore3),
                               **_eps_chart_kwargs(sok, vis_eps3))
         if _ok3:

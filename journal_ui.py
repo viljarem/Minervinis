@@ -872,6 +872,62 @@ def _kjop_skjema(lager, bors_navn, forhandsvalgt: str | None, key: str) -> None:
 # ---------------------------------------------------------------------------
 # TICKER-SIDE (drill-down)
 # ---------------------------------------------------------------------------
+def _bygg_handel_data(lager, ticker, bors_navn) -> dict | None:
+    """Henter dine kjøp/salg for aksjen og bygger chart-markører + pos (inngang/stop/mål).
+
+    Markørene får bevisst INGEN layer – da vises de alltid i chartet (ikke skjult
+    bak en lag-knapp). Grønn pil opp = kjøp, rød pil ned = salg.
+    """
+    norm = db.normaliser_ticker(ticker, bors_navn)
+    try:
+        handler = [h for h in lager.hent_handler() if h.get("ticker") == norm]
+        delsalg = lager.hent_delsalg()
+    except db.JournalFeil:
+        return None
+    if not handler:
+        return None
+
+    per_handel: dict[str, list] = {}
+    for d in delsalg:
+        per_handel.setdefault(d["handel_id"], []).append(d)
+
+    markorer = []
+    for h in handler:
+        if h.get("kjop_dato"):
+            kurs = h.get("kjop_kurs")
+            markorer.append({
+                "time": str(h["kjop_dato"])[:10], "position": "belowBar",
+                "color": "#16a34a", "shape": "arrowUp",
+                "text": f"Kjøp{(' ' + format(kurs, '.2f')) if kurs else ''}",
+            })
+        for d in per_handel.get(h["id"], []):
+            if d.get("salg_dato"):
+                sk = d.get("salg_kurs")
+                markorer.append({
+                    "time": str(d["salg_dato"])[:10], "position": "aboveBar",
+                    "color": "#dc2626", "shape": "arrowDown",
+                    "text": f"Salg{(' ' + format(sk, '.2f')) if sk else ''}",
+                })
+
+    # pos = siste åpne handel (eller nyeste) med gyldig stop < inngang < mål.
+    pos = None
+    apne = [h for h in handler if h.get("status") == "OPEN"] or handler
+    for h in sorted(apne, key=lambda x: str(x.get("kjop_dato") or ""), reverse=True):
+        try:
+            e = float(h.get("kjop_kurs"))
+            s = float(h.get("stop")) if h.get("stop") else None
+            m = float(h.get("mal")) if h.get("mal") else None
+            if s and m and s < e < m:
+                pos = {"entry": e, "stop": s, "mal": m}
+                break
+        except (TypeError, ValueError):
+            continue
+
+    if not markorer and not pos:
+        return None
+    return {"markorer": markorer, "pos": pos}
+
+
 def _vis_ticker_side(lager, ticker, bors_navn, screening, vis_ticker_fn) -> None:
     c1, c2 = st.columns([1, 5])
     if c1.button("← Tilbake", width="stretch"):
@@ -879,9 +935,20 @@ def _vis_ticker_side(lager, ticker, bors_navn, screening, vis_ticker_fn) -> None
         st.rerun()
     c2.subheader(f"📈 {ticker}")
 
+    handel_data = _bygg_handel_data(lager, ticker, bors_navn)
+    if handel_data:
+        st.caption("📍 Chartet viser dine kjøp/salg (piler) og inngang/stop/mål "
+                   "fra handelen din.")
+
     if vis_ticker_fn is not None:
         try:
-            vis_ticker_fn(ticker, kontekst="journal")
+            vis_ticker_fn(ticker, kontekst="journal", handel_data=handel_data)
+        except TypeError:
+            # Eldre signatur uten handel_data – fall tilbake.
+            try:
+                vis_ticker_fn(ticker, kontekst="journal")
+            except Exception as e:
+                st.warning(f"Klarte ikke tegne aksjevisningen: {e}")
         except Exception as e:
             st.warning(f"Klarte ikke tegne aksjevisningen: {e}")
     else:
