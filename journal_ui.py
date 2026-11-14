@@ -626,8 +626,11 @@ def _farg_tall(df: pd.DataFrame, kolonner: list[str]):
 def _vis_trades(lager, beregnet, bors_navn, skop) -> None:
     st.subheader("💼 Trades")
 
-    with st.popover("＋ Loggfør kjøp", width="stretch"):
+    v1, v2 = st.columns(2)
+    with v1.popover("＋ Loggfør kjøp", width="stretch"):
         _kjop_skjema(lager, bors_navn, forhandsvalgt=None, key="trades")
+    with v2.popover("🧮 R/R-kalkulator", width="stretch"):
+        _rr_kalkulator(key="trades")
 
     apne = [h for h in beregnet if h["status"] == "OPEN"]
     lukket = [h for h in beregnet if h["status"] == "CLOSED"]
@@ -643,6 +646,48 @@ def _vis_trades(lager, beregnet, bors_navn, skop) -> None:
         st.caption("Ingen lukkede handler ennå.")
     else:
         _tabell_lukket(lukket)
+        _vis_periode_statistikk(lukket)
+
+
+# --- R/R-kalkulator ---------------------------------------------------------
+def _rr_kalkulator(key: str) -> None:
+    """Live risk/reward- og posisjonskalkulator. Oppdaterer seg mens du skriver
+    (ligger bevisst UTENFOR et skjema)."""
+    st.caption("Regn ut R/R og antall aksjer før du kjøper. Ingenting lagres.")
+    c1, c2, c3 = st.columns(3)
+    entry = c1.number_input("Inngang", min_value=0.0, step=0.1, format="%.2f", key=f"rr_e_{key}")
+    stop = c2.number_input("Stop", min_value=0.0, step=0.1, format="%.2f", key=f"rr_s_{key}")
+    mal = c3.number_input("Mål", min_value=0.0, step=0.1, format="%.2f", key=f"rr_m_{key}")
+    k1, k2 = st.columns(2)
+    kapital = k1.number_input("Kapital", min_value=0.0, step=1000.0, value=100000.0,
+                              format="%.0f", key=f"rr_k_{key}")
+    risiko_pct = k2.number_input("Risiko %", min_value=0.0, max_value=100.0, step=0.25,
+                                 value=1.0, format="%.2f", key=f"rr_r_{key}")
+
+    if entry <= 0 or stop <= 0 or stop >= entry:
+        st.info("Fyll inn inngang og en stop som er lavere enn inngangen.")
+        return
+
+    risiko_pr_aksje = entry - stop
+    rr = (mal - entry) / risiko_pr_aksje if mal > entry else None
+    pos = tall.posisjonsstorrelse(entry, stop, kapital, risiko_pct)
+
+    m = st.columns(3)
+    m[0].metric("R/R", f"{rr:.2f}" if rr else "—", border=True,
+                help="Gevinst mot risiko. 3.0 = tjener 3× det du risikerer.")
+    m[1].metric("Antall", f"{pos['antall']:g}" if pos["antall"] else "—", border=True)
+    m[2].metric("Risiko", _penger(-pos["risiko_belop"]) if pos["risiko_belop"] else "—",
+                border=True)
+    m2 = st.columns(3)
+    m2[0].metric("Kostnad", f"{pos['kostnad']:,.0f}".replace(",", " ")
+                 if pos["kostnad"] else "—", border=True)
+    m2[1].metric("Andel av konto", f"{pos['andel_pct']:.1f} %"
+                 if pos["andel_pct"] is not None else "—", border=True)
+    if mal > entry:
+        gevinst = (mal - entry) * pos["antall"]
+        m2[2].metric("Gevinst v/mål", _penger(gevinst), border=True)
+    if rr is not None and rr < 2:
+        st.warning("R/R under 2 – vurder høyere mål eller strammere stop.")
 
 
 # --- moderne kort for åpne posisjoner ---------------------------------------
@@ -828,6 +873,61 @@ def _tabell_lukket(lukket) -> None:
         "P&L": st.column_config.NumberColumn(format="%.0f"),
         "%": st.column_config.NumberColumn(format="%.1f %%"),
     })
+
+
+# --- uke/måned-statistikk ---------------------------------------------------
+def _periode_nokkel(iso, oppl: str) -> str | None:
+    """Gjør en sluttdato om til en periode-etikett (uke eller måned)."""
+    if not iso:
+        return None
+    try:
+        d = datetime.fromisoformat(str(iso).replace("Z", "+00:00")).date()
+    except (ValueError, TypeError):
+        return None
+    if oppl == "Måned":
+        return d.strftime("%Y-%m")
+    iso_aar, iso_uke, _ = d.isocalendar()
+    return f"{iso_aar}-U{iso_uke:02d}"
+
+
+def _vis_periode_statistikk(lukket: list[dict]) -> None:
+    """Winrate, R og P&L gruppert per uke eller måned (lukkede handler)."""
+    with st.expander("📅 Statistikk per periode"):
+        oppl = st.radio("Oppløsning", ["Uke", "Måned"], horizontal=True,
+                        key="periode_oppl", label_visibility="collapsed")
+        grupper: dict[str, list] = {}
+        for h in lukket:
+            nk = _periode_nokkel(h.get("slutt_dato"), oppl)
+            if nk:
+                grupper.setdefault(nk, []).append(h)
+        if not grupper:
+            st.caption("Ingen lukkede handler med dato ennå.")
+            return
+
+        rader = []
+        for navn in sorted(grupper, reverse=True):
+            st_ = tall.statistikk(grupper[navn])
+            wr = st_["winrate"]
+            rader.append({
+                "Periode": navn,
+                "Handler": st_["lukket"],
+                "Winrate": f"{wr*100:.0f} %" if wr is not None else "—",
+                "Snitt-R": st_["snitt_r"],
+                "Sum R": round(sum(h["r"] for h in grupper[navn] if h.get("r") is not None), 2),
+                "P&L": st_["sum_realisert"],
+            })
+        df = pd.DataFrame(rader)
+        st.dataframe(_farg_tall(df, ["Snitt-R", "Sum R", "P&L"]),
+                     width="stretch", hide_index=True, column_config={
+            "Snitt-R": st.column_config.NumberColumn(format="%.2f"),
+            "Sum R": st.column_config.NumberColumn(format="%.2f"),
+            "P&L": st.column_config.NumberColumn(format="%.0f"),
+        })
+
+        # Søyler: sum R per periode (stigende tid for lesbarhet).
+        kurve = df[["Periode", "Sum R"]].set_index("Periode").sort_index()
+        st.caption("Sum R per periode:")
+        st.bar_chart(kurve, height=200, color="#3b82f6")
 
 
 def _kjop_skjema(lager, bors_navn, forhandsvalgt: str | None, key: str) -> None:
