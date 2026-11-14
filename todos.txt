@@ -3,3 +3,106 @@ Markedshelse
 trendscore, kan man få ett system på å oppdage de som stiger, viser mest styrke??
 
 se over fundamentale data
+
+https://qullamaggie.com/my-3-timeless-setups-that-have-made-me-tens-of-millions/ Qaullimagie
+
+
+=======================================================================
+TRADING JOURNAL – PLAN (bygges ved siden av screeneren, rører den ikke)
+=======================================================================
+
+Lagres i Supabase (gratis). Felles passord i Streamlit Secrets nå.
+Hver tabell har et 'eier'-felt, så ekte flerbruker kan legges til senere
+uten ombygging. Statistikk bygd på R (risiko-multipler) så kr og $ ikke
+blandes; kroner/dollar vises i tillegg. Fri 'kilde'/'setup' + frie tagger
+gjør nye screenere (f.eks. Qullamaggie) plug-and-play.
+
+DATAMODELL (opprettes samlet fra start):
+  konto          – kapital + risiko-% per børs (sizing og heat)
+  lister         – egne lister (navn, farge, rekkefølge)
+  liste_aksjer   – aksjer på lister (ticker, børs, pivot/stop/mål)
+  notater        – dagbok, mange daterte rader per aksje
+  handler        – én rad per handel (kjøp, antall, stop, mål, pivot,
+                   setup, kilde, status, evaluering)
+  delsalg        – ett/flere salg per handel (delsalg + trailing)
+  tagger + handel_tagger – frie, filtrerbare tagger
+  analyser       – tese (tittel, R/R-plan, snapshot, kobling til handel)
+  tegninger      – JSONB {id,type,role,points,style,label};
+                   analyse-snapshot ELLER aktivt arbeidslag
+
+MATEMATIKK (egen testbar modul, ingen nett):
+  R, P&L, P&L %, holdetid, R per handelsdag (Time Value),
+  winrate, expectancy, profit factor, kumulativ R-kurve,
+  posisjonsstørrelse fra konto-%, samlet åpen risiko (heat),
+  ATR-basert stop-forslag.
+
+-----------------------------------------------------------------------
+FASE 1 – FUNDAMENTET (bygges nå)
+-----------------------------------------------------------------------
+[ ] Steg 1: Supabase-SQL + Streamlit Secrets (guidet klikk for klikk)
+[ ] Steg 2: matematikk-modul med tester, ingen UI
+[ ] Steg 3: Mine lister (opprett/omdoep/slett lister, foelg-knapp fra
+            screener, live-kolonner) + dagbok per aksje
+[ ] Steg 4: Handler (kjoep, delsalg, lukking, evaluering, tagger,
+            filtrering, R per handelsdag)
+[ ] Steg 5: Dashboard (KPI: winrate, snitt-R, expectancy, profit
+            factor, aapen risiko/heat; aapne posisjoner med live P&L/R;
+            kumulativ R-kurve; R/R + posisjonskalkulator i dialog)
+[ ] Steg 6: Chart – kjoep/salg-piler + pivot/stop/maal-linjer paa ALLE
+            eksisterende chart (gjenbruk markoer/prislinje i lag_chart_lwc)
+[ ] Steg 7: Uke/maaned-statistikk (winrate, beste/verste, snittvinn/
+            tap, snitt-R, snitt holdetid, expectancy; per tag/setup/kilde)
+[ ] Steg 8: CSV-eksport av lister og handler (backup)
+
+UX-krav gjennom hele fase 1:
+  - Samme stil som appen i dag (faner, tabeller, LWC-chart).
+  - Progressiv visning: viktigst oeverst, resten i expanders.
+  - Kalkulator i popover/dialog, ikke fast paa forsiden.
+  - Tagger/triggere som klikkbare pills, ikke tunge nedtrekk.
+  - Tomme tilstander forklarer seg selv ("slik kommer du i gang").
+  - Mobilvennlig dashboard (du bruker telefon).
+  - Full CRUD med bekreftelse ved sletting.
+  - setup/trigger-lister er REDIGERBARE, ikke hardkodet til Minervini.
+
+-----------------------------------------------------------------------
+FASE 2 – ANALYSE SOM EGET OBJEKT (bygges naa, etter fase 1)
+-----------------------------------------------------------------------
+[ ] Egen 'analyser'-tabell: tittel, dato, oppsett/strategi, fritekst,
+    planlagt Entry/SL/Target, auto R/R, posisjonskalkulator.
+[ ] Analyse valgfritt foer en trade; kan kobles til handel.
+[ ] Laast snapshot: se oppsettet slik det var da tesen ble laget.
+[ ] Full CRUD paa analyser.
+
+=======================================================================
+SENERE (fase 3 og 4 – IKKE naa, avventes)
+=======================================================================
+
+FASE 3 – CHART-TEGNING
+  - Kompakt verktoeylinje i LWC: Markoer, 3-klikks Entry->SL->Target,
+    horisontal linje, trendlinje, sone/rektangel, slett valgt.
+  - subscribeClick() + subscribeCrosshairMove(); coordinateToTime/
+    coordinateToPrice for aa gaa fra piksler til data.
+  - Horisontale nivaaer via series.createPriceLine() (Entry/SL/Target).
+  - Trendlinjer og soner via custom plugin (ISeriesPrimitive,
+    series.attachPrimitive) saa de foelger zoom/scroll.
+  - TOVEIS synk: 3 klikk i chart fyller skjemaet (R/R + sizing);
+    endrer du tall i skjemaet, flyttes linjene.
+  - Lagres som JSONB i 'tegninger' (snapshot + aktivt arbeidslag).
+  - Trade-markoerer med tooltip; chart.takeScreenshot().
+
+FASE 4 – BILDER OG CSV-IMPORT
+  - Bildevedlegg: filopplasting, dra-og-slipp, lim inn (Ctrl+V),
+    1-klikks snapshot fra chart.
+  - Komprimer i nettleser (WebP/JPEG) foer lagring (Supabase Storage).
+  - Galleri/lightbox, slett enkeltbilder.
+  - CSV-import / lim inn fra megler: masseimport av trades, deretter
+    bare klikke trigger-/disiplin-tags.
+
+=======================================================================
+FRAMTID
+=======================================================================
+  - Qullamaggie-screener (episodic pivots, breakouts, parabolske
+    utbrudd, MA10/20-trailing) som ny 'kilde' – journalen er allerede
+    klar via fri kilde/setup + tagger.
+  - Ekte flerbruker: Supabase Auth + Row Level Security, bytt fra
+    service_role til anon-noekkel. 'eier'-feltet ligger klart.

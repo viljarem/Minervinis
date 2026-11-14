@@ -18,3 +18,7 @@ env/
 
 # Personlig tradingjournal (genereres med verktoy/lag_journal.py)
 journal/
+
+# Hemmeligheter til tradingjournalen – databasenøkkel og passord.
+# ALDRI til GitHub. Malen (.example) er trygg og blir liggende.
+.streamlit/secrets.toml
