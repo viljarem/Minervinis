@@ -1,25 +1,25 @@
 """
-journal_ui.py – Streamlit-UI for tradingjournalen.
+journal_ui.py – Streamlit-UI for tradingjournalen (ett sammenhengende dashboard).
 
-Denne fila tegner skjema og tabeller. All lagring ligger i motor/journal_db.py
-og all matematikk i motor/journal_tall.py. Feiler databasen, viser vi en vennlig
-melding – screeneren påvirkes aldri.
+Lagring ligger i motor/journal_db.py og matematikk i motor/journal_tall.py.
+Denne fila tegner bare. Feiler databasen, viser vi en vennlig melding –
+screeneren påvirkes aldri.
 
-Nå inneholder den (steg 3b):
-  * passordlås i sidebaren
-  * fanen «Mine lister» (opprett/omdøp/slett lister, flytt/fjern aksjer,
-    live-kolonner fra screeningen, dagbok per aksje)
-  * følg-knapp som hovedlista kan kalle for å legge valgte aksjer på en liste
-Handler, dashboard og chart-piler kommer i senere steg.
+Oppbygging etter innlogging (vis_dashboard):
+  1. 📊 Oversikt – hvordan går tradingen? (KPI-er, åpne posisjoner, R-kurve)
+  2. ⭐ Mine lister  |  📓 Dagbok   (side ved side)
+  3. 💼 Trades – loggfør kjøp/salg, se åpne og lukkede handler
+Klikker du en ticker hvor som helst → ticker-side med chart, all info og notater.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 import pandas as pd
 import streamlit as st
 
 from motor import journal_db as db
+from motor import journal_tall as tall
 
 # Tre forslag som opprettes FØRSTE gang (du kan omdøpe/slette fritt).
 START_LISTER = [
@@ -27,6 +27,10 @@ START_LISTER = [
     ("High alert", "#f59e0b", 1),
     ("Parkert", "#6b7280", 2),
 ]
+
+# Standard setup-/trigger-valg (fritt i tillegg, så du er ikke låst til disse).
+SETUP_VALG = ["VCP", "Breakout", "Flat base", "Cup & handle", "Pullback", "Momentum", "Annet"]
+TRIGGER_VALG = ["Volumbrudd", "Pivot", "MA-støtte", "Nyhet", "Annet"]
 
 
 # ---------------------------------------------------------------------------
@@ -37,7 +41,6 @@ def _konf():
 
 
 def tilgjengelig() -> bool:
-    """True hvis secrets finnes (databasen er satt opp)."""
     return _konf() is not None
 
 
@@ -51,7 +54,7 @@ def sidebar_las() -> None:
     st.header("📒 Journal")
     konf = _konf()
     if konf is None:
-        st.caption("Databasen er ikke koblet til ennå. Se fanen «Mine lister».")
+        st.caption("Databasen er ikke koblet til ennå. Se fanen «Journal».")
         return
     if innlogget():
         st.success("Låst opp.")
@@ -75,40 +78,15 @@ def _lager() -> db.Lager | None:
     return db.Lager.fra_secrets()
 
 
-def _krev_tilgang() -> db.Lager | None:
-    """Viser forklaring og returnerer lageret, eller None hvis vi skal stoppe."""
-    if not tilgjengelig():
-        st.info(
-            "Journalen er ikke koblet til databasen ennå. Når det er gjort, kan du "
-            "følge aksjer, skrive dagbok og loggføre handler – og se det samme på "
-            "telefon, Mac og PC. Screeneren virker som før uten dette."
-        )
-        with st.expander("Slik kobler du til (engangsjobb)"):
-            st.markdown(
-                "1. Kjør SQL-en i `verktoy/journal_supabase.sql` i Supabase.\n"
-                "2. Legg inn `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` og "
-                "`JOURNAL_PASSORD` i Streamlit Secrets (se `.streamlit/"
-                "secrets.toml.example`)."
-            )
-        return None
-    if not innlogget():
-        st.info("🔒 Lås opp journalen med passordet i menyen til venstre. "
-                "Samme passord på alle enheter.")
-        return None
-    return _lager()
+# ---------------------------------------------------------------------------
+# Navigasjon: velg en ticker (drill-down)
+# ---------------------------------------------------------------------------
+def velg_ticker(ticker: str) -> None:
+    st.session_state["journal_ticker"] = (ticker or "").strip().upper()
 
 
-def _sorg_for_startlister(lager: db.Lager) -> list[dict]:
-    """Henter lister; oppretter tre forslag hvis brukeren ikke har noen ennå."""
-    lister = lager.hent_lister()
-    if lister:
-        return lister
-    for navn, farge, rekkefolge in START_LISTER:
-        try:
-            lager.lag_liste(navn, farge, rekkefolge)
-        except db.JournalFeil:
-            pass
-    return lager.hent_lister()
+def _lukk_ticker() -> None:
+    st.session_state.pop("journal_ticker", None)
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +97,7 @@ def folg_knapp(tickere: list[str], bors: str, *, key: str) -> None:
     if not tickere:
         return
     if not tilgjengelig():
-        st.caption("💡 Koble til journalen for å kunne følge aksjer (se fanen «Mine lister»).")
+        st.caption("💡 Koble til journalen for å kunne følge aksjer (se fanen «Journal»).")
         return
     if not innlogget():
         st.caption("🔒 Lås opp journalen i menyen til venstre for å følge valgte aksjer.")
@@ -182,11 +160,168 @@ def _til_pivot(avstand) -> str:
         return "—"
 
 
-def _berik_aksjer(aksjer: list[dict], screening) -> pd.DataFrame:
-    treff = _screening_oppslag(screening)
+def _naa_kurs(ticker: str, skop: dict) -> float | None:
+    return _verdi(skop.get(ticker, {}), "pris")
+
+
+# ---------------------------------------------------------------------------
+# Hjelpere for data
+# ---------------------------------------------------------------------------
+def _sorg_for_startlister(lager: db.Lager) -> list[dict]:
+    lister = lager.hent_lister()
+    if lister:
+        return lister
+    for navn, farge, rekkefolge in START_LISTER:
+        try:
+            lager.lag_liste(navn, farge, rekkefolge)
+        except db.JournalFeil:
+            pass
+    return lager.hent_lister()
+
+
+def _beregn_handler(handler: list[dict], delsalg_alle: list[dict], skop: dict) -> list[dict]:
+    """Beriker hver handel med utregnede tall (R, P&L, status osv.)."""
+    per_handel: dict[str, list] = {}
+    for d in delsalg_alle:
+        per_handel.setdefault(d["handel_id"], []).append(d)
+    ut = []
+    for h in handler:
+        ds = per_handel.get(h["id"], [])
+        naa = _naa_kurs(h["ticker"], skop)
+        t = tall.handelstall(
+            h.get("kjop_kurs"), h.get("antall"), h.get("stop"),
+            delsalg=ds, kjop_dato=h.get("kjop_dato"), kurs_naa=naa)
+        rad = dict(h)
+        rad.update(t)
+        rad["delsalg"] = ds
+        rad["kurs_naa"] = naa
+        if ds:
+            datoer = [d.get("salg_dato") for d in ds if d.get("salg_dato")]
+            rad["slutt_dato"] = max(datoer) if datoer else None
+        ut.append(rad)
+    return ut
+
+
+# ---------------------------------------------------------------------------
+# HOVEDINNGANG
+# ---------------------------------------------------------------------------
+def vis_dashboard(bors_navn: str, screening, vis_ticker_fn=None) -> None:
+    if not tilgjengelig():
+        st.subheader("📒 Journal")
+        st.info(
+            "Journalen er ikke koblet til databasen ennå. Når det er gjort, får du "
+            "ett samlet dashboard med oversikt, lister, dagbok og trades – synlig på "
+            "telefon, Mac og PC. Screeneren virker som før uten dette."
+        )
+        with st.expander("Slik kobler du til (engangsjobb)"):
+            st.markdown(
+                "1. Kjør SQL-en i `verktoy/journal_supabase.sql` i Supabase.\n"
+                "2. Legg inn `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` og "
+                "`JOURNAL_PASSORD` i Streamlit Secrets."
+            )
+        return
+
+    if not innlogget():
+        st.subheader("📒 Journal")
+        st.info("🔒 Lås opp journalen med passordet i menyen til venstre. "
+                "Samme passord på alle enheter.")
+        return
+
+    lager = _lager()
+
+    # Er en ticker valgt? Vis ticker-siden i stedet for dashboardet.
+    valgt_ticker = st.session_state.get("journal_ticker")
+    if valgt_ticker:
+        _vis_ticker_side(lager, valgt_ticker, bors_navn, screening, vis_ticker_fn)
+        return
+
+    try:
+        lister = _sorg_for_startlister(lager)
+        alle_aksjer = lager.hent_liste_aksjer()
+        notater = lager.hent_notater()
+        handler = lager.hent_handler()
+        delsalg = lager.hent_delsalg()
+    except db.JournalFeil as e:
+        st.error(str(e))
+        return
+
+    skop = _screening_oppslag(screening)
+    beregnet = _beregn_handler(handler, delsalg, skop)
+
+    _vis_oversikt(beregnet)
+    st.divider()
+
+    kol_lister, kol_dagbok = st.columns([3, 2], gap="large")
+    with kol_lister:
+        _vis_lister(lager, lister, alle_aksjer, bors_navn, skop)
+    with kol_dagbok:
+        _vis_dagbok(lager, notater)
+    st.divider()
+
+    _vis_trades(lager, beregnet, bors_navn, skop)
+
+
+# ---------------------------------------------------------------------------
+# 1) OVERSIKT
+# ---------------------------------------------------------------------------
+def _vis_oversikt(beregnet: list[dict]) -> None:
+    st.subheader("📊 Oversikt")
+    stat = tall.statistikk(beregnet)
+
+    if stat["antall"] == 0:
+        st.caption("Ingen handler loggført ennå. Loggfør din første under «💼 Trades» "
+                   "så fylles nøkkeltallene inn her automatisk.")
+        return
+
+    c = st.columns(4)
+    wr = stat["winrate"]
+    c[0].metric("Winrate", f"{wr*100:.0f} %" if wr is not None else "—",
+                help="Andel lukkede handler med gevinst.")
+    exp = stat["expectancy_r"]
+    c[1].metric("Forventning", f"{exp:+.2f} R" if exp is not None else "—",
+                help="Snitt R per lukket handel. Over 0 = systemet tjener penger.")
+    pf = stat["profit_factor"]
+    pf_tekst = "∞" if pf == float("inf") else (f"{pf:.2f}" if pf is not None else "—")
+    c[2].metric("Profit factor", pf_tekst,
+                help="Brutto gevinst delt på brutto tap. Over 1 = lønnsomt.")
+    c[3].metric("Lukket / åpne", f"{stat['lukket']} / {stat['apne']}")
+
+    c2 = st.columns(4)
+    sr = stat["snitt_r"]
+    c2[0].metric("Snitt-R", f"{sr:+.2f}" if sr is not None else "—")
+    c2[1].metric("Snitt holdedager", f"{stat['snitt_holdedager']:.0f}"
+                 if stat["snitt_holdedager"] is not None else "—")
+    c2[2].metric("Realisert P&L", _penger(stat["sum_realisert"]))
+    c2[3].metric("Urealisert", _penger(stat["urealisert"]))
+
+    kurve = tall.kumulativ_r(beregnet)
+    if kurve:
+        df = pd.DataFrame(kurve)
+        df["dato"] = pd.to_datetime(df["dato"])
+        df = df.set_index("dato")[["kum_r"]].rename(columns={"kum_r": "Kumulativ R"})
+        st.caption("Porteføljekurve – kumulativ R fra lukkede handler:")
+        st.line_chart(df, height=200)
+    else:
+        st.caption("📈 Porteføljekurven tegnes når du har lukket din første handel.")
+
+
+# ---------------------------------------------------------------------------
+# 2a) MINE LISTER
+# ---------------------------------------------------------------------------
+_AKSJE_KOLONNER = {
+    "Pris": st.column_config.NumberColumn("Pris", format="%.2f"),
+    "RS": st.column_config.NumberColumn("RS", help="Relativ styrke 1–99 (fra siste skanning)."),
+    "TS": st.column_config.NumberColumn("TS", format="%.0f", help="TrendScore 0–100."),
+    "Min pivot": st.column_config.NumberColumn("Min pivot", format="%.2f"),
+    "Min stop": st.column_config.NumberColumn("Min stop", format="%.2f"),
+    "Mål": st.column_config.NumberColumn("Mål", format="%.2f"),
+}
+
+
+def _berik_aksjer(aksjer: list[dict], skop: dict) -> pd.DataFrame:
     rader = []
     for a in aksjer:
-        s = treff.get(a["ticker"], {})
+        s = skop.get(a["ticker"], {})
         status = _verdi(s, "status") or ""
         tekst = _verdi(s, "statustekst") or ""
         setup = f"{status} {tekst}".strip() or "—"
@@ -207,61 +342,27 @@ def _berik_aksjer(aksjer: list[dict], screening) -> pd.DataFrame:
     return pd.DataFrame(rader)
 
 
-_AKSJE_KOLONNER = {
-    "Pris": st.column_config.NumberColumn("Pris", format="%.2f"),
-    "RS": st.column_config.NumberColumn("RS", help="Relativ styrke 1–99 (fra siste skanning)."),
-    "TS": st.column_config.NumberColumn("TS", format="%.0f", help="TrendScore 0–100."),
-    "Min pivot": st.column_config.NumberColumn("Min pivot", format="%.2f"),
-    "Min stop": st.column_config.NumberColumn("Min stop", format="%.2f"),
-    "Mål": st.column_config.NumberColumn("Mål", format="%.2f"),
-}
-
-
-# ---------------------------------------------------------------------------
-# Fanen «Mine lister»
-# ---------------------------------------------------------------------------
-def vis_mine_lister(bors_navn: str, screening) -> None:
+def _vis_lister(lager, lister, alle_aksjer, bors_navn, skop) -> None:
     st.subheader("⭐ Mine lister")
-    st.caption(
-        "Du lagrer tickeren og hvilken liste den ligger på. Pris, setup, RS og "
-        "TrendScore hentes på nytt fra siste skanning – de fryser ikke fast."
-    )
-    lager = _krev_tilgang()
-    if lager is None:
-        return
 
-    try:
-        lister = _sorg_for_startlister(lager)
-        alle_aksjer = lager.hent_liste_aksjer()
-    except db.JournalFeil as e:
-        st.error(str(e))
-        return
-
-    # Aksjer gruppert per liste-id.
     per_liste: dict[str, list] = {}
     for a in alle_aksjer:
         per_liste.setdefault(a["liste_id"], []).append(a)
 
     _administrer_lister(lager, lister)
-    st.divider()
 
     if not lister:
         st.info("Du har ingen lister ennå. Lag én over for å komme i gang.")
         return
 
-    # Én fane per liste, så det blir oversiktlig på mobil.
     faner = st.tabs([f"{l['navn']} ({len(per_liste.get(l['id'], []))})" for l in lister])
     for fane, liste in zip(faner, lister):
         with fane:
             _vis_en_liste(lager, liste, lister, per_liste.get(liste["id"], []),
-                          bors_navn, screening)
-
-    st.divider()
-    _vis_dagbok(lager)
+                          bors_navn, skop)
 
 
-def _administrer_lister(lager: db.Lager, lister: list[dict]) -> None:
-    """Opprett ny liste + omdøp/slett eksisterende, pakket i hver sin popover."""
+def _administrer_lister(lager, lister) -> None:
     c1, c2 = st.columns(2)
     with c1.popover("＋ Ny liste", width="stretch"):
         with st.form("ny_liste", clear_on_submit=True):
@@ -293,7 +394,6 @@ def _administrer_lister(lager: db.Lager, lister: list[dict]) -> None:
                     st.error(str(e))
                 else:
                     st.rerun()
-            # Slett med bekreftelse.
             if r3.button("🗑", key=f"slett_{liste['id']}", help="Slett listen"):
                 st.session_state[f"bekreft_slett_{liste['id']}"] = True
             if st.session_state.get(f"bekreft_slett_{liste['id']}"):
@@ -313,56 +413,58 @@ def _administrer_lister(lager: db.Lager, lister: list[dict]) -> None:
             st.divider()
 
 
-def _vis_en_liste(lager, liste, alle_lister, aksjer, bors_navn, screening) -> None:
-    # Legg til aksje manuelt.
-    with st.form(f"legg_til_{liste['id']}", clear_on_submit=True):
-        c1, c2, c3, c4, c5 = st.columns([2, 1, 1, 1, 1])
-        ticker = c1.text_input("Ticker", placeholder="EQNR eller AAPL",
-                               key=f"nyt_{liste['id']}")
-        pivot = c2.number_input("Pivot", min_value=0.0, step=0.1, format="%.2f",
-                                key=f"nyp_{liste['id']}")
-        stop = c3.number_input("Stop", min_value=0.0, step=0.1, format="%.2f",
-                               key=f"nys_{liste['id']}")
-        mal = c4.number_input("Mål", min_value=0.0, step=0.1, format="%.2f",
-                              key=f"nym_{liste['id']}")
-        if c5.form_submit_button("＋ Legg til", type="primary"):
-            if not ticker.strip():
-                st.warning("Skriv inn en ticker.")
-            else:
-                try:
-                    status = lager.legg_til_aksje(
-                        liste["id"], ticker, bors_navn,
-                        pivot=pivot or None, stop=stop or None, mal=mal or None)
-                except db.JournalFeil as e:
-                    st.error(str(e))
+def _vis_en_liste(lager, liste, alle_lister, aksjer, bors_navn, skop) -> None:
+    with st.popover("＋ Legg til aksje", width="stretch"):
+        with st.form(f"legg_til_{liste['id']}", clear_on_submit=True):
+            ticker = st.text_input("Ticker", placeholder="EQNR eller AAPL",
+                                   key=f"nyt_{liste['id']}")
+            c2, c3, c4 = st.columns(3)
+            pivot = c2.number_input("Pivot", min_value=0.0, step=0.1, format="%.2f",
+                                    key=f"nyp_{liste['id']}")
+            stop = c3.number_input("Stop", min_value=0.0, step=0.1, format="%.2f",
+                                   key=f"nys_{liste['id']}")
+            mal = c4.number_input("Mål", min_value=0.0, step=0.1, format="%.2f",
+                                  key=f"nym_{liste['id']}")
+            if st.form_submit_button("Legg til", type="primary"):
+                if not ticker.strip():
+                    st.warning("Skriv inn en ticker.")
                 else:
-                    if status == "finnes":
-                        st.info("Aksjen ligger allerede på denne listen.")
+                    try:
+                        status = lager.legg_til_aksje(
+                            liste["id"], ticker, bors_navn,
+                            pivot=pivot or None, stop=stop or None, mal=mal or None)
+                    except db.JournalFeil as e:
+                        st.error(str(e))
                     else:
-                        st.rerun()
+                        if status == "finnes":
+                            st.info("Aksjen ligger allerede på denne listen.")
+                        else:
+                            st.rerun()
 
     if not aksjer:
         st.caption("Ingen aksjer her ennå. Legg til en over, eller bruk «Følg valgte» "
                    "i hovedlista etter en skanning.")
         return
 
-    df = _berik_aksjer(aksjer, screening)
+    df = _berik_aksjer(aksjer, skop)
     st.dataframe(df.drop(columns=["id"]), width="stretch", hide_index=True,
                  column_config=_AKSJE_KOLONNER)
-    if screening is None:
+    if not skop:
         st.caption("💡 Skann børsen for å fylle inn Pris, Setup, RS og TrendScore.")
 
-    # Flytt eller fjern en aksje.
-    with st.expander("Flytt eller fjern en aksje"):
-        etikett = {a["ticker"]: a for a in aksjer}
-        valgt = st.selectbox("Aksje", list(etikett), key=f"endre_valg_{liste['id']}")
-        rad = etikett[valgt]
-        andre = [l for l in alle_lister if l["id"] != liste["id"]]
-        c1, c2 = st.columns(2)
-        if andre:
-            mal_liste = c1.selectbox("Flytt til", [l["navn"] for l in andre],
+    etikett = {a["ticker"]: a for a in aksjer}
+    valgt = st.selectbox("Velg aksje", list(etikett), key=f"velg_{liste['id']}")
+    rad = etikett[valgt]
+    c1, c2, c3 = st.columns(3)
+    if c1.button("🔍 Åpne", key=f"apne_{liste['id']}", width="stretch"):
+        velg_ticker(rad["ticker"])
+        st.rerun()
+    andre = [l for l in alle_lister if l["id"] != liste["id"]]
+    if andre:
+        with c2.popover("↦ Flytt", width="stretch"):
+            mal_liste = st.selectbox("Flytt til", [l["navn"] for l in andre],
                                      key=f"flytt_valg_{liste['id']}")
-            if c1.button("Flytt", key=f"flytt_{liste['id']}"):
+            if st.button("Flytt", key=f"flytt_{liste['id']}", type="primary"):
                 mid = next(l["id"] for l in andre if l["navn"] == mal_liste)
                 try:
                     lager.flytt_aksje(rad["id"], mid)
@@ -370,36 +472,63 @@ def _vis_en_liste(lager, liste, alle_lister, aksjer, bors_navn, screening) -> No
                     st.error(str(e))
                 else:
                     st.rerun()
-        if c2.button("🗑 Fjern fra listen", key=f"fjern_{liste['id']}"):
-            try:
-                lager.fjern_aksje(rad["id"])
-            except db.JournalFeil as e:
-                st.error(str(e))
-            else:
-                st.rerun()
+    if c3.button("🗑 Fjern", key=f"fjern_{liste['id']}", width="stretch"):
+        try:
+            lager.fjern_aksje(rad["id"])
+        except db.JournalFeil as e:
+            st.error(str(e))
+        else:
+            st.rerun()
 
 
 # ---------------------------------------------------------------------------
-# Dagbok
+# 2b) DAGBOK
 # ---------------------------------------------------------------------------
-def _vis_dagbok(lager: db.Lager) -> None:
+def _vis_dagbok(lager, notater) -> None:
     st.subheader("📓 Dagbok")
-    st.caption("Skriv daterte notater om en aksje. Gamle notater består, så du "
-               "kan følge tankerekken din over tid.")
 
-    try:
-        notater = lager.hent_notater()
-    except db.JournalFeil as e:
-        st.error(str(e))
+    with st.popover("✍️ Nytt notat", width="stretch"):
+        _notat_skjema(lager, forhandsvalgt=None, key="dagbok")
+
+    if not notater:
+        st.caption("Ingen notater ennå. Skriv ditt første over.")
         return
 
-    with st.form("nytt_notat", clear_on_submit=True):
-        c1, c2 = st.columns([1, 3])
-        ticker = c1.text_input("Ticker", placeholder="EQNR")
-        tekst = c2.text_area("Notat", placeholder="Hva ser du? Hva er planen?", height=80)
+    tickere = sorted({n["ticker"] for n in notater})
+    valgt = st.selectbox("Vis", ["Alle"] + tickere, key="dagbok_filter",
+                         label_visibility="collapsed")
+    vist = notater if valgt == "Alle" else [n for n in notater if n["ticker"] == valgt]
+
+    with st.container(height=420):
+        for n in vist:
+            dato = _formater_dato(n.get("opprettet"))
+            with st.container(border=True):
+                top = st.columns([3, 1, 1])
+                top[0].markdown(f"**{n['ticker']}** · {dato}")
+                if top[1].button("🔍", key=f"dnd_{n['id']}", help="Åpne aksjen"):
+                    velg_ticker(n["ticker"])
+                    st.rerun()
+                if top[2].button("🗑", key=f"slett_notat_{n['id']}", help="Slett notatet"):
+                    try:
+                        lager.slett_notat(n["id"])
+                    except db.JournalFeil as e:
+                        st.error(str(e))
+                    else:
+                        st.rerun()
+                st.write(n.get("tekst") or "")
+
+
+def _notat_skjema(lager, forhandsvalgt: str | None, key: str) -> None:
+    with st.form(f"nytt_notat_{key}", clear_on_submit=True):
+        if forhandsvalgt:
+            ticker = forhandsvalgt
+            st.caption(f"Notat for **{forhandsvalgt}**")
+        else:
+            ticker = st.text_input("Ticker", placeholder="EQNR")
+        tekst = st.text_area("Notat", placeholder="Hva ser du? Hva er planen?", height=100)
         bors = st.session_state.get("bors_navn", "Oslo Børs")
         if st.form_submit_button("Lagre notat", type="primary"):
-            if not ticker.strip() or not tekst.strip():
+            if not (ticker or "").strip() or not tekst.strip():
                 st.warning("Både ticker og tekst må fylles inn.")
             else:
                 try:
@@ -409,30 +538,256 @@ def _vis_dagbok(lager: db.Lager) -> None:
                 else:
                     st.rerun()
 
-    if not notater:
-        st.caption("Ingen notater ennå.")
-        return
 
-    # Filtrer på ticker.
-    tickere = sorted({n["ticker"] for n in notater})
-    valgt = st.selectbox("Vis notater for", ["Alle"] + tickere, key="dagbok_filter")
-    vist = notater if valgt == "Alle" else [n for n in notater if n["ticker"] == valgt]
+# ---------------------------------------------------------------------------
+# 3) TRADES
+# ---------------------------------------------------------------------------
+def _penger(x) -> str:
+    if x is None:
+        return "—"
+    return f"{x:+,.0f}".replace(",", " ")
 
-    for n in vist:
-        dato = _formater_dato(n.get("opprettet"))
-        with st.container(border=True):
-            top = st.columns([3, 1])
-            top[0].markdown(f"**{n['ticker']}** · {dato}")
-            if top[1].button("🗑", key=f"slett_notat_{n['id']}", help="Slett notatet"):
+
+def _vis_trades(lager, beregnet, bors_navn, skop) -> None:
+    st.subheader("💼 Trades")
+
+    with st.popover("＋ Loggfør kjøp", width="stretch"):
+        _kjop_skjema(lager, bors_navn, forhandsvalgt=None, key="trades")
+
+    apne = [h for h in beregnet if h["status"] == "OPEN"]
+    lukket = [h for h in beregnet if h["status"] == "CLOSED"]
+
+    st.markdown(f"**Åpne posisjoner ({len(apne)})**")
+    if not apne:
+        st.caption("Ingen åpne posisjoner. Loggfør et kjøp over.")
+    else:
+        _tabell_apne(apne)
+        _handtering_apne(lager, apne, skop)
+
+    st.markdown(f"**Lukkede handler ({len(lukket)})**")
+    if not lukket:
+        st.caption("Ingen lukkede handler ennå.")
+    else:
+        _tabell_lukket(lukket)
+
+
+def _tabell_apne(apne) -> None:
+    rader = []
+    for h in apne:
+        rader.append({
+            "Ticker": h["ticker"],
+            "Kjøpt": _dato_kort(h.get("kjop_dato")),
+            "Kurs": h.get("kjop_kurs"),
+            "Nå": h.get("kurs_naa"),
+            "Antall": h.get("antall_igjen"),
+            "Stop": h.get("stop"),
+            "Mål": h.get("mal"),
+            "R nå": h.get("r"),
+            "P&L": h.get("total_pnl"),
+            "Dager": h.get("holdedager"),
+            "Setup": h.get("setup") or "—",
+        })
+    df = pd.DataFrame(rader)
+    st.dataframe(df, width="stretch", hide_index=True, column_config={
+        "Kurs": st.column_config.NumberColumn(format="%.2f"),
+        "Nå": st.column_config.NumberColumn(format="%.2f"),
+        "Stop": st.column_config.NumberColumn(format="%.2f"),
+        "Mål": st.column_config.NumberColumn(format="%.2f"),
+        "R nå": st.column_config.NumberColumn(format="%.2f"),
+        "P&L": st.column_config.NumberColumn(format="%.0f"),
+    })
+
+
+def _tabell_lukket(lukket) -> None:
+    rader = []
+    for h in lukket:
+        plan = h.get("fulgte_plan")
+        rader.append({
+            "Ticker": h["ticker"],
+            "Kjøpt": _dato_kort(h.get("kjop_dato")),
+            "Lukket": _dato_kort(h.get("slutt_dato")),
+            "Resultat": "✅" if h.get("vinn") else "❌",
+            "R": h.get("r"),
+            "P&L": h.get("total_pnl"),
+            "%": h.get("pnl_pct"),
+            "Dager": h.get("holdedager"),
+            "Setup": h.get("setup") or "—",
+            "Plan": "✓" if plan else ("✗" if plan is False else "—"),
+        })
+    df = pd.DataFrame(rader)
+    st.dataframe(df, width="stretch", hide_index=True, column_config={
+        "R": st.column_config.NumberColumn(format="%.2f"),
+        "P&L": st.column_config.NumberColumn(format="%.0f"),
+        "%": st.column_config.NumberColumn(format="%.1f %%"),
+    })
+
+
+def _handtering_apne(lager, apne, skop) -> None:
+    """Velg en åpen handel for å selge (helt/delvis), justere stop eller lukke."""
+    etikett = {f"{h['ticker']} · {_dato_kort(h.get('kjop_dato'))}": h for h in apne}
+    with st.expander("Selg, juster eller lukk en posisjon"):
+        valgt = st.selectbox("Posisjon", list(etikett), key="handter_valg")
+        h = etikett[valgt]
+        igjen = h.get("antall_igjen") or 0
+
+        if st.button("🔍 Åpne aksjen", key=f"handter_apne_{h['id']}"):
+            velg_ticker(h["ticker"])
+            st.rerun()
+
+        with st.form(f"selg_{h['id']}", clear_on_submit=True):
+            st.caption(f"Du har {igjen:g} igjen av {h['ticker']}.")
+            s1, s2, s3 = st.columns(3)
+            naa = _naa_kurs(h["ticker"], skop)
+            salg_kurs = s1.number_input("Salgskurs", min_value=0.0, step=0.1,
+                                        value=float(naa) if naa else 0.0, format="%.2f")
+            antall = s2.number_input("Antall", min_value=0.0, max_value=float(igjen),
+                                     value=float(igjen), step=1.0)
+            dato = s3.date_input("Dato", value=date.today())
+            arsak = st.text_input("Årsak (valgfritt)", placeholder="Mål nådd, stop, delsalg …")
+            if st.form_submit_button("Registrer salg", type="primary"):
+                if salg_kurs <= 0 or antall <= 0:
+                    st.warning("Fyll inn gyldig kurs og antall.")
+                else:
+                    try:
+                        lager.lag_delsalg(h["id"], str(dato), salg_kurs, antall, arsak)
+                        if antall >= igjen - 1e-9:
+                            lager.sett_status(h["id"], "CLOSED")
+                    except db.JournalFeil as e:
+                        st.error(str(e))
+                    else:
+                        st.rerun()
+
+        with st.form(f"juster_{h['id']}", clear_on_submit=False):
+            j1, j2 = st.columns(2)
+            ny_stop = j1.number_input("Ny stop", min_value=0.0, step=0.1,
+                                      value=float(h.get("stop") or 0), format="%.2f")
+            ny_mal = j2.number_input("Nytt mål", min_value=0.0, step=0.1,
+                                     value=float(h.get("mal") or 0), format="%.2f")
+            if st.form_submit_button("Lagre stop/mål"):
                 try:
-                    lager.slett_notat(n["id"])
+                    lager.oppdater_handel(h["id"], stop=ny_stop or None, mal=ny_mal or None)
                 except db.JournalFeil as e:
                     st.error(str(e))
                 else:
                     st.rerun()
-            st.write(n.get("tekst") or "")
+
+        with st.form(f"lukk_{h['id']}", clear_on_submit=True):
+            st.caption("Lukk hele posisjonen og evaluér.")
+            fulgte = st.checkbox("Jeg fulgte planen", value=True)
+            evaluering = st.text_area("Evaluering", placeholder="Hva gikk bra/dårlig?", height=80)
+            if st.form_submit_button("Lukk posisjon"):
+                try:
+                    naa = _naa_kurs(h["ticker"], skop)
+                    if igjen > 0 and naa:
+                        lager.lag_delsalg(h["id"], str(date.today()), naa, igjen, "Lukket")
+                    lager.oppdater_handel(h["id"], status="CLOSED",
+                                          fulgte_plan=fulgte, evaluering=evaluering)
+                except db.JournalFeil as e:
+                    st.error(str(e))
+                else:
+                    st.rerun()
+
+        if st.button("🗑 Slett handel helt", key=f"slett_handel_{h['id']}"):
+            try:
+                lager.slett_handel(h["id"])
+            except db.JournalFeil as e:
+                st.error(str(e))
+            else:
+                st.rerun()
 
 
+def _kjop_skjema(lager, bors_navn, forhandsvalgt: str | None, key: str) -> None:
+    with st.form(f"kjop_{key}", clear_on_submit=True):
+        if forhandsvalgt:
+            ticker = forhandsvalgt
+            st.caption(f"Loggfør kjøp av **{forhandsvalgt}**")
+        else:
+            ticker = st.text_input("Ticker", placeholder="EQNR")
+        c1, c2, c3 = st.columns(3)
+        kjop_dato = c1.date_input("Kjøpsdato", value=date.today())
+        kjop_kurs = c2.number_input("Kjøpskurs", min_value=0.0, step=0.1, format="%.2f")
+        antall = c3.number_input("Antall", min_value=0.0, step=1.0)
+        p1, p2, p3 = st.columns(3)
+        pivot = p1.number_input("Pivot", min_value=0.0, step=0.1, format="%.2f")
+        stop = p2.number_input("Stop", min_value=0.0, step=0.1, format="%.2f")
+        mal = p3.number_input("Mål", min_value=0.0, step=0.1, format="%.2f")
+        s1, s2 = st.columns(2)
+        setup = s1.selectbox("Setup", SETUP_VALG)
+        trigger = s2.selectbox("Trigger", TRIGGER_VALG)
+        notat = st.text_area("Notat (valgfritt)", height=70)
+        if st.form_submit_button("Loggfør kjøp", type="primary"):
+            if not (ticker or "").strip() or kjop_kurs <= 0 or antall <= 0:
+                st.warning("Ticker, kjøpskurs og antall må fylles inn.")
+            elif stop and stop >= kjop_kurs:
+                st.warning("Stop må være lavere enn kjøpskursen.")
+            else:
+                try:
+                    lager.lag_handel({
+                        "ticker": ticker, "bors": bors_navn,
+                        "kjop_dato": str(kjop_dato), "kjop_kurs": kjop_kurs,
+                        "antall": antall, "pivot": pivot or None, "stop": stop or None,
+                        "mal": mal or None, "setup": setup, "trigger": trigger,
+                        "notat": notat,
+                    })
+                except db.JournalFeil as e:
+                    st.error(str(e))
+                else:
+                    st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# TICKER-SIDE (drill-down)
+# ---------------------------------------------------------------------------
+def _vis_ticker_side(lager, ticker, bors_navn, screening, vis_ticker_fn) -> None:
+    c1, c2 = st.columns([1, 5])
+    if c1.button("← Tilbake", width="stretch"):
+        _lukk_ticker()
+        st.rerun()
+    c2.subheader(f"📈 {ticker}")
+
+    if vis_ticker_fn is not None:
+        try:
+            vis_ticker_fn(ticker, kontekst="journal")
+        except Exception as e:
+            st.warning(f"Klarte ikke tegne aksjevisningen: {e}")
+    else:
+        st.info("Aksjevisningen er ikke tilgjengelig i denne konteksten.")
+
+    st.divider()
+    kol1, kol2 = st.columns(2, gap="large")
+    with kol1:
+        st.markdown("### ✍️ Nytt notat")
+        _notat_skjema(lager, forhandsvalgt=ticker, key=f"ts_{ticker}")
+    with kol2:
+        st.markdown("### 💼 Loggfør kjøp")
+        _kjop_skjema(lager, bors_navn, forhandsvalgt=ticker, key=f"ts_{ticker}")
+
+    st.markdown(f"### 📓 Notater for {ticker}")
+    try:
+        notater = lager.hent_notater(db.normaliser_ticker(ticker, bors_navn))
+    except db.JournalFeil as e:
+        st.error(str(e))
+        notater = []
+    if not notater:
+        st.caption("Ingen notater for denne aksjen ennå.")
+    else:
+        for n in notater:
+            with st.container(border=True):
+                top = st.columns([4, 1])
+                top[0].markdown(f"**{_formater_dato(n.get('opprettet'))}**")
+                if top[1].button("🗑", key=f"tsnd_{n['id']}", help="Slett"):
+                    try:
+                        lager.slett_notat(n["id"])
+                    except db.JournalFeil as e:
+                        st.error(str(e))
+                    else:
+                        st.rerun()
+                st.write(n.get("tekst") or "")
+
+
+# ---------------------------------------------------------------------------
+# Små hjelpere
+# ---------------------------------------------------------------------------
 def _formater_dato(iso: str | None) -> str:
     if not iso:
         return ""
@@ -440,3 +795,12 @@ def _formater_dato(iso: str | None) -> str:
         return datetime.fromisoformat(str(iso).replace("Z", "+00:00")).strftime("%d.%m.%Y %H:%M")
     except (ValueError, TypeError):
         return str(iso)[:16]
+
+
+def _dato_kort(iso) -> str:
+    if not iso:
+        return "—"
+    try:
+        return datetime.fromisoformat(str(iso).replace("Z", "+00:00")).strftime("%d.%m.%y")
+    except (ValueError, TypeError):
+        return str(iso)[:10]

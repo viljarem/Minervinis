@@ -3044,7 +3044,7 @@ else:
     else:
         resultat = kjor_screening(bors_navn, preset_navn, versjon) if skannet_na else None
 
-fane1, fane2, fane3, fane4, fane5 = st.tabs(["📋 Hovedliste", "📊 Chart", "🔎 Søk", "🌡️ Markedshelse", "⭐ Mine lister"])
+fane1, fane2, fane3, fane4, fane5 = st.tabs(["📋 Hovedliste", "📊 Chart", "🔎 Søk", "🌡️ Markedshelse", "📒 Journal"])
 
 # Gjør valgt børs tilgjengelig for journal-dagboka.
 st.session_state["bors_navn"] = bors_navn
@@ -3053,6 +3053,107 @@ st.session_state["bors_navn"] = bors_navn
 # lenger nede så bildet tegnes på nytt når du bytter tema.
 MORKT = _er_morkt()
 TEMA = "d" if MORKT else "l"
+
+
+def vis_ticker_detalj(sok: str, *, kontekst: str = "sok") -> dict | None:
+    """Felles aksjevisning: chart + all Minervini-info + fundamenta + posisjonsverktøy.
+
+    Brukes både i Søk-fanen og i journalens ticker-side, så du får samme bilde
+    uansett hvor du kommer fra. `kontekst` gjør Streamlit-nøklene unike (så søk
+    og journal ikke kolliderer). Returnerer analyse-dicten (res) eller None.
+    """
+    sok = (sok or "").strip().upper()
+    if not sok:
+        return None
+    priser = last_priser(bors_navn, versjon)
+    if sok in priser["Ticker"].values:
+        serie = datamod.serie_for(priser, sok)
+    else:
+        with st.spinner(f"Henter {sok} live ..."):
+            serie = datamod.hent_live(sok)
+    if serie is None or serie.empty:
+        st.error(f"Fant ingen data for «{sok}». Sjekk at tickeren er riktig skrevet.")
+        return None
+    res = screener.analyser_ticker(serie, sok, konfig.PRESETS[aktiv_preset_navn])
+    if res is None:
+        st.info("For lite historikk (trenger ~200 handelsdager) til full analyse.")
+        return None
+    st.subheader(f"{sok} · {res['score']}/7 · {res['status']} {res['statustekst']}")
+    vis_klassisk3 = st.toggle("Klassisk chart", value=False, key=f"{kontekst}_klassisk",
+                              help="Den innebygde chart-komponenten med kontroller over chartet.")
+    if vis_klassisk3:
+        _k3 = chart_kontroller(kontekst)
+    else:
+        _k3 = {f: False for f in LAG_ID}
+        _k3.update(periode="2 år", ukentlig=False)
+    periode3 = _k3["periode"]
+    ukentlig3 = _k3["ukentlig"]
+    tidsramme3 = "Uke" if ukentlig3 else "Dag"
+    vis_ma3 = _k3["vis_ma"]; vis_52u3 = _k3["vis_52u"]; vis_vcp3 = _k3["vis_vcp"]
+    vis_7av7_3 = _k3["vis_7av7"]; vis_hist3 = _k3["vis_hist"]
+    vis_golden3 = _k3["vis_golden"]; vis_indeks3 = _k3["vis_indeks"]
+    vis_rs_rating3 = _k3["vis_rs_rating"]; vis_eps3 = _k3["vis_eps"]
+    vis_trendscore3 = _k3["vis_trendscore"]
+    if not HAR_LWC:
+        st.warning("Chart-komponenten er ikke lastet i dette miljøet ennå.")
+    else:
+        # Info-stripe over chartet. RS/TrendScore slås opp i siste skanning.
+        _rsv3 = _tsv3 = None
+        try:
+            if resultat is not None and not resultat.empty:
+                _rad3 = resultat[resultat["ticker"] == sok]
+                if not _rad3.empty:
+                    if pd.notna(_rad3.iloc[0].get("rs")):
+                        _rsv3 = int(_rad3.iloc[0]["rs"])
+                    if "trendscore" in _rad3.columns and pd.notna(_rad3.iloc[0].get("trendscore")):
+                        _tsv3 = float(_rad3.iloc[0]["trendscore"])
+        except Exception:
+            pass
+        vis_chart_legend(serie, res, rs=_rsv3, trendscore=_tsv3, valuta=VALUTA)
+        _init_posisjon_state(res, f"{kontekst}_{sok}")
+        pos3, pos_suffix3 = _posisjon_fra_state(f"{kontekst}_{sok}")
+        _rs_serie3 = None
+        if vis_rs_rating3:
+            _rs_mat3 = rs_rating_historikk(bors_navn, versjon)
+            if sok in _rs_mat3.columns:
+                _rs_serie3 = _rs_mat3[sok].dropna()
+        _indeks3 = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark) if vis_indeks3 else None
+        _ok3 = False
+        if not vis_klassisk3:
+            _rs_mat_s = rs_rating_historikk(bors_navn, versjon)
+            _ok3 = chart_interaktiv(
+                serie, res, sok, pos=pos3,
+                rs_serie=_rs_mat_s[sok].dropna() if sok in _rs_mat_s.columns else None,
+                indeks=datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark),
+                morkt=MORKT, valuta=VALUTA)
+        spec3 = None if _ok3 else lag_chart_lwc(serie, res, PERIODER_VALG[periode3],
+                              vis_ma=vis_ma3, vis_52u=vis_52u3, vis_vcp=vis_vcp3,
+                              vis_7av7=vis_7av7_3, vis_hist=vis_hist3, vis_golden=vis_golden3,
+                              vis_rs_rating=vis_rs_rating3, rs_rating=_rs_serie3,
+                              vis_indeks=vis_indeks3, indeks=_indeks3, indeks_navn=BORS.benchmark,
+                              ukentlig=ukentlig3, pos=pos3, morkt=MORKT, tittel=sok,
+                              **_trendscore_chart_kwargs(sok, vis_trendscore3),
+                              **_eps_chart_kwargs(sok, vis_eps3))
+        if _ok3:
+            st.caption("Velg periode, tidsramme og lag rett i chartet – valgene huskes.")
+        elif spec3 is None:
+            st.info("Klarte ikke bygge chartet for denne aksjen.")
+        else:
+            _html3 = None if vis_klassisk3 else lag_chart_hover_fra_spec(spec3, morkt=MORKT, valuta=VALUTA)
+            if _html3:
+                components.html(_html3, height=_hover_total_hoyde(spec3), scrolling=False)
+                st.caption("⚡ Beveg musa over chartet for O/H/L/C, dagsendring, volum og "
+                           "MA under pekeren. Dra for å panorere, rull for å zoome.")
+            else:
+                renderLightweightCharts(
+                    spec3,
+                    key=f"{kontekst}_{sok}_{periode3}_{tidsramme3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{vis_rs_rating3}{vis_indeks3}{vis_eps3}{vis_trendscore3}{pos_suffix3}_{TEMA}")
+    vis_vcp_boks(res)
+    fundamenta_seksjon(sok, f"{kontekst}_{sok}")
+    st.divider()
+    posisjon_verktoy(res, f"{kontekst}_{sok}", VALUTA)
+    return res
+
 
 
 # ---------------------------------------------------------------------------
@@ -3726,95 +3827,7 @@ with fane3:
     st.markdown("Slå opp **hvilken som helst** ticker. Er den ikke i universet, hentes den live fra Yahoo.")
     sok = st.text_input("Ticker (f.eks. EQNR.OL, AAPL, NVDA)", value="").strip().upper()
     if sok:
-        priser = last_priser(bors_navn, versjon)
-        if sok in priser["Ticker"].values:
-            serie = datamod.serie_for(priser, sok)
-        else:
-            with st.spinner(f"Henter {sok} live ..."):
-                serie = datamod.hent_live(sok)
-        if serie is None or serie.empty:
-            st.error(f"Fant ingen data for «{sok}». Sjekk at tickeren er riktig skrevet.")
-        else:
-            res = screener.analyser_ticker(serie, sok, konfig.PRESETS[aktiv_preset_navn])
-            if res is None:
-                st.info("For lite historikk (trenger ~200 handelsdager) til full analyse.")
-            else:
-                st.subheader(f"{sok} · {res['score']}/7 · {res['status']} {res['statustekst']}")
-                vis_klassisk3 = st.toggle("Klassisk chart", value=False, key="sok_klassisk",
-                                          help="Den innebygde chart-komponenten med kontroller over chartet.")
-                if vis_klassisk3:
-                    _k3 = chart_kontroller("sok")
-                else:
-                    _k3 = {f: False for f in LAG_ID}
-                    _k3.update(periode="2 år", ukentlig=False)
-                periode3 = _k3["periode"]
-                ukentlig3 = _k3["ukentlig"]
-                tidsramme3 = "Uke" if ukentlig3 else "Dag"
-                vis_ma3 = _k3["vis_ma"]; vis_52u3 = _k3["vis_52u"]; vis_vcp3 = _k3["vis_vcp"]
-                vis_7av7_3 = _k3["vis_7av7"]; vis_hist3 = _k3["vis_hist"]
-                vis_golden3 = _k3["vis_golden"]; vis_indeks3 = _k3["vis_indeks"]
-                vis_rs_rating3 = _k3["vis_rs_rating"]; vis_eps3 = _k3["vis_eps"]
-                vis_trendscore3 = _k3["vis_trendscore"]
-                if not HAR_LWC:
-                    st.warning("Chart-komponenten er ikke lastet i dette miljøet ennå.")
-                else:
-                    # Moderne info-stripe over chartet (samme som Chart-fanen). RS/TrendScore
-                    # slås opp i siste skanning hvis aksjen er i universet. Fjern dette kallet
-                    # for å rulle tilbake.
-                    _rsv3 = _tsv3 = None
-                    try:
-                        if resultat is not None and not resultat.empty:
-                            _rad3 = resultat[resultat["ticker"] == sok]
-                            if not _rad3.empty:
-                                if pd.notna(_rad3.iloc[0].get("rs")):
-                                    _rsv3 = int(_rad3.iloc[0]["rs"])
-                                if "trendscore" in _rad3.columns and pd.notna(_rad3.iloc[0].get("trendscore")):
-                                    _tsv3 = float(_rad3.iloc[0]["trendscore"])
-                    except Exception:
-                        pass
-                    vis_chart_legend(serie, res, rs=_rsv3, trendscore=_tsv3, valuta=VALUTA)
-                    _init_posisjon_state(res, f"sok_{sok}")
-                    pos3, pos_suffix3 = _posisjon_fra_state(f"sok_{sok}")
-                    _rs_serie3 = None
-                    if vis_rs_rating3:
-                        _rs_mat3 = rs_rating_historikk(bors_navn, versjon)
-                        if sok in _rs_mat3.columns:
-                            _rs_serie3 = _rs_mat3[sok].dropna()
-                    _indeks3 = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark) if vis_indeks3 else None
-                    _ok3 = False
-                    if not vis_klassisk3:
-                        _rs_mat_s = rs_rating_historikk(bors_navn, versjon)
-                        _ok3 = chart_interaktiv(
-                            serie, res, sok, pos=pos3,
-                            rs_serie=_rs_mat_s[sok].dropna() if sok in _rs_mat_s.columns else None,
-                            indeks=datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark),
-                            morkt=MORKT, valuta=VALUTA)
-                    spec3 = None if _ok3 else lag_chart_lwc(serie, res, PERIODER_VALG[periode3],
-                                          vis_ma=vis_ma3, vis_52u=vis_52u3, vis_vcp=vis_vcp3,
-                                          vis_7av7=vis_7av7_3, vis_hist=vis_hist3, vis_golden=vis_golden3,
-                                          vis_rs_rating=vis_rs_rating3, rs_rating=_rs_serie3,
-                                          vis_indeks=vis_indeks3, indeks=_indeks3, indeks_navn=BORS.benchmark,
-                                          ukentlig=ukentlig3, pos=pos3, morkt=MORKT, tittel=sok,
-                                          **_trendscore_chart_kwargs(sok, vis_trendscore3),
-                                          **_eps_chart_kwargs(sok, vis_eps3))
-                    if _ok3:
-                        st.caption("Velg periode, tidsramme og lag rett i chartet – valgene huskes.")
-                    elif spec3 is None:
-                        st.info("Klarte ikke bygge chartet for denne aksjen.")
-                    else:
-                        _html3 = None if vis_klassisk3 else lag_chart_hover_fra_spec(spec3, morkt=MORKT, valuta=VALUTA)
-                        if _html3:
-                            components.html(_html3, height=_hover_total_hoyde(spec3), scrolling=False)
-                            st.caption("⚡ Beveg musa over chartet for O/H/L/C, dagsendring, volum og "
-                                       "MA under pekeren. Dra for å panorere, rull for å zoome.")
-                        else:
-                            renderLightweightCharts(
-                                spec3,
-                                key=f"sok_{sok}_{periode3}_{tidsramme3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{vis_rs_rating3}{vis_indeks3}{vis_eps3}{vis_trendscore3}{pos_suffix3}_{TEMA}")
-                vis_vcp_boks(res)
-                fundamenta_seksjon(sok, f"sok_{sok}")
-                st.divider()
-                posisjon_verktoy(res, f"sok_{sok}", VALUTA)
+        vis_ticker_detalj(sok, kontekst="sok")
 
 
 # --- Fane 4: Markedshelse (sektorstyrke) ---
@@ -4004,9 +4017,10 @@ with fane4:
 
 
 # ---------------------------------------------------------------------------
-# Fane 5: Mine lister (journal). Egen datalagring i Supabase – rører ALDRI
-# screeneren. «resultat» er siste Minervini-skanning og brukes til live-kolonner.
+# Fane 5: Journal (dashboard). Egen datalagring i Supabase – rører ALDRI
+# screeneren. «resultat» er siste skanning (live-kolonner). vis_ticker_detalj
+# gjenbrukes som felles aksjevisning når du borer ned på en ticker.
 # ---------------------------------------------------------------------------
 with fane5:
-    journal_ui.vis_mine_lister(bors_navn, resultat)
+    journal_ui.vis_dashboard(bors_navn, resultat, vis_ticker_detalj)
 
