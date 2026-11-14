@@ -344,11 +344,16 @@ def _vis_oversikt(beregnet: list[dict]) -> None:
     c2[0].metric("Snitt-R", f"{sr:+.2f}" if sr is not None else "—", border=True)
     c2[1].metric("Snitt holdedager", f"{stat['snitt_holdedager']:.0f}"
                  if stat["snitt_holdedager"] is not None else "—", border=True)
-    real = stat["sum_realisert"]
-    c2[2].metric("Realisert P&L", _penger(real), border=True,
+    tv = stat["snitt_time_value"]
+    c2[2].metric("Time Value", f"{tv:.2f}" if tv is not None else "—", border=True,
+                 help="Prosent avkastning per handelsdag (P/D). Høyere = raskere "
+                      "penger. F.eks. 10 % på 3 dager = 3.33.")
+    c2[3].metric("Realisert P&L", _penger(real := stat["sum_realisert"]), border=True,
                  delta=f"{real:+,.0f}".replace(",", " ") if real else None)
+
+    c3 = st.columns(4)
     ure = stat["urealisert"]
-    c2[3].metric("Urealisert", _penger(ure), border=True,
+    c3[0].metric("Urealisert", _penger(ure), border=True,
                  delta=f"{ure:+,.0f}".replace(",", " ") if ure else None)
 
     kurve = tall.kumulativ_r(beregnet)
@@ -863,6 +868,7 @@ def _tabell_lukket(lukket) -> None:
             "P&L": h.get("total_pnl"),
             "%": h.get("pnl_pct"),
             "Dager": h.get("holdedager"),
+            "TV": h.get("time_value"),
             "Setup": h.get("setup") or "—",
             "Plan": "✓" if plan else ("✗" if plan is False else "—"),
         })
@@ -872,6 +878,8 @@ def _tabell_lukket(lukket) -> None:
         "R": st.column_config.NumberColumn(format="%.2f"),
         "P&L": st.column_config.NumberColumn(format="%.0f"),
         "%": st.column_config.NumberColumn(format="%.1f %%"),
+        "TV": st.column_config.NumberColumn(
+            format="%.2f", help="Time Value = prosent avkastning per handelsdag (P/D). Høyere = raskere penger."),
     })
 
 

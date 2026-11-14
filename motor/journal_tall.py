@@ -89,7 +89,8 @@ def handelstall(kjop_kurs, antall, stop, *, delsalg=None, kjop_dato=None,
       risiko        – opprinnelig risiko i kr/$ ((kjøp − stop) × antall)
       r             – total_pnl / risiko (None uten gyldig stop)
       holdedager    – handelsdager til siste salg (lukket) eller til i dag (åpen)
-      time_value    – r / holdedager (R per handelsdag)
+      time_value    – pnl_pct / holdedager (prosent avkastning per handelsdag,
+                      P/D: f.eks. 10 % på 3 dager = 3.33. Høyere = raskere penger)
       vinn          – True/False for en LUKKET handel, ellers None
     """
     kjop = _tall(kjop_kurs)
@@ -152,8 +153,8 @@ def handelstall(kjop_kurs, antall, stop, *, delsalg=None, kjop_dato=None,
         sluttdato = max(datoer) if datoer else None
     hd = handelsdager(kjop_dato, sluttdato or idag) if kjop_dato else None
     ut["holdedager"] = hd
-    if hd and ut["r"] is not None:
-        ut["time_value"] = round(ut["r"] / hd, 4)
+    if hd and ut["pnl_pct"] is not None:
+        ut["time_value"] = round(ut["pnl_pct"] / hd, 4)
 
     if lukket:
         ut["vinn"] = total > 0

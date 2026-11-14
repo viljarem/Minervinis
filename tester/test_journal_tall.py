@@ -39,7 +39,7 @@ def test_lukket_handel_r_og_pnl():
     assert t["r"] == 2.0                    # 200/100
     assert t["pnl_pct"] == 20.0
     assert t["holdedager"] == 5             # man-fre
-    assert t["time_value"] == round(2.0 / 5, 4)
+    assert t["time_value"] == round(20.0 / 5, 4)   # pnl_pct / dager (P/D)
 
 
 def test_tap_gir_negativ_r():
@@ -48,6 +48,16 @@ def test_tap_gir_negativ_r():
     assert t["vinn"] is False
     assert t["total_pnl"] == -50.0
     assert t["r"] == -1.0
+
+
+def test_time_value_er_prosent_per_dag():
+    # Time Value = P/D (prosent avkastning / handelsdager). Qullamaggie-stil.
+    # 10 % på 3 handelsdager → 3.33.  Kjøp man 2/11, selg ons 4/11 (man-ons = 3 dager).
+    t = jt.handelstall(100, 1, 90, kjop_dato="2026-11-02",
+                       delsalg=[{"salg_kurs": 110, "antall": 1, "salg_dato": "2026-11-04"}])
+    assert t["pnl_pct"] == 10.0
+    assert t["holdedager"] == 3
+    assert t["time_value"] == round(10.0 / 3, 4)   # ≈ 3.33
 
 
 # --- delsalg / trailing ----------------------------------------------------
