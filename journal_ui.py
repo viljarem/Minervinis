@@ -32,6 +32,54 @@ START_LISTER = [
 SETUP_VALG = ["VCP", "Breakout", "Flat base", "Cup & handle", "Pullback", "Momentum", "Annet"]
 TRIGGER_VALG = ["Volumbrudd", "Pivot", "MA-støtte", "Nyhet", "Annet"]
 
+# Farge per setup til badges (faller tilbake til grå).
+SETUP_FARGE = {
+    "VCP": "violet", "Breakout": "green", "Flat base": "blue",
+    "Cup & handle": "orange", "Pullback": "blue", "Momentum": "red", "Annet": "gray",
+}
+
+
+# ---------------------------------------------------------------------------
+# Moderne stil – diskret CSS som følger app-temaet (lys/mørk)
+# ---------------------------------------------------------------------------
+def _injiser_stil() -> None:
+    """Kort-look på nøkkeltall, luftigere faner og mykere kanter. Kjøres én gang."""
+    if st.session_state.get("_journal_stil"):
+        return
+    st.session_state["_journal_stil"] = True
+    st.markdown("""
+        <style>
+        /* Nøkkeltall som kort med myk skygge og løft ved hover */
+        div[data-testid="stMetric"] {
+            background: var(--secondary-background-color);
+            border-radius: 14px;
+            padding: 16px 18px;
+            border: 1px solid rgba(128,128,128,0.15);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+            transition: transform .12s ease, box-shadow .12s ease;
+        }
+        div[data-testid="stMetric"]:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.10);
+        }
+        div[data-testid="stMetricLabel"] p {
+            font-size: 0.80rem; opacity: 0.75; font-weight: 500;
+            text-transform: uppercase; letter-spacing: .03em;
+        }
+        div[data-testid="stMetricValue"] { font-weight: 700; }
+        /* Faner – pill-stil */
+        button[data-baseweb="tab"] { font-weight: 600; }
+        /* Rammede containere får litt mer luft */
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            border-radius: 14px;
+        }
+        /* Popover- og primærknapper litt rundere */
+        div[data-testid="stPopover"] button, .stButton button, .stFormSubmitButton button {
+            border-radius: 10px;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
 
 # ---------------------------------------------------------------------------
 # Tilkobling og lås
@@ -206,6 +254,7 @@ def _beregn_handler(handler: list[dict], delsalg_alle: list[dict], skop: dict) -
 # HOVEDINNGANG
 # ---------------------------------------------------------------------------
 def vis_dashboard(bors_navn: str, screening, vis_ticker_fn=None) -> None:
+    _injiser_stil()
     if not tilgjengelig():
         st.subheader("📒 Journal")
         st.info(
@@ -275,24 +324,32 @@ def _vis_oversikt(beregnet: list[dict]) -> None:
 
     c = st.columns(4)
     wr = stat["winrate"]
+    wr_delta = f"{(wr-0.5)*100:+.0f} pp vs 50 %" if wr is not None else None
     c[0].metric("Winrate", f"{wr*100:.0f} %" if wr is not None else "—",
+                delta=wr_delta, border=True,
                 help="Andel lukkede handler med gevinst.")
     exp = stat["expectancy_r"]
     c[1].metric("Forventning", f"{exp:+.2f} R" if exp is not None else "—",
+                delta=("positiv" if (exp or 0) > 0 else "negativ") if exp is not None else None,
+                border=True,
                 help="Snitt R per lukket handel. Over 0 = systemet tjener penger.")
     pf = stat["profit_factor"]
     pf_tekst = "∞" if pf == float("inf") else (f"{pf:.2f}" if pf is not None else "—")
-    c[2].metric("Profit factor", pf_tekst,
+    c[2].metric("Profit factor", pf_tekst, border=True,
                 help="Brutto gevinst delt på brutto tap. Over 1 = lønnsomt.")
-    c[3].metric("Lukket / åpne", f"{stat['lukket']} / {stat['apne']}")
+    c[3].metric("Lukket / åpne", f"{stat['lukket']} / {stat['apne']}", border=True)
 
     c2 = st.columns(4)
     sr = stat["snitt_r"]
-    c2[0].metric("Snitt-R", f"{sr:+.2f}" if sr is not None else "—")
+    c2[0].metric("Snitt-R", f"{sr:+.2f}" if sr is not None else "—", border=True)
     c2[1].metric("Snitt holdedager", f"{stat['snitt_holdedager']:.0f}"
-                 if stat["snitt_holdedager"] is not None else "—")
-    c2[2].metric("Realisert P&L", _penger(stat["sum_realisert"]))
-    c2[3].metric("Urealisert", _penger(stat["urealisert"]))
+                 if stat["snitt_holdedager"] is not None else "—", border=True)
+    real = stat["sum_realisert"]
+    c2[2].metric("Realisert P&L", _penger(real), border=True,
+                 delta=f"{real:+,.0f}".replace(",", " ") if real else None)
+    ure = stat["urealisert"]
+    c2[3].metric("Urealisert", _penger(ure), border=True,
+                 delta=f"{ure:+,.0f}".replace(",", " ") if ure else None)
 
     kurve = tall.kumulativ_r(beregnet)
     if kurve:
@@ -300,7 +357,7 @@ def _vis_oversikt(beregnet: list[dict]) -> None:
         df["dato"] = pd.to_datetime(df["dato"])
         df = df.set_index("dato")[["kum_r"]].rename(columns={"kum_r": "Kumulativ R"})
         st.caption("Porteføljekurve – kumulativ R fra lukkede handler:")
-        st.line_chart(df, height=200)
+        st.area_chart(df, height=220, color="#3b82f6")
     else:
         st.caption("📈 Porteføljekurven tegnes når du har lukket din første handel.")
 
@@ -548,6 +605,24 @@ def _penger(x) -> str:
     return f"{x:+,.0f}".replace(",", " ")
 
 
+def _farg_tall(df: pd.DataFrame, kolonner: list[str]):
+    """Grønn tekst på positive tall, rød på negative – moderne og lettlest."""
+    def _stil(v):
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return ""
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return ""
+        if f > 0:
+            return "color: #16a34a; font-weight: 600;"
+        if f < 0:
+            return "color: #dc2626; font-weight: 600;"
+        return ""
+    finnes = [k for k in kolonner if k in df.columns]
+    return df.style.map(_stil, subset=finnes)
+
+
 def _vis_trades(lager, beregnet, bors_navn, skop) -> None:
     st.subheader("💼 Trades")
 
@@ -588,7 +663,8 @@ def _tabell_apne(apne) -> None:
             "Setup": h.get("setup") or "—",
         })
     df = pd.DataFrame(rader)
-    st.dataframe(df, width="stretch", hide_index=True, column_config={
+    st.dataframe(_farg_tall(df, ["R nå", "P&L"]), width="stretch", hide_index=True,
+                 column_config={
         "Kurs": st.column_config.NumberColumn(format="%.2f"),
         "Nå": st.column_config.NumberColumn(format="%.2f"),
         "Stop": st.column_config.NumberColumn(format="%.2f"),
@@ -615,7 +691,8 @@ def _tabell_lukket(lukket) -> None:
             "Plan": "✓" if plan else ("✗" if plan is False else "—"),
         })
     df = pd.DataFrame(rader)
-    st.dataframe(df, width="stretch", hide_index=True, column_config={
+    st.dataframe(_farg_tall(df, ["R", "P&L", "%"]), width="stretch", hide_index=True,
+                 column_config={
         "R": st.column_config.NumberColumn(format="%.2f"),
         "P&L": st.column_config.NumberColumn(format="%.0f"),
         "%": st.column_config.NumberColumn(format="%.1f %%"),
