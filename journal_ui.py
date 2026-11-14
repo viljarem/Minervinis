@@ -636,8 +636,7 @@ def _vis_trades(lager, beregnet, bors_navn, skop) -> None:
     if not apne:
         st.caption("Ingen åpne posisjoner. Loggfør et kjøp over.")
     else:
-        _tabell_apne(apne)
-        _handtering_apne(lager, apne, skop)
+        _kort_apne(lager, apne, skop)
 
     st.markdown(f"**Lukkede handler ({len(lukket)})**")
     if not lukket:
@@ -646,32 +645,164 @@ def _vis_trades(lager, beregnet, bors_navn, skop) -> None:
         _tabell_lukket(lukket)
 
 
-def _tabell_apne(apne) -> None:
-    rader = []
-    for h in apne:
-        rader.append({
-            "Ticker": h["ticker"],
-            "Kjøpt": _dato_kort(h.get("kjop_dato")),
-            "Kurs": h.get("kjop_kurs"),
-            "Nå": h.get("kurs_naa"),
-            "Antall": h.get("antall_igjen"),
-            "Stop": h.get("stop"),
-            "Mål": h.get("mal"),
-            "R nå": h.get("r"),
-            "P&L": h.get("total_pnl"),
-            "Dager": h.get("holdedager"),
-            "Setup": h.get("setup") or "—",
-        })
-    df = pd.DataFrame(rader)
-    st.dataframe(_farg_tall(df, ["R nå", "P&L"]), width="stretch", hide_index=True,
-                 column_config={
-        "Kurs": st.column_config.NumberColumn(format="%.2f"),
-        "Nå": st.column_config.NumberColumn(format="%.2f"),
-        "Stop": st.column_config.NumberColumn(format="%.2f"),
-        "Mål": st.column_config.NumberColumn(format="%.2f"),
-        "R nå": st.column_config.NumberColumn(format="%.2f"),
-        "P&L": st.column_config.NumberColumn(format="%.0f"),
-    })
+# --- moderne kort for åpne posisjoner ---------------------------------------
+def _setup_badge(setup: str | None) -> None:
+    if not setup or setup == "—":
+        return
+    farge = SETUP_FARGE.get(setup, "gray")
+    st.badge(setup, color=farge)
+
+
+def _fremdrift(kjop, naa, stop, mal) -> tuple[float, str]:
+    """Hvor langt fra stop (0) mot mål (1) ligger kursen nå? Returnerer (andel, tekst)."""
+    try:
+        kjop = float(kjop); naa = float(naa)
+    except (TypeError, ValueError):
+        return 0.0, ""
+    lav = float(stop) if stop else kjop * 0.9
+    hoy = float(mal) if mal else kjop * 1.2
+    if hoy <= lav:
+        return 0.0, ""
+    andel = (naa - lav) / (hoy - lav)
+    andel = max(0.0, min(1.0, andel))
+    return andel, f"Stop {lav:.2f} → Mål {hoy:.2f}"
+
+
+def _kort_apne(lager, apne, skop) -> None:
+    kolonner = st.columns(2, gap="medium")
+    for i, h in enumerate(apne):
+        with kolonner[i % 2]:
+            with st.container(border=True):
+                naa = h.get("kurs_naa")
+                kjop = h.get("kjop_kurs")
+                r = h.get("r")
+                pnl = h.get("total_pnl")
+
+                topp = st.columns([2, 1])
+                topp[0].markdown(f"### {h['ticker']}")
+                with topp[1]:
+                    if r is not None:
+                        farge = "green" if r >= 0 else "red"
+                        st.badge(f"{r:+.2f} R", color=farge, icon=":material/trending_up:")
+
+                _setup_badge(h.get("setup"))
+
+                # Nøkkeltall i tre små kolonner.
+                m = st.columns(3)
+                m[0].caption("Kjøpt")
+                m[0].markdown(f"**{kjop:.2f}**" if kjop else "—")
+                m[1].caption("Nå")
+                m[1].markdown(f"**{naa:.2f}**" if naa else "—")
+                m[2].caption("P&L")
+                if pnl is not None:
+                    f = "#16a34a" if pnl >= 0 else "#dc2626"
+                    m[2].markdown(f"<b style='color:{f}'>{pnl:+,.0f}</b>".replace(",", " "),
+                                  unsafe_allow_html=True)
+                else:
+                    m[2].markdown("—")
+
+                # Fremdriftslinje stop → mål.
+                if naa:
+                    andel, tekst = _fremdrift(kjop, naa, h.get("stop"), h.get("mal"))
+                    if tekst:
+                        st.progress(andel, text=tekst)
+
+                bunn = st.columns([1, 1, 2])
+                dager = h.get("holdedager")
+                bunn[0].caption(f"📅 {dager}d" if dager else "📅 —")
+                antall = h.get("antall_igjen")
+                bunn[1].caption(f"📦 {antall:g}" if antall else "📦 —")
+                if bunn[2].button("Håndter ▸", key=f"handter_{h['id']}", width="stretch"):
+                    st.session_state["handter_id"] = h["id"]
+
+    # Håndteringspanel for valgt posisjon.
+    valgt_id = st.session_state.get("handter_id")
+    if valgt_id:
+        valgt = next((h for h in apne if h["id"] == valgt_id), None)
+        if valgt:
+            st.divider()
+            _handter_en(lager, valgt, skop)
+
+
+def _handter_en(lager, h, skop) -> None:
+    """Selg, juster stop/mål eller lukk ÉN valgt posisjon."""
+    c = st.columns([3, 1])
+    c[0].markdown(f"#### Håndter {h['ticker']}")
+    if c[1].button("Lukk panel", key=f"lukk_panel_{h['id']}", width="stretch"):
+        st.session_state.pop("handter_id", None)
+        st.rerun()
+    igjen = h.get("antall_igjen") or 0
+
+    if st.button("🔍 Åpne aksjen", key=f"handter_apne_{h['id']}"):
+        velg_ticker(h["ticker"])
+        st.rerun()
+
+    faner = st.tabs(["Selg", "Juster stop/mål", "Lukk", "Slett"])
+    with faner[0]:
+        with st.form(f"selg_{h['id']}", clear_on_submit=True):
+            st.caption(f"Du har {igjen:g} igjen av {h['ticker']}.")
+            s1, s2, s3 = st.columns(3)
+            naa = _naa_kurs(h["ticker"], skop)
+            salg_kurs = s1.number_input("Salgskurs", min_value=0.0, step=0.1,
+                                        value=float(naa) if naa else 0.0, format="%.2f")
+            antall = s2.number_input("Antall", min_value=0.0, max_value=float(igjen),
+                                     value=float(igjen), step=1.0)
+            dato = s3.date_input("Dato", value=date.today())
+            arsak = st.text_input("Årsak (valgfritt)", placeholder="Mål nådd, stop, delsalg …")
+            if st.form_submit_button("Registrer salg", type="primary"):
+                if salg_kurs <= 0 or antall <= 0:
+                    st.warning("Fyll inn gyldig kurs og antall.")
+                else:
+                    try:
+                        lager.lag_delsalg(h["id"], str(dato), salg_kurs, antall, arsak)
+                        if antall >= igjen - 1e-9:
+                            lager.sett_status(h["id"], "CLOSED")
+                            st.session_state.pop("handter_id", None)
+                    except db.JournalFeil as e:
+                        st.error(str(e))
+                    else:
+                        st.rerun()
+    with faner[1]:
+        with st.form(f"juster_{h['id']}", clear_on_submit=False):
+            j1, j2 = st.columns(2)
+            ny_stop = j1.number_input("Ny stop", min_value=0.0, step=0.1,
+                                      value=float(h.get("stop") or 0), format="%.2f")
+            ny_mal = j2.number_input("Nytt mål", min_value=0.0, step=0.1,
+                                     value=float(h.get("mal") or 0), format="%.2f")
+            if st.form_submit_button("Lagre stop/mål", type="primary"):
+                try:
+                    lager.oppdater_handel(h["id"], stop=ny_stop or None, mal=ny_mal or None)
+                except db.JournalFeil as e:
+                    st.error(str(e))
+                else:
+                    st.rerun()
+    with faner[2]:
+        with st.form(f"lukk_{h['id']}", clear_on_submit=True):
+            st.caption("Lukk hele posisjonen og evaluér.")
+            fulgte = st.checkbox("Jeg fulgte planen", value=True)
+            evaluering = st.text_area("Evaluering", placeholder="Hva gikk bra/dårlig?", height=80)
+            if st.form_submit_button("Lukk posisjon", type="primary"):
+                try:
+                    naa = _naa_kurs(h["ticker"], skop)
+                    if igjen > 0 and naa:
+                        lager.lag_delsalg(h["id"], str(date.today()), naa, igjen, "Lukket")
+                    lager.oppdater_handel(h["id"], status="CLOSED",
+                                          fulgte_plan=fulgte, evaluering=evaluering)
+                    st.session_state.pop("handter_id", None)
+                except db.JournalFeil as e:
+                    st.error(str(e))
+                else:
+                    st.rerun()
+    with faner[3]:
+        st.caption("Sletter handelen og alle delsalg permanent.")
+        if st.button("🗑 Slett handel helt", key=f"slett_handel_{h['id']}", type="primary"):
+            try:
+                lager.slett_handel(h["id"])
+                st.session_state.pop("handter_id", None)
+            except db.JournalFeil as e:
+                st.error(str(e))
+            else:
+                st.rerun()
 
 
 def _tabell_lukket(lukket) -> None:
@@ -697,80 +828,6 @@ def _tabell_lukket(lukket) -> None:
         "P&L": st.column_config.NumberColumn(format="%.0f"),
         "%": st.column_config.NumberColumn(format="%.1f %%"),
     })
-
-
-def _handtering_apne(lager, apne, skop) -> None:
-    """Velg en åpen handel for å selge (helt/delvis), justere stop eller lukke."""
-    etikett = {f"{h['ticker']} · {_dato_kort(h.get('kjop_dato'))}": h for h in apne}
-    with st.expander("Selg, juster eller lukk en posisjon"):
-        valgt = st.selectbox("Posisjon", list(etikett), key="handter_valg")
-        h = etikett[valgt]
-        igjen = h.get("antall_igjen") or 0
-
-        if st.button("🔍 Åpne aksjen", key=f"handter_apne_{h['id']}"):
-            velg_ticker(h["ticker"])
-            st.rerun()
-
-        with st.form(f"selg_{h['id']}", clear_on_submit=True):
-            st.caption(f"Du har {igjen:g} igjen av {h['ticker']}.")
-            s1, s2, s3 = st.columns(3)
-            naa = _naa_kurs(h["ticker"], skop)
-            salg_kurs = s1.number_input("Salgskurs", min_value=0.0, step=0.1,
-                                        value=float(naa) if naa else 0.0, format="%.2f")
-            antall = s2.number_input("Antall", min_value=0.0, max_value=float(igjen),
-                                     value=float(igjen), step=1.0)
-            dato = s3.date_input("Dato", value=date.today())
-            arsak = st.text_input("Årsak (valgfritt)", placeholder="Mål nådd, stop, delsalg …")
-            if st.form_submit_button("Registrer salg", type="primary"):
-                if salg_kurs <= 0 or antall <= 0:
-                    st.warning("Fyll inn gyldig kurs og antall.")
-                else:
-                    try:
-                        lager.lag_delsalg(h["id"], str(dato), salg_kurs, antall, arsak)
-                        if antall >= igjen - 1e-9:
-                            lager.sett_status(h["id"], "CLOSED")
-                    except db.JournalFeil as e:
-                        st.error(str(e))
-                    else:
-                        st.rerun()
-
-        with st.form(f"juster_{h['id']}", clear_on_submit=False):
-            j1, j2 = st.columns(2)
-            ny_stop = j1.number_input("Ny stop", min_value=0.0, step=0.1,
-                                      value=float(h.get("stop") or 0), format="%.2f")
-            ny_mal = j2.number_input("Nytt mål", min_value=0.0, step=0.1,
-                                     value=float(h.get("mal") or 0), format="%.2f")
-            if st.form_submit_button("Lagre stop/mål"):
-                try:
-                    lager.oppdater_handel(h["id"], stop=ny_stop or None, mal=ny_mal or None)
-                except db.JournalFeil as e:
-                    st.error(str(e))
-                else:
-                    st.rerun()
-
-        with st.form(f"lukk_{h['id']}", clear_on_submit=True):
-            st.caption("Lukk hele posisjonen og evaluér.")
-            fulgte = st.checkbox("Jeg fulgte planen", value=True)
-            evaluering = st.text_area("Evaluering", placeholder="Hva gikk bra/dårlig?", height=80)
-            if st.form_submit_button("Lukk posisjon"):
-                try:
-                    naa = _naa_kurs(h["ticker"], skop)
-                    if igjen > 0 and naa:
-                        lager.lag_delsalg(h["id"], str(date.today()), naa, igjen, "Lukket")
-                    lager.oppdater_handel(h["id"], status="CLOSED",
-                                          fulgte_plan=fulgte, evaluering=evaluering)
-                except db.JournalFeil as e:
-                    st.error(str(e))
-                else:
-                    st.rerun()
-
-        if st.button("🗑 Slett handel helt", key=f"slett_handel_{h['id']}"):
-            try:
-                lager.slett_handel(h["id"])
-            except db.JournalFeil as e:
-                st.error(str(e))
-            else:
-                st.rerun()
 
 
 def _kjop_skjema(lager, bors_navn, forhandsvalgt: str | None, key: str) -> None:
