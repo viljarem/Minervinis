@@ -31,6 +31,8 @@ CHART-TEGNING – teknisk avklaring (lightweight-charts):
          Gjenstaar: flytte mer fra sidebaren hit om oensket.)
 [ ] Q3: Auto-portefoelje-lister: "Portefoelje" = aktive handler,
         "Lukket portefoelje" = lukkede. Genereres fra handler-tabellen.
+        (FERDIG - commit <neste>. To auto-faner i Mine lister som
+         speiler handlene; flyttes automatisk ved lukking.)
 [ ] Q4: Slette fullfoerte/feil-lagde handler (full CRUD + bekreftelse).
 [ ] Q5: Statuslinje for data ("Oppdatert kl. 08:15 i dag") saa jeg ser
         at dataene er ferske.

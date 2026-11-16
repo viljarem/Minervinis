@@ -335,7 +335,7 @@ def vis_dashboard(bors_navn: str, screening, vis_ticker_fn=None) -> None:
 
     kol_lister, kol_dagbok = st.columns([3, 2], gap="large")
     with kol_lister:
-        _vis_lister(lager, lister, alle_aksjer, bors_navn, skop)
+        _vis_lister(lager, lister, alle_aksjer, bors_navn, skop, beregnet)
     with kol_dagbok:
         _vis_dagbok(lager, notater)
     st.divider()
@@ -437,7 +437,7 @@ def _berik_aksjer(aksjer: list[dict], skop: dict) -> pd.DataFrame:
     return pd.DataFrame(rader)
 
 
-def _vis_lister(lager, lister, alle_aksjer, bors_navn, skop) -> None:
+def _vis_lister(lager, lister, alle_aksjer, bors_navn, skop, beregnet=None) -> None:
     st.subheader("⭐ Mine lister")
 
     per_liste: dict[str, list] = {}
@@ -446,15 +446,99 @@ def _vis_lister(lager, lister, alle_aksjer, bors_navn, skop) -> None:
 
     _administrer_lister(lager, lister)
 
-    if not lister:
+    # Auto-porteføljer genereres fra handlene dine (ikke egne DB-lister):
+    #   💼 Portefølje        = aksjer du har en ÅPEN handel i
+    #   📁 Lukket portefølje = aksjer der siste handel er lukket
+    beregnet = beregnet or []
+    apne_t, lukket_t = _portefolje_tickere(beregnet)
+
+    if not lister and not apne_t and not lukket_t:
         st.info("Du har ingen lister ennå. Lag én over for å komme i gang.")
         return
 
-    faner = st.tabs([f"{l['navn']} ({len(per_liste.get(l['id'], []))})" for l in lister])
+    auto = [
+        ("💼 Portefølje", apne_t, "💼"),
+        ("📁 Lukket", lukket_t, "📁"),
+    ]
+    fane_navn = [f"{l['navn']} ({len(per_liste.get(l['id'], []))})" for l in lister]
+    fane_navn += [f"{navn} ({len(ts)})" for navn, ts, _ in auto]
+
+    faner = st.tabs(fane_navn)
     for fane, liste in zip(faner, lister):
         with fane:
             _vis_en_liste(lager, liste, lister, per_liste.get(liste["id"], []),
                           bors_navn, skop)
+    for fane, (navn, tickere, ikon) in zip(faner[len(lister):], auto):
+        with fane:
+            _vis_auto_portefolje(navn, tickere, skop, beregnet,
+                                 lukket=(ikon == "📁"))
+
+
+def _portefolje_tickere(beregnet: list[dict]) -> tuple[list[str], list[str]]:
+    """Deler handlene i åpne og lukkede, og gir unike tickere per gruppe.
+
+    En ticker regnes som «i portefølje» hvis den har minst én åpen handel.
+    Den havner i «lukket» kun hvis den IKKE har noen åpen handel men har
+    minst én lukket – så en ticker aldri står to steder samtidig.
+    """
+    apne, lukkede = [], []
+    for h in beregnet:
+        (apne if h.get("status") == "OPEN" else lukkede).append(h)
+    apne_t, sett = [], set()
+    for h in apne:
+        t = h.get("ticker")
+        if t and t not in sett:
+            sett.add(t); apne_t.append(t)
+    lukket_t, sett2 = [], set()
+    for h in lukkede:
+        t = h.get("ticker")
+        if t and t not in sett and t not in sett2:
+            sett2.add(t); lukket_t.append(t)
+    return apne_t, lukket_t
+
+
+def _vis_auto_portefolje(navn: str, tickere: list[str], skop: dict,
+                         beregnet: list[dict], lukket: bool) -> None:
+    """Skrivebeskyttet liste som speiler handlene dine. Oppdateres automatisk."""
+    if lukket:
+        st.caption("Aksjer der siste handel er lukket. Flyttes hit automatisk "
+                   "når du lukker en posisjon.")
+    else:
+        st.caption("Aksjer du har en åpen posisjon i akkurat nå. Oppdateres "
+                   "automatisk når du kjøper og selger.")
+    if not tickere:
+        st.caption("Ingen aksjer her ennå." if lukket
+                   else "Ingen åpne posisjoner. Loggfør et kjøp under «Trades».")
+        return
+
+    # Tabell: ticker + litt kontekst fra siste skanning og handel.
+    per_ticker: dict[str, list] = {}
+    for h in beregnet:
+        per_ticker.setdefault(h.get("ticker"), []).append(h)
+    rader = []
+    for t in tickere:
+        s = skop.get(t, {})
+        hs = per_ticker.get(t, [])
+        rader.append({
+            "Ticker": t,
+            "Pris": _verdi(s, "pris"),
+            "RS": _verdi(s, "rs"),
+            "TS": _verdi(s, "trendscore"),
+            "Handler": len(hs),
+        })
+    df = pd.DataFrame(rader)
+    st.dataframe(df, width="stretch", hide_index=True, column_config={
+        "Pris": st.column_config.NumberColumn("Pris", format="%.2f"),
+        "RS": st.column_config.NumberColumn("RS", help="Relativ styrke 1–99 (fra siste skanning)."),
+        "TS": st.column_config.NumberColumn("TS", format="%.0f", help="TrendScore 0–100."),
+        "Handler": st.column_config.NumberColumn("Handler", help="Antall handler på denne aksjen."),
+    })
+
+    nokkel = "lukket" if lukket else "apne"
+    valgt = st.selectbox("Åpne aksje", tickere, key=f"auto_valg_{nokkel}")
+    if st.button("🔍 Åpne", key=f"auto_apne_{nokkel}", width="stretch"):
+        velg_ticker(valgt)
+        st.rerun()
 
 
 def _administrer_lister(lager, lister) -> None:
