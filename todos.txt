@@ -273,23 +273,50 @@ NYE INDIKATORER som maa inn (motor/indikatorer.py el. ny modul)
   - Dollar-/krone-volum likviditetsgulv (har MIN_DAGSOMSETNING alt).
 
 -----------------------------------------------------------------------
-RANGERING ("optimalt store gevinster" – ikke tilfeldig)
+INGEN KUNSTIG SCORE – SETUP-VARIANT (transparent & etterproevbar)
 -----------------------------------------------------------------------
-Ett sammensatt QM-score (0-100) per aksje saa de BESTE kommer oeverst,
-ikke bare "passerer/feiler". Forslag til vekter (justeres i konfig):
-  40 %  Momentum-lederskap (beste persentil av 1M/3M/6M)
-  25 %  Konsolideringskvalitet (lav tightness + bekreftede hoyere bunner)
-  15 %  Trend-struktur (Close>EMA10>EMA20>EMA50, 10/20 godt over 50)
-  10 %  Volum-signatur (toerke inn i base, surge paa utbrudd)
-  10 %  ADR%-"mulighetsrom" (nok bevegelse til store R, men ikke kaos)
-Resultat: topp-20 QM-score = dagens reelle markedsledere i setup.
-Vis score + delscorer i tabellen (transparent, som Minervini-kriteriene).
+Avklart 16.11: DROPPER sammensatt QM-score (0-100). En vektet score
+(40/25/15...) SER presis ut, men vektene er gjettet, den er vanskelig
+aa etterproeve og skjuler HVORFOR en aksje er med. Minervini-screeneren
+er bedre nettopp fordi den er transparent + binaer: hvert kriterium
+passerer/feiler, du ser avstand til pivot, og tidligere brudd paa chart.
+Qullamaggie bygges likedan.
+
+1) KRITERIER (passerer/feiler – som Minervini, full etterproevbarhet):
+   - Momentum-leder: topp X % paa 1M/3M/6M (persentil, RS-maskineri).
+   - Reelt byks bak oss: >= 30 % siste 1-3 mnd.
+   - Surfer stigende EMA: Close over, EMA10 > EMA20 > EMA50.
+   - Hoyere bunner i konsolideringen.
+   - Volum toerket inn i basen.
+   - ADR% over gulv (nok bevegelse til store R).
+   En aksje er GYLDIG SETUP naar kjernekriteriene er oppfylt – ikke
+   fordi en score tilfeldigvis traff 73. Vis ✅/❌ pr. kriterium.
+
+2) AVSTAND TIL UTBRUDD (det som gjoer at vi ligger FORAN markedet):
+   Som Minervinis "avstand til pivot", men for QM:
+   - Pivot = toppen av konsolideringen (motstanden som skal brytes).
+   - Avstand % = hvor langt UNDER pivot prisen er naa.
+   - Stop-bredde = pivot -> dagens low; flagg om den er <= ADR%
+     (R/R-mekanikken intakt).
+   Liste over ledere som SETTER SEG OPP, saa vi er klare FOER bruddet.
+
+3) TIDLIGERE BRUDD PAA CHART (visuell bekreftelse, ikke et tall):
+   Marker historiske konsolideringer + utbrudd paa chartet (som
+   Minervini). Da ser du med egne oeyne "byks -> base -> byks" gjentatt
+   – DET er bekreftelsen, ikke en svart boks.
+
+SORTERING uten score: sorter paa OBJEKTIVE, raa stoerrelser DU velger:
+  - "naermest utbrudd" (avstand % til pivot, minst foerst)
+  - "sterkest 3M-momentum" (raa avkastning / persentil)
+  - "strammest base" (range/ADR, lavest foerst)
+Alt er etterproevbar raadata, ingen vekter, ingen svart boks.
 
 -----------------------------------------------------------------------
 ARKITEKTUR (roerer ALDRI Minervini-screeneren)
 -----------------------------------------------------------------------
   - Ny modul: motor/qullamaggie.py (speiler minervini.py-moensteret:
-    kriterie_kolonner / score / pivot+stop). Rein, testbar, ingen nett.
+    kriterie_kolonner + pivot/stop/avstand – INGEN score). Rein,
+    testbar, ingen nett.
   - konfig.py: nye Preset-er QM_BREAKOUT / QM_EP (+ terskler i egne
     konstanter, alt justerbart ett sted – som i dag).
   - screener.py: valgfri "motor"-parameter ELLER egen analyser_qm()
@@ -312,9 +339,9 @@ EXIT-REGLER (bakes inn som forslag i journalen, ikke auto)
 BYGGEREKKEFOELGE (neste oekt)
 -----------------------------------------------------------------------
   1. ADR% + EMA10/20/50 + momentum-persentil i indikatorer (+ tester).
-  2. motor/qullamaggie.py: QM1 breakout-logikk + QM-score (+ tester
-     paa syntetiske serier: en "ren" leder skal score hoyt, en
-     tilfeldig/fallende skal score lavt).
+  2. motor/qullamaggie.py: QM1 breakout-kriterier + pivot/stop/avstand
+     (INGEN score) (+ tester paa syntetiske serier: en "ren" leder
+     skal passere alle kriterier, en tilfeldig/fallende skal feile).
   3. QM_BREAKOUT-preset i konfig + koble inn i screener/app som nytt
      oppsett. Verifiser mot kjente ledere i dagens data.
   4. QM2 EP (gap+volum) som andre preset.
@@ -322,3 +349,22 @@ BYGGEREKKEFOELGE (neste oekt)
   6. Historisk chart-visning + konsolideringsboks/utbruddsnivaa.
 Prinsipp hele veien: liten, testet bit om gangen; Minervini-screeneren
 skal aldri kunne paavirkes. Alt i try/except der det treffer app-laget.
+
+-----------------------------------------------------------------------
+VALIDERT MOT EKTE DATA 16.11 (verktoy/qm_prototype.py – engangstest)
+-----------------------------------------------------------------------
+Kjoerte setup-varianten (7 kriterier, INGEN score) mot fersk data:
+  S&P 500 (510): 1 full match (EL), 12 nesten (ACN +47%, APP +79% byks
+    1,2% fra pivot, IDXX 1,4% fra pivot, TYL, CDW...).
+  Oslo (288): 2 full (OMDA, OKEA), 6 nesten (HUNT +69%/+108% byks,
+    CONTX +63% byks, NKR, SMOP).
+FUNN:
+  - TREFFENE ER EKTE LEDERE, ikke stoey. Ingen junk slapp gjennom.
+  - "Avstand til utbrudd" funker perfekt (APP 1,2%, IDXX 1,4%, EL 3,2%
+    fra pivot) -> ser hvem som staar paa KANTEN av utbrudd = foran mkt.
+  - Hovedfilteret er "stram base" (range/ADR). Terskel 4 er litt streng;
+    ~5-6 fanger flere kvalitetsledere uten aa slippe inn stoey. VIKTIGSTE
+    tuning-knapp -> legg i konfig.
+  - Qullamaggie-stop = DAGENS low (ikke basens low). Viktig detalj.
+KONKLUSJON: logikken er riktig, treffene gode, faa falske. Klar for
+ordentlig motor-modul. Prototypen beholdes som referanse i verktoy/.
