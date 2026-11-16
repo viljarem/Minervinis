@@ -56,6 +56,11 @@ CHART-TEGNING – teknisk avklaring (lightweight-charts):
          oppsett ved skann; journalen auto-laster siste lagrede resultat
          ved aapning (ingen innlogging noedvendig). Screenerens egen
          Hovedliste er urort. SQL maa kjoeres i Supabase.)
+[ ] M1b: LIVE P&L/R i journalen automatisk i aapningstid.
+        (FERDIG - commit <neste>. motor/markedstid.py (bors_apen for
+         Oslo/S&P) + live-kurser for aapne posisjoner naar borsen er
+         aapen. Lukkede handler uroert. Alt i try/except; faller tilbake
+         til sluttkurs. 🔴 Live-indikator paa kort + topptekst.)
 [ ] M2: Qullamaggie-screener (samme motor-moenster som Minervini:
         episodic pivots, breakouts, parabolske utbrudd, MA10/20-trail).
         Historiske resultat i chart paa samme maate som Minervini.

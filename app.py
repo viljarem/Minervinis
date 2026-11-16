@@ -19,6 +19,7 @@ import json
 
 from motor import konfig, data as datamod, fundamenta, indikatorer, minervini, posisjon, screener, sektor, univers, vcp, aksjeinfo, trendscore
 from motor import skann_cache
+from motor import markedstid
 import journal_ui
 
 # TradingViews lightweight-charts (testfane). Pakket i try/except så appen aldri
@@ -4090,15 +4091,39 @@ with fane4:
 # gjenbrukes som felles aksjevisning når du borer ned på en ticker.
 # ---------------------------------------------------------------------------
 with fane5:
-    # Bakoverkompatibelt: send datastatus kun hvis denne versjonen av
-    # journal_ui stotter det (unngaar TypeError hvis en gammel modul henger
+    # Live P&L/R i journalen automatisk naar borsen er aapen: hent sanntids-
+    # kurser for tickerne du har ÅPNE handler i. Alt pakket i try/except saa
+    # journalen aldri krasjer av dette; feiler det, brukes siste sluttkurs.
+    _journal_live = {}
+    _journal_apen = False
+    try:
+        _journal_apen = markedstid.bors_apen(BORS.kind)
+        if _journal_apen and journal_ui.innlogget():
+            _lg = journal_ui._lager()
+            if _lg is not None:
+                _apne_h = _lg.hent_handler(status="OPEN")
+                _apne_t = sorted({h.get("ticker") for h in _apne_h if h.get("ticker")})
+                if _apne_t:
+                    _journal_live = hent_live_priser(tuple(_apne_t[:80]))
+                    # hent_live_priser gir {ticker: {"pris":..}} – flat ut til {ticker: pris}
+                    _journal_live = {t: (v.get("pris") if isinstance(v, dict) else v)
+                                     for t, v in (_journal_live or {}).items()}
+    except Exception:
+        _journal_live = {}
+
+    # Bakoverkompatibelt: send nye parametre kun hvis denne versjonen av
+    # journal_ui stotter dem (unngaar TypeError hvis en gammel modul henger
     # igjen i minnet paa Streamlit Cloud for en reboot).
     import inspect as _inspect
-    if "datastatus" in _inspect.signature(journal_ui.vis_dashboard).parameters:
-        journal_ui.vis_dashboard(bors_navn, journal_screening, vis_ticker_detalj,
-                                 datastatus=_status)
-    else:
-        journal_ui.vis_dashboard(bors_navn, journal_screening, vis_ticker_detalj)
+    _params = _inspect.signature(journal_ui.vis_dashboard).parameters
+    _kw = {}
+    if "datastatus" in _params:
+        _kw["datastatus"] = _status
+    if "live_kurser" in _params:
+        _kw["live_kurser"] = _journal_live
+    if "bors_apen" in _params:
+        _kw["bors_apen"] = _journal_apen
+    journal_ui.vis_dashboard(bors_navn, journal_screening, vis_ticker_detalj, **_kw)
 
 with fane6:
     journal_ui.vis_innstillinger(bors_navn)

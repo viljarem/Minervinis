@@ -274,8 +274,16 @@ def _sorg_for_startlister(lager: db.Lager) -> list[dict]:
     return lager.hent_lister()
 
 
-def _beregn_handler(handler: list[dict], delsalg_alle: list[dict], skop: dict) -> list[dict]:
-    """Beriker hver handel med utregnede tall (R, P&L, status osv.)."""
+def _beregn_handler(handler: list[dict], delsalg_alle: list[dict], skop: dict,
+                    live_kurser: dict | None = None) -> list[dict]:
+    """Beriker hver handel med utregnede tall (R, P&L, status osv.).
+
+    `live_kurser` (valgfritt) = {ticker: pris} fra sanntid i åpningstid. Brukes
+    som «nå-kurs» for ÅPNE handler når det finnes, så P&L/R blir live. Falles
+    tilbake til siste sluttkurs fra skop ellers. Lukkede handler bruker salgs-
+    kursene uansett (live rører dem ikke).
+    """
+    live_kurser = live_kurser or {}
     per_handel: dict[str, list] = {}
     for d in delsalg_alle:
         per_handel.setdefault(d["handel_id"], []).append(d)
@@ -283,13 +291,23 @@ def _beregn_handler(handler: list[dict], delsalg_alle: list[dict], skop: dict) -
     for h in handler:
         ds = per_handel.get(h["id"], [])
         naa = _naa_kurs(h["ticker"], skop)
+        live = None
+        if h.get("status") == "OPEN":
+            lv = live_kurser.get(h["ticker"])
+            try:
+                if lv is not None and float(lv) > 0:
+                    live = float(lv)
+            except (TypeError, ValueError):
+                live = None
+        kurs_naa = live if live is not None else naa
         t = tall.handelstall(
             h.get("kjop_kurs"), h.get("antall"), h.get("stop"),
-            delsalg=ds, kjop_dato=h.get("kjop_dato"), kurs_naa=naa)
+            delsalg=ds, kjop_dato=h.get("kjop_dato"), kurs_naa=kurs_naa)
         rad = dict(h)
         rad.update(t)
         rad["delsalg"] = ds
-        rad["kurs_naa"] = naa
+        rad["kurs_naa"] = kurs_naa
+        rad["er_live"] = live is not None
         if ds:
             datoer = [d.get("salg_dato") for d in ds if d.get("salg_dato")]
             rad["slutt_dato"] = max(datoer) if datoer else None
@@ -301,7 +319,9 @@ def _beregn_handler(handler: list[dict], delsalg_alle: list[dict], skop: dict) -
 # HOVEDINNGANG
 # ---------------------------------------------------------------------------
 def vis_dashboard(bors_navn: str, screening, vis_ticker_fn=None,
-                  datastatus: dict | None = None) -> None:
+                  datastatus: dict | None = None,
+                  live_kurser: dict | None = None,
+                  bors_apen: bool = False) -> None:
     _injiser_stil()
     if not tilgjengelig():
         st.subheader("📒 Journal")
@@ -343,9 +363,12 @@ def vis_dashboard(bors_navn: str, screening, vis_ticker_fn=None,
         return
 
     skop = _screening_oppslag(screening)
-    beregnet = _beregn_handler(handler, delsalg, skop)
+    beregnet = _beregn_handler(handler, delsalg, skop, live_kurser)
 
     _vis_datastatus(datastatus)
+    if bors_apen and live_kurser:
+        st.caption("🔴 **Live** – åpne posisjoner viser sanntids P&L/R "
+                   "(≈15 min forsinket) så lenge børsen er åpen.")
     _vis_oversikt(beregnet)
     st.divider()
 
@@ -903,7 +926,7 @@ def _kort_apne(lager, apne, skop) -> None:
                 m = st.columns(3)
                 m[0].caption("Kjøpt")
                 m[0].markdown(f"**{kjop:.2f}**" if kjop else "—")
-                m[1].caption("Nå")
+                m[1].caption("🔴 Nå (live)" if h.get("er_live") else "Nå")
                 m[1].markdown(f"**{naa:.2f}**" if naa else "—")
                 m[2].caption("P&L")
                 if pnl is not None:
