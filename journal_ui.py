@@ -774,6 +774,7 @@ def _vis_trades(lager, beregnet, bors_navn, skop) -> None:
         st.caption("Ingen lukkede handler ennå.")
     else:
         _tabell_lukket(lukket)
+        _slett_lukket(lager, lukket)
         _vis_periode_statistikk(lukket)
 
 
@@ -968,13 +969,26 @@ def _handter_en(lager, h, skop) -> None:
                     st.rerun()
     with faner[3]:
         st.caption("Sletter handelen og alle delsalg permanent.")
-        if st.button("🗑 Slett handel helt", key=f"slett_handel_{h['id']}", type="primary"):
-            try:
-                lager.slett_handel(h["id"])
-                st.session_state.pop("handter_id", None)
-            except db.JournalFeil as e:
-                st.error(str(e))
-            else:
+        bekreft_key = f"bekreft_slett_handel_{h['id']}"
+        if not st.session_state.get(bekreft_key):
+            if st.button("🗑 Slett handel helt", key=f"slett_handel_{h['id']}"):
+                st.session_state[bekreft_key] = True
+                st.rerun()
+        else:
+            st.warning(f"Sikker på at du vil slette hele handelen i {h['ticker']}? "
+                       "Dette kan ikke angres.")
+            b1, b2 = st.columns(2)
+            if b1.button("Ja, slett", key=f"ja_slett_handel_{h['id']}", type="primary"):
+                try:
+                    lager.slett_handel(h["id"])
+                    st.session_state.pop("handter_id", None)
+                    st.session_state.pop(bekreft_key, None)
+                except db.JournalFeil as e:
+                    st.error(str(e))
+                else:
+                    st.rerun()
+            if b2.button("Avbryt", key=f"nei_slett_handel_{h['id']}"):
+                st.session_state.pop(bekreft_key, None)
                 st.rerun()
 
 
@@ -1004,6 +1018,41 @@ def _tabell_lukket(lukket) -> None:
         "TV": st.column_config.NumberColumn(
             format="%.2f", help="Time Value = prosent avkastning per handelsdag (P/D). Høyere = raskere penger."),
     })
+
+
+def _slett_lukket(lager, lukket) -> None:
+    """Slett en lukket handel som er lagt inn feil (med bekreftelse)."""
+    with st.expander("🗑 Slett en lukket handel (lagt inn feil)"):
+        st.caption("Velg handelen du vil fjerne permanent. Dette sletter også "
+                   "alle delsalg på handelen og kan ikke angres.")
+        valg = {
+            f"{h['ticker']} · kjøpt {_dato_kort(h.get('kjop_dato'))} · "
+            f"lukket {_dato_kort(h.get('slutt_dato'))} "
+            f"({(h.get('r') if h.get('r') is not None else 0):+.2f} R)": h["id"]
+            for h in lukket
+        }
+        etikett = st.selectbox("Handel", list(valg), key="slett_lukket_valg")
+        valgt_id = valg.get(etikett)
+        bekreft_key = f"bekreft_slett_lukket_{valgt_id}"
+        if not st.session_state.get(bekreft_key):
+            if st.button("🗑 Slett valgt handel", key="slett_lukket_knapp"):
+                st.session_state[bekreft_key] = True
+                st.rerun()
+        else:
+            st.warning(f"Sikker på at du vil slette «{etikett}»? Kan ikke angres.")
+            b1, b2 = st.columns(2)
+            if b1.button("Ja, slett", key="ja_slett_lukket", type="primary"):
+                try:
+                    lager.slett_handel(valgt_id)
+                    st.session_state.pop(bekreft_key, None)
+                except db.JournalFeil as e:
+                    st.error(str(e))
+                else:
+                    st.success("Handelen er slettet.")
+                    st.rerun()
+            if b2.button("Avbryt", key="nei_slett_lukket"):
+                st.session_state.pop(bekreft_key, None)
+                st.rerun()
 
 
 # --- uke/måned-statistikk ---------------------------------------------------
