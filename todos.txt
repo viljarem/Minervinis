@@ -64,6 +64,7 @@ CHART-TEGNING – teknisk avklaring (lightweight-charts):
 [ ] M2: Qullamaggie-screener (samme motor-moenster som Minervini:
         episodic pivots, breakouts, parabolske utbrudd, MA10/20-trail).
         Historiske resultat i chart paa samme maate som Minervini.
+        >>> DETALJERT DESIGN NEDERST: se "M2-DESIGN: QULLAMAGGIE" <<<
 [ ] M3: Uke-/maanedsevaluering: fritekst-vurdering per periode (egen
         tabell), ved siden av eksisterende uke/maaned-statistikk.
 [ ] M4: Chart-linjer: vannrette nivaaer + skraalinjer/kanal, lagres i
@@ -200,3 +201,124 @@ FRAMTID
     klar via fri kilde/setup + tagger.
   - Ekte flerbruker: Supabase Auth + Row Level Security, bytt fra
     service_role til anon-noekkel. 'eier'-feltet ligger klart.
+
+
+=======================================================================
+M2-DESIGN: QULLAMAGGIE-SCREENER ("markedsledende", ikke tilfeldig)
+=======================================================================
+Kilde: qullamaggie.com/my-3-timeless-setups... (lest ord for ord).
+Maal: finne de FAA aksjene som LEDER markedet NAA, i presist det
+oeyeblikket de setter opp for neste etappe. Kvalitet > kvantitet.
+Filosofi (Qullamaggies egne ord): "Scan for the 1-2% of stocks that
+are up the most over 1-, 3- og 6-month. This is how you find the
+stocks that are leading right now." Small tap, store vinnere
+(5-20x+ risiko). 25-30 % treff holder hvis vinnerne faar loepe.
+
+-----------------------------------------------------------------------
+KJERNEINNSIKT – HVORFOR DETTE GIR STORE GEVINSTER
+-----------------------------------------------------------------------
+Ledende aksjer beveger seg i "stair steps": stort byks 20-50 %+ →
+sidelengs/pullback (konsolidering som "surfer" paa stigende 10/20-
+dag) → nytt byks. Vi vil kjoepe KANTEN av trinn 2, 3, 4... – ikke
+trinn 1 (for sent da). Edge = tight, definert risiko (stop <= ADR)
+ved utbrudd fra stram konsolidering paa en aksje som ALLEREDE har
+bevist at den kan loepe. Det er DET som gir asymmetrisk R/R.
+
+-----------------------------------------------------------------------
+TRE OPPSETT (presets) – bygges inn som nye Preset-er i konfig.py
+-----------------------------------------------------------------------
+QM1 BREAKOUT (continuation) – hovedoppsettet, mest data-vennlig:
+  Steg 1 – Stort trinn bak oss (momentum-leder):
+    - Topp 1-2 % stigning paa 1M, 3M ELLER 6M i universet (persentil).
+      (Vi har allerede persentil-maskineri fra RS – gjenbruk moenster.)
+    - Konkret byks: en periode siste 1-3 mnd med >= 30-100 % move.
+  Steg 2 – Ryddig konsolidering (det kritiske kvalitetssteget):
+    - Hoyere bunner + STRAMMERE range (kontraksjon) 2 uker - 2 mnd.
+    - Prisen "surfer" stigende 10- og 20-dag (og av og til 50-dag):
+      Close naer/over EMA10/EMA20, EMA10 > EMA20 (helst > EMA50).
+    - Volum toerker inn i konsolideringen (lavere enn under bykset).
+    - Maal paa stramhet: (range siste N dager) / ADR -> lav = bra.
+  Steg 3 – Range-ekspansjon (utbruddet, det vi flagger):
+    - Dagens high bryter konsolideringens topp, volum tar seg opp.
+    - Stop = dagens low; stop-bredde <= ADR% (R/R-mekanikken intakt).
+
+QM2 EPISODIC PIVOT (EP) – nyhets-/resultatgap:
+  - Gap opp >= 10 % + STORT volum (flere x snitt).
+  - Helst IKKE allerede gaatt mye siste 3-6 mnd (overraskelse = edge).
+  - (Resultat-/EPS-vekst er ideelt, men vi har begrenset fundamental
+    live-data – start teknisk: gap% + volum-x + "ikke allerede strukket".
+    Fundamenta kan legges paa senere via motor/fundamenta.py.)
+  - Stop = dagens low, trail 10/20-dag.
+
+QM3 PARABOLSK (kun flagg/observasjon, IKKE kjoepssignal):
+  - Opp 50-100 %+ paa faa dager, 3-5+ groenne dager paa rad.
+  - Dette er Qullamaggies SHORT-oppsett -> for oss: ren "vokt deg /
+    ta gevinst"-flagg paa aksjer vi allerede eier. Ikke long-signal.
+
+-----------------------------------------------------------------------
+NYE INDIKATORER som maa inn (motor/indikatorer.py el. ny modul)
+-----------------------------------------------------------------------
+  - ADR% (Average Daily Range, Qullamaggies #1 volatilitetsmaal):
+      ADR% = (snitt av (High/Low) over 20 dager - 1) * 100.
+      (Qullamaggie bruker ~20d. Hoy ADR% = mer "gunpowder".)
+  - EMA10, EMA20 (og EMA50) – trailing/surfing (vi har SMA, maa EMA).
+  - Momentum-persentil 1M/3M/6M (gjenbruk RS-persentil-moenster, men
+    rene avkastningsvinduer: 21d / 63d / 126d).
+  - Konsoliderings-/stramhetsmaal:
+      range_pct = (maxHigh - minLow)/minLow * 100 siste N dager;
+      tightness = range_pct / ADR%  (lav = stram base).
+      higher_lows = bekreftet stigende bunner i vinduet.
+  - Volum-dynamikk: snittvolum-i-base / snittvolum-i-byks (toerke inn),
+    og utbruddsdag-volum / snitt (surge).
+  - Dollar-/krone-volum likviditetsgulv (har MIN_DAGSOMSETNING alt).
+
+-----------------------------------------------------------------------
+RANGERING ("optimalt store gevinster" – ikke tilfeldig)
+-----------------------------------------------------------------------
+Ett sammensatt QM-score (0-100) per aksje saa de BESTE kommer oeverst,
+ikke bare "passerer/feiler". Forslag til vekter (justeres i konfig):
+  40 %  Momentum-lederskap (beste persentil av 1M/3M/6M)
+  25 %  Konsolideringskvalitet (lav tightness + bekreftede hoyere bunner)
+  15 %  Trend-struktur (Close>EMA10>EMA20>EMA50, 10/20 godt over 50)
+  10 %  Volum-signatur (toerke inn i base, surge paa utbrudd)
+  10 %  ADR%-"mulighetsrom" (nok bevegelse til store R, men ikke kaos)
+Resultat: topp-20 QM-score = dagens reelle markedsledere i setup.
+Vis score + delscorer i tabellen (transparent, som Minervini-kriteriene).
+
+-----------------------------------------------------------------------
+ARKITEKTUR (roerer ALDRI Minervini-screeneren)
+-----------------------------------------------------------------------
+  - Ny modul: motor/qullamaggie.py (speiler minervini.py-moensteret:
+    kriterie_kolonner / score / pivot+stop). Rein, testbar, ingen nett.
+  - konfig.py: nye Preset-er QM_BREAKOUT / QM_EP (+ terskler i egne
+    konstanter, alt justerbart ett sted – som i dag).
+  - screener.py: valgfri "motor"-parameter ELLER egen analyser_qm()
+    som gjenbruker data/indikatorer. Minervini-sti helt uroert.
+  - app.py: QM som nye "Oppsett" i samme dropdown som Minervini-presets.
+    Resultat gaar automatisk til skann_cache (M1 dekker alle oppsett).
+  - Journal: QM-treff logges med kilde="Qullamaggie" + setup=QM1/QM2
+    (fri kilde/setup finnes allerede -> plug-and-play).
+  - Chart: samme historiske visning som Minervini; tegn inn
+    konsolideringsboks + utbruddsnivaa + EMA10/20 (gjenbruk chart-lag).
+
+-----------------------------------------------------------------------
+EXIT-REGLER (bakes inn som forslag i journalen, ikke auto)
+-----------------------------------------------------------------------
+  - Selg 1/3-1/2 etter 3-5 dager, flytt stop til break-even.
+  - Resten trailes paa EMA10 (rask aksje) eller EMA20 (roligere):
+    foerste CLOSE under MA = ut. (Vi viser disse nivaaene live.)
+
+-----------------------------------------------------------------------
+BYGGEREKKEFOELGE (neste oekt)
+-----------------------------------------------------------------------
+  1. ADR% + EMA10/20/50 + momentum-persentil i indikatorer (+ tester).
+  2. motor/qullamaggie.py: QM1 breakout-logikk + QM-score (+ tester
+     paa syntetiske serier: en "ren" leder skal score hoyt, en
+     tilfeldig/fallende skal score lavt).
+  3. QM_BREAKOUT-preset i konfig + koble inn i screener/app som nytt
+     oppsett. Verifiser mot kjente ledere i dagens data.
+  4. QM2 EP (gap+volum) som andre preset.
+  5. QM3 parabolsk som flagg paa aapne posisjoner i journalen.
+  6. Historisk chart-visning + konsolideringsboks/utbruddsnivaa.
+Prinsipp hele veien: liten, testet bit om gangen; Minervini-screeneren
+skal aldri kunne paavirkes. Alt i try/except der det treffer app-laget.
