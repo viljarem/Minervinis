@@ -38,6 +38,8 @@ CHART-TEGNING – teknisk avklaring (lightweight-charts):
          + egen "slett lukket handel"-boks med bekreftelse.)
 [ ] Q5: Statuslinje for data ("Oppdatert kl. 08:15 i dag") saa jeg ser
         at dataene er ferske.
+        (FERDIG - commit <neste>. Statuslinje oeverst i journalen som
+         viser siste handelsdag + sist hentet, groenn/gul etter alder.)
 [ ] Q6: Konsistent fargespraak (groenn/roed/noeytral likt overalt).
 
 -----------------------------------------------------------------------

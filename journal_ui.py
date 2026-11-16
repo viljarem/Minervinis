@@ -286,7 +286,8 @@ def _beregn_handler(handler: list[dict], delsalg_alle: list[dict], skop: dict) -
 # ---------------------------------------------------------------------------
 # HOVEDINNGANG
 # ---------------------------------------------------------------------------
-def vis_dashboard(bors_navn: str, screening, vis_ticker_fn=None) -> None:
+def vis_dashboard(bors_navn: str, screening, vis_ticker_fn=None,
+                  datastatus: dict | None = None) -> None:
     _injiser_stil()
     if not tilgjengelig():
         st.subheader("📒 Journal")
@@ -330,6 +331,7 @@ def vis_dashboard(bors_navn: str, screening, vis_ticker_fn=None) -> None:
     skop = _screening_oppslag(screening)
     beregnet = _beregn_handler(handler, delsalg, skop)
 
+    _vis_datastatus(datastatus)
     _vis_oversikt(beregnet)
     st.divider()
 
@@ -346,6 +348,28 @@ def vis_dashboard(bors_navn: str, screening, vis_ticker_fn=None) -> None:
 # ---------------------------------------------------------------------------
 # 1) OVERSIKT
 # ---------------------------------------------------------------------------
+def _vis_datastatus(datastatus: dict | None) -> None:
+    """Liten statuslinje som viser hvor ferske kursdataene er (fra screeneren).
+
+    Journalen bruker siste skanning til live Pris/RS/TS. Her ser du med ett blikk
+    om de tallene er dagsferske eller gamle, uten å bytte fane.
+    """
+    if not datastatus or datastatus.get("tom"):
+        return
+    siste = datastatus.get("siste_dato")
+    alder = datastatus.get("alder_dager")
+    hentet = datastatus.get("sist_hentet")
+    siste_s = f"{siste:%d.%m.%Y}" if siste is not None else "—"
+    hentet_s = f"{hentet:%d.%m kl. %H:%M}" if hentet is not None else "—"
+    if alder is not None and alder <= 4:
+        st.success(f"✅ Kursdata oppdatert – siste handelsdag **{siste_s}** "
+                   f"· sist hentet {hentet_s} (norsk tid)")
+    else:
+        st.warning(f"⚠️ Kursdata er fra **{siste_s}** "
+                   f"({alder} dager siden) · sist hentet {hentet_s}. "
+                   "Pris/RS/TS i listene kan være utdaterte.")
+
+
 def _vis_oversikt(beregnet: list[dict]) -> None:
     st.subheader("📊 Oversikt")
     stat = tall.statistikk(beregnet)

@@ -4053,7 +4053,8 @@ with fane4:
 # gjenbrukes som felles aksjevisning når du borer ned på en ticker.
 # ---------------------------------------------------------------------------
 with fane5:
-    journal_ui.vis_dashboard(bors_navn, resultat, vis_ticker_detalj)
+    journal_ui.vis_dashboard(bors_navn, resultat, vis_ticker_detalj,
+                             datastatus=_status)
 
 with fane6:
     journal_ui.vis_innstillinger(bors_navn)
