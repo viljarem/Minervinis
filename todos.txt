@@ -51,6 +51,11 @@ CHART-TEGNING – teknisk avklaring (lightweight-charts):
         lagrer hele resultatet (tickere + score/kriterier). Appen leser
         ferdig data ved aapning (ingen ny scan). Lynrask + helhetlig
         mot journal. (Dette er "punkt 2" riktig forstaatt.)
+        (FERDIG - commit <neste>. Ny skann_cache-tabell + motor/
+         skann_cache.py (alt i try/except). Write-through paa alle
+         oppsett ved skann; journalen auto-laster siste lagrede resultat
+         ved aapning (ingen innlogging noedvendig). Screenerens egen
+         Hovedliste er urort. SQL maa kjoeres i Supabase.)
 [ ] M2: Qullamaggie-screener (samme motor-moenster som Minervini:
         episodic pivots, breakouts, parabolske utbrudd, MA10/20-trail).
         Historiske resultat i chart paa samme maate som Minervini.

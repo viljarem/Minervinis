@@ -271,6 +271,32 @@ create trigger innstillinger_oppdatert before update on public.innstillinger
   for each row execute function public.sett_oppdatert();
 
 
+-- ---------------------------------------------------------------------
+-- 12) SKANN_CACHE – ferdig skann-resultat lagret som JSON, delt paa
+--     tvers av enheter. Appen leser ferdig resultat ved aapning saa den
+--     ikke maa regne paa nytt. Dette er bare screener-resultater
+--     (offentlig info), derfor ikke laast bak journal-passordet.
+--     Noekkel: eier + bors + oppsett + datadato (siste handelsdag).
+-- ---------------------------------------------------------------------
+create table if not exists public.skann_cache (
+  eier        text not null default 'meg',
+  bors        text not null,
+  oppsett     text not null,                        -- 'Minervini' / 'Golden Cross' / ...
+  datadato    date not null,                        -- siste handelsdag i datagrunnlaget
+  antall      integer not null default 0,
+  rader       jsonb not null default '[]'::jsonb,   -- hele resultatet som liste av objekter
+  oppdatert   timestamptz not null default now(),
+  primary key (eier, bors, oppsett, datadato)
+);
+
+create index if not exists skann_cache_oppslag_idx
+  on public.skann_cache (bors, oppsett, datadato desc);
+
+drop trigger if exists skann_cache_oppdatert on public.skann_cache;
+create trigger skann_cache_oppdatert before update on public.skann_cache
+  for each row execute function public.sett_oppdatert();
+
+
 -- =====================================================================
 --  SIKKERHET: row level security (RLS)
 -- =====================================================================
@@ -288,7 +314,8 @@ declare
 begin
   foreach t in array array[
     'konto','lister','liste_aksjer','notater','handler',
-    'delsalg','tagger','handel_tagger','analyser','tegninger','innstillinger'
+    'delsalg','tagger','handel_tagger','analyser','tegninger','innstillinger',
+    'skann_cache'
   ]
   loop
     execute format('alter table public.%I enable row level security;', t);

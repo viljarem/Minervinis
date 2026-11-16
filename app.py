@@ -18,6 +18,7 @@ import streamlit.components.v1 as components
 import json
 
 from motor import konfig, data as datamod, fundamenta, indikatorer, minervini, posisjon, screener, sektor, univers, vcp, aksjeinfo, trendscore
+from motor import skann_cache
 import journal_ui
 
 # TradingViews lightweight-charts (testfane). Pakket i try/except så appen aldri
@@ -3040,18 +3041,37 @@ with st.sidebar:
     journal_ui.sidebar_las()
 
 # Hva skal skanningen lete etter? Styres av «Oppsett»-dropdownen.
+_cache_datadato = _status.get("siste_dato") if not _status.get("tom") else None
+
+
+def _skann_skriv_cache(oppsett_navn, df) -> None:
+    """Write-through: lagre et ferdig skann-resultat til Supabase (M1).
+
+    Deler resultatet med alle enheter. ALT er pakket i try/except – feiler
+    Supabase, merker skanningen ingenting og alt virker som før.
+    """
+    try:
+        if df is not None and not getattr(df, "empty", True) and _cache_datadato is not None:
+            skann_cache.lagre(bors_navn, oppsett_navn, _cache_datadato, df)
+    except Exception:
+        pass
+
+
 if er_golden:
     gc_resultat = kjor_golden_cross(bors_navn, versjon) if skannet_na else None
+    _skann_skriv_cache("Golden Cross", gc_resultat)
     resultat = None
     ipo_resultat = None
     ts_resultat = None
 elif er_trendscore:
     ts_resultat = kjor_trendscore(bors_navn, versjon) if skannet_na else None
+    _skann_skriv_cache("TrendScore", ts_resultat)
     gc_resultat = None
     resultat = None
     ipo_resultat = None
 elif er_ipo:
     ipo_resultat = kjor_nye_ipoer(bors_navn, versjon) if skannet_na else None
+    _skann_skriv_cache("Nye IPO-er", ipo_resultat)
     gc_resultat = None
     resultat = None
     ts_resultat = None
@@ -3063,6 +3083,23 @@ else:
         resultat = kjor_screening_retrospektiv(bors_navn, preset_navn, pd.Timestamp(bruker_dato), versjon)
     else:
         resultat = kjor_screening(bors_navn, preset_navn, versjon) if skannet_na else None
+        _skann_skriv_cache(preset_navn, resultat)
+
+# Journalen: bruk ferskt skann hvis det finnes, ellers auto-last siste lagrede
+# resultat fra Supabase (M1). Journalens dataaksess er robust mot JSON-runder,
+# så dette rører ALDRI screenerens egen Hovedliste-visning.
+journal_screening = resultat
+if journal_screening is None:
+    try:
+        if _cache_datadato is not None:
+            _auto = skann_cache.hent(bors_navn, preset_navn, _cache_datadato)
+            if _auto is None or _auto.empty:
+                _par = skann_cache.hent_siste(bors_navn, preset_navn)
+                _auto = _par[0] if _par else None
+            if _auto is not None and not _auto.empty:
+                journal_screening = _auto
+    except Exception:
+        journal_screening = resultat
 
 fane1, fane2, fane3, fane4, fane5, fane6 = st.tabs(
     ["📋 Hovedliste", "📊 Chart", "🔎 Søk", "🌡️ Markedshelse", "📒 Journal", "⚙️ Innstillinger"])
@@ -4058,10 +4095,10 @@ with fane5:
     # igjen i minnet paa Streamlit Cloud for en reboot).
     import inspect as _inspect
     if "datastatus" in _inspect.signature(journal_ui.vis_dashboard).parameters:
-        journal_ui.vis_dashboard(bors_navn, resultat, vis_ticker_detalj,
+        journal_ui.vis_dashboard(bors_navn, journal_screening, vis_ticker_detalj,
                                  datastatus=_status)
     else:
-        journal_ui.vis_dashboard(bors_navn, resultat, vis_ticker_detalj)
+        journal_ui.vis_dashboard(bors_navn, journal_screening, vis_ticker_detalj)
 
 with fane6:
     journal_ui.vis_innstillinger(bors_navn)
