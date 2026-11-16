@@ -586,7 +586,10 @@ def _notat_skjema(lager, forhandsvalgt: str | None, key: str) -> None:
             ticker = forhandsvalgt
             st.caption(f"Notat for **{forhandsvalgt}**")
         else:
-            ticker = st.text_input("Ticker", placeholder="EQNR")
+            ticker = st.text_input(
+                "Ticker", placeholder="EQNR.OL eller AAPL",
+                help="Skriv tickeren akkurat slik du vil ha den – "
+                     "for Oslo-aksjer tar du med .OL selv.")
         tekst = st.text_area("Notat", placeholder="Hva ser du? Hva er planen?", height=100)
         bors = st.session_state.get("bors_navn", "Oslo Børs")
         if st.form_submit_button("Lagre notat", type="primary"):
@@ -594,7 +597,10 @@ def _notat_skjema(lager, forhandsvalgt: str | None, key: str) -> None:
                 st.warning("Både ticker og tekst må fylles inn.")
             else:
                 try:
-                    lager.lag_notat(ticker, bors, tekst)
+                    # Forhaandsvalgt ticker er allerede normalisert; frie notat
+                    # lagres akkurat slik de skrives (ingen auto .OL).
+                    lager.lag_notat(ticker, bors, tekst,
+                                    normaliser=bool(forhandsvalgt))
                 except db.JournalFeil as e:
                     st.error(str(e))
                 else:

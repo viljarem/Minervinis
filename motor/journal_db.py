@@ -220,9 +220,13 @@ class Lager:
             sti = f"/rest/v1/notater?ticker=eq.{ticker}&select=*&order=opprettet.desc"
         return self._kall("GET", sti)
 
-    def lag_notat(self, ticker: str, bors: str, tekst: str) -> dict:
-        body = {"eier": EIER, "ticker": normaliser_ticker(ticker, bors),
-                "bors": bors, "tekst": tekst or ""}
+    def lag_notat(self, ticker: str, bors: str, tekst: str,
+                  normaliser: bool = True) -> dict:
+        # normaliser=False lagrer tickeren akkurat slik den skrives (kun
+        # trimmet + store bokstaver), uten aa tvinge paa .OL-endingen.
+        t = (normaliser_ticker(ticker, bors) if normaliser
+             else (ticker or "").strip().upper())
+        body = {"eier": EIER, "ticker": t, "bors": bors, "tekst": tekst or ""}
         rader = self._kall("POST", "/rest/v1/notater", body, prefer="return=representation")
         return rader[0] if rader else {}
 
