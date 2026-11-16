@@ -21,11 +21,25 @@ import streamlit as st
 from motor import journal_db as db
 from motor import journal_tall as tall
 
+# ---------------------------------------------------------------------------
+# Konsistent fargespråk – ett sted for hele journalen.
+#   POS  = positivt/opp (grønn)   NEG = negativt/ned (rød)
+#   AKSENT = nøytral handling/kurver (blå)   VARSEL = gul   NOYTRAL = grå
+# Bruk disse overalt (tabeller, kort, chart, lister) så alt matcher.
+# ---------------------------------------------------------------------------
+FARGER = {
+    "pos": "#16a34a",      # grønn – gevinst/opp
+    "neg": "#dc2626",      # rød – tap/ned
+    "aksent": "#3b82f6",   # blå – nøytral aksent/kurver
+    "varsel": "#f59e0b",   # gul – advarsel/høy alert
+    "noytral": "#6b7280",  # grå – nøytral/parkert
+}
+
 # Tre forslag som opprettes FØRSTE gang (du kan omdøpe/slette fritt).
 START_LISTER = [
-    ("Watchlist", "#3b82f6", 0),
-    ("High alert", "#f59e0b", 1),
-    ("Parkert", "#6b7280", 2),
+    ("Watchlist", FARGER["aksent"], 0),
+    ("High alert", FARGER["varsel"], 1),
+    ("Parkert", FARGER["noytral"], 2),
 ]
 
 # Standard setup-/trigger-valg (fritt i tillegg, så du er ikke låst til disse).
@@ -419,7 +433,7 @@ def _vis_oversikt(beregnet: list[dict]) -> None:
         df["dato"] = pd.to_datetime(df["dato"])
         df = df.set_index("dato")[["kum_r"]].rename(columns={"kum_r": "Kumulativ R"})
         st.caption("Porteføljekurve – kumulativ R fra lukkede handler:")
-        st.area_chart(df, height=220, color="#3b82f6")
+        st.area_chart(df, height=220, color=FARGER["aksent"])
     else:
         st.caption("📈 Porteføljekurven tegnes når du har lukket din første handel.")
 
@@ -570,7 +584,7 @@ def _administrer_lister(lager, lister) -> None:
     with c1.popover("＋ Ny liste", width="stretch"):
         with st.form("ny_liste", clear_on_submit=True):
             navn = st.text_input("Navn", placeholder="f.eks. Momentum")
-            farge = st.color_picker("Farge", value="#3b82f6")
+            farge = st.color_picker("Farge", value=FARGER["aksent"])
             if st.form_submit_button("Opprett", type="primary"):
                 if not navn.strip():
                     st.warning("Gi listen et navn.")
@@ -767,9 +781,9 @@ def _farg_tall(df: pd.DataFrame, kolonner: list[str]):
         except (TypeError, ValueError):
             return ""
         if f > 0:
-            return "color: #16a34a; font-weight: 600;"
+            return f"color: {FARGER['pos']}; font-weight: 600;"
         if f < 0:
-            return "color: #dc2626; font-weight: 600;"
+            return f"color: {FARGER['neg']}; font-weight: 600;"
         return ""
     finnes = [k for k in kolonner if k in df.columns]
     return df.style.map(_stil, subset=finnes)
@@ -893,7 +907,7 @@ def _kort_apne(lager, apne, skop) -> None:
                 m[1].markdown(f"**{naa:.2f}**" if naa else "—")
                 m[2].caption("P&L")
                 if pnl is not None:
-                    f = "#16a34a" if pnl >= 0 else "#dc2626"
+                    f = FARGER["pos"] if pnl >= 0 else FARGER["neg"]
                     m[2].markdown(f"<b style='color:{f}'>{pnl:+,.0f}</b>".replace(",", " "),
                                   unsafe_allow_html=True)
                 else:
@@ -1131,7 +1145,7 @@ def _vis_periode_statistikk(lukket: list[dict]) -> None:
         # Søyler: sum R per periode (stigende tid for lesbarhet).
         kurve = df[["Periode", "Sum R"]].set_index("Periode").sort_index()
         st.caption("Sum R per periode:")
-        st.bar_chart(kurve, height=200, color="#3b82f6")
+        st.bar_chart(kurve, height=200, color=FARGER["aksent"])
 
 
 def _kjop_skjema(lager, bors_navn, forhandsvalgt: str | None, key: str) -> None:
@@ -1201,7 +1215,7 @@ def _bygg_handel_data(lager, ticker, bors_navn) -> dict | None:
             kurs = h.get("kjop_kurs")
             markorer.append({
                 "time": str(h["kjop_dato"])[:10], "position": "belowBar",
-                "color": "#16a34a", "shape": "arrowUp",
+                "color": FARGER["pos"], "shape": "arrowUp",
                 "text": f"Kjøp{(' ' + format(kurs, '.2f')) if kurs else ''}",
             })
         for d in per_handel.get(h["id"], []):
@@ -1209,7 +1223,7 @@ def _bygg_handel_data(lager, ticker, bors_navn) -> dict | None:
                 sk = d.get("salg_kurs")
                 markorer.append({
                     "time": str(d["salg_dato"])[:10], "position": "aboveBar",
-                    "color": "#dc2626", "shape": "arrowDown",
+                    "color": FARGER["neg"], "shape": "arrowDown",
                     "text": f"Salg{(' ' + format(sk, '.2f')) if sk else ''}",
                 })
 

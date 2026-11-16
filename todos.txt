@@ -41,6 +41,8 @@ CHART-TEGNING – teknisk avklaring (lightweight-charts):
         (FERDIG - commit <neste>. Statuslinje oeverst i journalen som
          viser siste handelsdag + sist hentet, groenn/gul etter alder.)
 [ ] Q6: Konsistent fargespraak (groenn/roed/noeytral likt overalt).
+        (FERDIG - commit <neste>. Sentral FARGER-palett i journal_ui.py;
+         alle tabeller/kort/chart/markoerer/lister peker paa den.)
 
 -----------------------------------------------------------------------
 🟡 MELLOMSTORE
