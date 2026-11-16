@@ -4053,8 +4053,15 @@ with fane4:
 # gjenbrukes som felles aksjevisning når du borer ned på en ticker.
 # ---------------------------------------------------------------------------
 with fane5:
-    journal_ui.vis_dashboard(bors_navn, resultat, vis_ticker_detalj,
-                             datastatus=_status)
+    # Bakoverkompatibelt: send datastatus kun hvis denne versjonen av
+    # journal_ui stotter det (unngaar TypeError hvis en gammel modul henger
+    # igjen i minnet paa Streamlit Cloud for en reboot).
+    import inspect as _inspect
+    if "datastatus" in _inspect.signature(journal_ui.vis_dashboard).parameters:
+        journal_ui.vis_dashboard(bors_navn, resultat, vis_ticker_detalj,
+                                 datastatus=_status)
+    else:
+        journal_ui.vis_dashboard(bors_navn, resultat, vis_ticker_detalj)
 
 with fane6:
     journal_ui.vis_innstillinger(bors_navn)
