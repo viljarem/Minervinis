@@ -3064,7 +3064,8 @@ else:
     else:
         resultat = kjor_screening(bors_navn, preset_navn, versjon) if skannet_na else None
 
-fane1, fane2, fane3, fane4, fane5 = st.tabs(["📋 Hovedliste", "📊 Chart", "🔎 Søk", "🌡️ Markedshelse", "📒 Journal"])
+fane1, fane2, fane3, fane4, fane5, fane6 = st.tabs(
+    ["📋 Hovedliste", "📊 Chart", "🔎 Søk", "🌡️ Markedshelse", "📒 Journal", "⚙️ Innstillinger"])
 
 # Gjør valgt børs tilgjengelig for journal-dagboka.
 st.session_state["bors_navn"] = bors_navn
@@ -4053,4 +4054,7 @@ with fane4:
 # ---------------------------------------------------------------------------
 with fane5:
     journal_ui.vis_dashboard(bors_navn, resultat, vis_ticker_detalj)
+
+with fane6:
+    journal_ui.vis_innstillinger(bors_navn)
 

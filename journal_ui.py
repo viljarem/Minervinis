@@ -38,6 +38,39 @@ SETUP_FARGE = {
     "Cup & handle": "orange", "Pullback": "blue", "Momentum": "red", "Annet": "gray",
 }
 
+# Nokler i innstillinger-tabellen (Supabase) for redigerbare tagger.
+NOKKEL_SETUP = "setup_valg"
+NOKKEL_TRIGGER = "trigger_valg"
+
+
+def _tagg_liste(lager, nokkel: str, standard: list[str]) -> list[str]:
+    """Henter en redigerbar taggliste fra Supabase (cachet i session).
+
+    Faller tilbake til standardlista hvis journalen ikke er koblet til eller
+    innstillinger-tabellen ikke finnes ennaa. Da virker alt som foer.
+    """
+    buf = st.session_state.setdefault("_tagg_cache", {})
+    if nokkel in buf:
+        return buf[nokkel]
+    verdi = standard
+    if lager is not None:
+        try:
+            lagret = lager.hent_innstilling(nokkel, None)
+            if isinstance(lagret, list) and lagret:
+                verdi = [str(x) for x in lagret]
+        except db.JournalFeil:
+            verdi = standard
+    buf[nokkel] = verdi
+    return verdi
+
+
+def hent_setup_valg(lager=None) -> list[str]:
+    return _tagg_liste(lager, NOKKEL_SETUP, SETUP_VALG)
+
+
+def hent_trigger_valg(lager=None) -> list[str]:
+    return _tagg_liste(lager, NOKKEL_TRIGGER, TRIGGER_VALG)
+
 
 # ---------------------------------------------------------------------------
 # Moderne stil – diskret CSS som følger app-temaet (lys/mørk)
@@ -960,8 +993,8 @@ def _kjop_skjema(lager, bors_navn, forhandsvalgt: str | None, key: str) -> None:
         stop = p2.number_input("Stop", min_value=0.0, step=0.1, format="%.2f")
         mal = p3.number_input("Mål", min_value=0.0, step=0.1, format="%.2f")
         s1, s2 = st.columns(2)
-        setup = s1.selectbox("Setup", SETUP_VALG)
-        trigger = s2.selectbox("Trigger", TRIGGER_VALG)
+        setup = s1.selectbox("Setup", hent_setup_valg(lager))
+        trigger = s2.selectbox("Trigger", hent_trigger_valg(lager))
         notat = st.text_area("Notat (valgfritt)", height=70)
         if st.form_submit_button("Loggfør kjøp", type="primary"):
             if not (ticker or "").strip() or kjop_kurs <= 0 or antall <= 0:
@@ -1119,3 +1152,111 @@ def _dato_kort(iso) -> str:
         return datetime.fromisoformat(str(iso).replace("Z", "+00:00")).strftime("%d.%m.%y")
     except (ValueError, TypeError):
         return str(iso)[:10]
+
+
+# ---------------------------------------------------------------------------
+# INNSTILLINGER (egen fane) – rydder sidebaren og samler valg
+# ---------------------------------------------------------------------------
+def _rediger_tagger(lager, tittel: str, nokkel: str, standard: list[str]) -> None:
+    """Redigerbar taggliste lagret i Supabase (synkes paa tvers av enheter)."""
+    valg = hent_setup_valg(lager) if nokkel == NOKKEL_SETUP else hent_trigger_valg(lager)
+    st.markdown(f"**{tittel}**")
+
+    def _lagre(ny_liste: list[str]) -> None:
+        rene = []
+        for t in ny_liste:
+            t = (t or "").strip()
+            if t and t not in rene:
+                rene.append(t)
+        try:
+            lager.sett_innstilling(nokkel, rene)
+        except db.JournalFeil as e:
+            st.error(f"Kunne ikke lagre: {e}")
+            return
+        st.session_state.get("_tagg_cache", {}).pop(nokkel, None)
+        st.rerun()
+
+    if valg:
+        for i, t in enumerate(valg):
+            c1, c2 = st.columns([6, 1])
+            c1.write(f"• {t}")
+            if c2.button("🗑", key=f"tagdel_{nokkel}_{i}", help=f"Fjern «{t}»"):
+                _lagre([x for x in valg if x != t])
+    else:
+        st.caption("Ingen tagger ennå.")
+
+    with st.form(f"legg_tagg_{nokkel}", clear_on_submit=True):
+        c1, c2 = st.columns([4, 1])
+        ny = c1.text_input("Ny tag", key=f"ny_tagg_{nokkel}",
+                           label_visibility="collapsed", placeholder="Legg til ny …")
+        if c2.form_submit_button("＋ Legg til", width="stretch"):
+            if (ny or "").strip():
+                _lagre(valg + [ny.strip()])
+
+    if valg != standard:
+        if st.button("↩︎ Tilbakestill til standard", key=f"nullstill_{nokkel}"):
+            _lagre(list(standard))
+
+
+def vis_innstillinger(bors_navn: str) -> None:
+    """Samleside for innstillinger. Rydder sidebaren – alt valgfritt på ett sted."""
+    _injiser_stil()
+    st.subheader("⚙️ Innstillinger")
+
+    lager = _lager()
+
+    # --- Redigerbare tagger (krever tilkoblet + opplåst journal) ---
+    with st.container(border=True):
+        st.markdown("### 🏷️ Tagger for handler")
+        st.caption("Rediger setup- og trigger-valgene du får når du loggfører kjøp. "
+                   "Lagres i databasen, så de er like på telefon, Mac og PC.")
+        if not tilgjengelig():
+            st.info("Koble til journalen (se fanen «Journal») for å redigere tagger.")
+        elif not innlogget():
+            st.info("🔒 Lås opp journalen i menyen til venstre for å redigere tagger.")
+        else:
+            k1, k2 = st.columns(2)
+            with k1:
+                _rediger_tagger(lager, "Setup", NOKKEL_SETUP, SETUP_VALG)
+            with k2:
+                _rediger_tagger(lager, "Trigger", NOKKEL_TRIGGER, TRIGGER_VALG)
+
+    # --- Egne tickere (likviditets-/universfil) ---
+    with st.container(border=True):
+        st.markdown("### 📄 Egne tickere (universfil)")
+        st.caption("Dine ekstra tickere i data/univers.txt, i tillegg til den "
+                   "auto-hentede børslista. Én ticker per linje (f.eks. AAPL eller NHY.OL).")
+        from motor import univers
+        try:
+            naavaerende = univers.les_manuelle()
+        except Exception as e:                       # robusthet – aldri krasj siden
+            naavaerende = []
+            st.warning(f"Klarte ikke lese universfila: {e}")
+        with st.form("egne_tickere", clear_on_submit=False):
+            tekst = st.text_area("Tickere", value="\n".join(naavaerende), height=160,
+                                 label_visibility="collapsed")
+            if st.form_submit_button("💾 Lagre tickere", type="primary"):
+                linjer = [l.strip() for l in (tekst or "").splitlines()]
+                try:
+                    lagret = univers.skriv_manuelle(linjer)
+                except Exception as e:
+                    st.error(f"Kunne ikke lagre: {e}")
+                else:
+                    st.success(f"Lagret {len(lagret)} tickere. "
+                               "De er med ved neste skanning.")
+        st.caption("ℹ️ Endringen gjelder lokalt og tas med i neste skanning. "
+                   "På nettutgaven (Streamlit Cloud) nullstilles fila ved ny oppstart – "
+                   "der styrer roboten universet.")
+
+    # --- Generelt / status ---
+    with st.container(border=True):
+        st.markdown("### 🧭 Generelt")
+        st.write(f"Valgt børs: **{bors_navn}**")
+        konf = _konf()
+        if konf is None:
+            st.caption("Journal-database: ikke koblet til.")
+        elif innlogget():
+            st.caption("Journal-database: ✅ tilkoblet og låst opp.")
+        else:
+            st.caption("Journal-database: tilkoblet (lås opp i menyen for full tilgang).")
+

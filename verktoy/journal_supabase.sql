@@ -253,6 +253,24 @@ create trigger tegninger_oppdatert before update on public.tegninger
   for each row execute function public.sett_oppdatert();
 
 
+-- ---------------------------------------------------------------------
+-- 11) INNSTILLINGER – enkel nokkel/verdi-lagring (JSON) per eier.
+--     Brukes til redigerbare setup-/trigger-tagger m.m. som da synkes
+--     paa tvers av telefon, Mac og PC. Appen takler at tabellen mangler.
+-- ---------------------------------------------------------------------
+create table if not exists public.innstillinger (
+  eier       text not null default 'meg',
+  nokkel     text not null,
+  verdi      jsonb not null default 'null'::jsonb,
+  oppdatert  timestamptz not null default now(),
+  primary key (eier, nokkel)
+);
+
+drop trigger if exists innstillinger_oppdatert on public.innstillinger;
+create trigger innstillinger_oppdatert before update on public.innstillinger
+  for each row execute function public.sett_oppdatert();
+
+
 -- =====================================================================
 --  SIKKERHET: row level security (RLS)
 -- =====================================================================
@@ -270,7 +288,7 @@ declare
 begin
   foreach t in array array[
     'konto','lister','liste_aksjer','notater','handler',
-    'delsalg','tagger','handel_tagger','analyser','tegninger'
+    'delsalg','tagger','handel_tagger','analyser','tegninger','innstillinger'
   ]
   loop
     execute format('alter table public.%I enable row level security;', t);

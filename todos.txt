@@ -22,10 +22,13 @@ CHART-TEGNING – teknisk avklaring (lightweight-charts):
 -----------------------------------------------------------------------
 🟢 QUICK WINS (smaa, stor effekt – tas foerst)
 -----------------------------------------------------------------------
-[ ] Q1: Fjern auto ".OL"-ending naar jeg skriver notat (skriv ticker
-        manuelt). Liten endring.
+[x] Q1: Fjern auto ".OL"-ending naar jeg skriver notat (skriv ticker
+        manuelt). Liten endring. (FERDIG - commit 1c2452e)
 [ ] Q2: Innstillinger-side (ny fane). Samle: tags-redigering fra
         listevalg, likviditetsfiler, generelle valg. Rydd sidebaren.
+        (DELVIS FERDIG: ny fane med redigerbare setup/trigger-tagger
+         (Supabase-synk), egne tickere (univers.txt), generelt-status.
+         Gjenstaar: flytte mer fra sidebaren hit om oensket.)
 [ ] Q3: Auto-portefoelje-lister: "Portefoelje" = aktive handler,
         "Lukket portefoelje" = lukkede. Genereres fra handler-tabellen.
 [ ] Q4: Slette fullfoerte/feil-lagde handler (full CRUD + bekreftelse).

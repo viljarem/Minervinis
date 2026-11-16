@@ -344,3 +344,28 @@ class Lager:
         self._kall("DELETE",
                    f"/rest/v1/handel_tagger?handel_id=eq.{handel_id}&tag_id=eq.{tag_id}",
                    prefer="return=minimal")
+
+    # ===================================================================
+    # INNSTILLINGER (enkel nokkel/verdi, synkes paa tvers av enheter)
+    # ===================================================================
+    def hent_innstilling(self, nokkel: str, standard=None):
+        """Leser en lagret verdi. Mangler tabellen/raden, returneres standard."""
+        try:
+            rader = self._kall(
+                "GET", f"/rest/v1/innstillinger?nokkel=eq.{urllib.parse.quote(nokkel)}"
+                       "&select=verdi")
+        except JournalFeil:
+            return standard
+        if rader and rader[0].get("verdi") is not None:
+            return rader[0]["verdi"]
+        return standard
+
+    def sett_innstilling(self, nokkel: str, verdi) -> None:
+        """Lagrer en verdi (upsert). Stille hvis tabellen ikke finnes ennaa."""
+        body = {"eier": EIER, "nokkel": nokkel, "verdi": verdi}
+        try:
+            self._kall("POST", "/rest/v1/innstillinger", body,
+                       prefer="resolution=merge-duplicates,return=minimal")
+        except JournalFeil:
+            raise
+

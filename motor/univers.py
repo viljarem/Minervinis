@@ -56,6 +56,19 @@ def les_manuelle(sti: str = konfig.UNIVERS_FIL) -> list[str]:
     return _les_fil(sti)
 
 
+def skriv_manuelle(tickere: list[str], sti: str = konfig.UNIVERS_FIL) -> list[str]:
+    """Skriver DINE egne ekstra tickere til data/univers.txt.
+
+    Rydder bort tomme/duplikater, store bokstaver, sortert. Returnerer den
+    lagrede lista. Roerer ikke den auto-hentede boerslista.
+    """
+    rene = sorted({(t or "").strip().upper() for t in tickere if (t or "").strip()})
+    _skriv_fil(sti, rene,
+               "# Dine egne ekstra tickere (en per linje). Rediger fritt i appen "
+               "under Innstillinger,\n# eller her. Tomme linjer og # ignoreres.")
+    return rene
+
+
 def les_cache(sti: str = konfig.OSLOBORS_CACHE_FIL) -> list[str]:
     """Leser den sist lagrede Oslo Børs-lista (fallback hvis Euronext er nede)."""
     return _les_fil(sti)
