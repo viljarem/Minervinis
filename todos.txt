@@ -1,5 +1,78 @@
-Markedshelse
+=======================================================================
+RUNDE 2 – STROEMLINJEFORMET & INTUITIV APP (brainstorm 16.11.2026)
+=======================================================================
+Maal: raskere, ryddigere, mer helhetlig. Alt lagres i Supabase saa det
+er likt paa telefon/Mac/PC. Rorer ALDRI screeneren paa en maate som
+kan odelegge den (bygges ved siden av / bak feature-flagg der noedvendig).
 
+Avklart i brainstorm:
+  - Punkt 2 (cache): JA. Lagre ferdig scan-resultat i Supabase saa appen
+    leser ferdig data (ingen ny catch/scan ved aapning). Rask + helhetlig.
+  - Drag-drop mellom lister (gammelt 3b): DROPPET. Bruk knapper/dropdown.
+  - Chart-tegning: KUN rette linjer (ikke frihaand). Vannrett + skraa/
+    kanal + enkel tekstboks.
+
+CHART-TEGNING – teknisk avklaring (lightweight-charts):
+  - Vannrett linje (stoette/motstand): enkelt, createPriceLine().
+  - Skraalinje / trendlinje / kanal: mulig via primitives-plugin
+    (to punkter dato+pris; kanal = to parallelle linjer). Lagres i DB.
+  - Tekstboks/etikett: mulig i enkel form (tekst festet til dato/pris
+    via marker/primitiv). Fritt plasserte bokser = mer jobb.
+
+-----------------------------------------------------------------------
+🟢 QUICK WINS (smaa, stor effekt – tas foerst)
+-----------------------------------------------------------------------
+[ ] Q1: Fjern auto ".OL"-ending naar jeg skriver notat (skriv ticker
+        manuelt). Liten endring.
+[ ] Q2: Innstillinger-side (ny fane). Samle: tags-redigering fra
+        listevalg, likviditetsfiler, generelle valg. Rydd sidebaren.
+[ ] Q3: Auto-portefoelje-lister: "Portefoelje" = aktive handler,
+        "Lukket portefoelje" = lukkede. Genereres fra handler-tabellen.
+[ ] Q4: Slette fullfoerte/feil-lagde handler (full CRUD + bekreftelse).
+[ ] Q5: Statuslinje for data ("Oppdatert kl. 08:15 i dag") saa jeg ser
+        at dataene er ferske.
+[ ] Q6: Konsistent fargespraak (groenn/roed/noeytral likt overalt).
+
+-----------------------------------------------------------------------
+🟡 MELLOMSTORE
+-----------------------------------------------------------------------
+[ ] M1: CACHE SCAN-RESULTAT I SUPABASE. Robot/scan kjoerer én gang →
+        lagrer hele resultatet (tickere + score/kriterier). Appen leser
+        ferdig data ved aapning (ingen ny scan). Lynrask + helhetlig
+        mot journal. (Dette er "punkt 2" riktig forstaatt.)
+[ ] M2: Qullamaggie-screener (samme motor-moenster som Minervini:
+        episodic pivots, breakouts, parabolske utbrudd, MA10/20-trail).
+        Historiske resultat i chart paa samme maate som Minervini.
+[ ] M3: Uke-/maanedsevaluering: fritekst-vurdering per periode (egen
+        tabell), ved siden av eksisterende uke/maaned-statistikk.
+[ ] M4: Chart-linjer: vannrette nivaaer + skraalinjer/kanal, lagres i
+        Supabase saa de henger igjen paa tvers av enheter.
+[ ] M5: Global ticker-soek oeverst → hopp rett til detaljvisning
+        (chart + info + notat + handler). Mindre klikking.
+[ ] M6: Hurtig-handling pr. ticker (lik overalt): 👁 chart / ➕ liste /
+        📝 notat / 💰 logg handel. Fra screener → journal med ett klikk.
+[ ] M7: Dashboard-"helse" oeverst: aapne posisjoner, samlet heat,
+        neste stop-nivaaer. Ett blikk = kontroll.
+
+-----------------------------------------------------------------------
+🔴 STOERRE PROSJEKTER
+-----------------------------------------------------------------------
+[ ] S1: "Scan hele boers"-funksjon (hele universet, jeg sorterer
+        manuelt). Treg (mange nedlastinger) – byg paa cache (M1).
+[ ] S2: Varsler/flagg (proaktivt): "naermer seg stop", "brutt MA50".
+[ ] S3: Tekstboks/annotasjon fritt plassert i chart (utvidelse av M4).
+[ ] S5: Auto-backup av journal (CSV → Supabase Storage).
+[ ] S6: Mobilvennlig layout-gjennomgang (stable kolonner, store
+        trykkflater – jeg bruker telefon mye).
+
+Rekkefoelge-forslag: Q1-Q6 foerst (rask effekt), deretter M1 (cache)
+som laaser opp S1, saa M2 (Qullamaggie) + M3-M7, til slutt S1-S6.
+
+=======================================================================
+
+
+Markedshelse
+Mulighet til legge på egne SMA linjer
 trendscore, kan man få ett system på å oppdage de som stiger, viser mest styrke??
 
 se over fundamentale data
