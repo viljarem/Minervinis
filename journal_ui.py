@@ -699,14 +699,33 @@ def _vis_en_liste(lager, liste, alle_lister, aksjer, bors_navn, skop,
                                    key=f"nys_{liste['id']}")
             mal = c4.number_input("Mål", min_value=0.0, step=0.1, format="%.2f",
                                   key=f"nym_{liste['id']}")
+            kommentar = st.text_area(
+                "Kommentar (valgfritt)", key=f"nyk_{liste['id']}", height=80,
+                placeholder="Hva ser du? Plan, nivåer, hvorfor den er på lista …")
+            bilde_fil = st.file_uploader(
+                "Chart-bilde (valgfritt, PNG/JPG)", type=["png", "jpg", "jpeg"],
+                key=f"nyb_{liste['id']}",
+                help="Lagres i databasen og vises som miniatyr i tabellen. "
+                     "Hold filen under ~1,7 MB.")
             if st.form_submit_button("Legg til", type="primary"):
                 if not ticker.strip():
                     st.warning("Skriv inn en ticker.")
                 else:
+                    bilde_uri = None
+                    if bilde_fil is not None:
+                        _data = bilde_fil.getvalue()
+                        if len(_data) > 1_800_000:
+                            st.warning("Bildet er for stort (>1,7 MB) – aksjen legges til "
+                                       "uten bilde. Last opp et mindre bilde etterpå.")
+                        else:
+                            import base64
+                            _mime = bilde_fil.type or "image/png"
+                            bilde_uri = f"data:{_mime};base64," + base64.b64encode(_data).decode()
                     try:
                         status = lager.legg_til_aksje(
                             liste["id"], ticker, bors_navn,
-                            pivot=pivot or None, stop=stop or None, mal=mal or None)
+                            pivot=pivot or None, stop=stop or None, mal=mal or None,
+                            kommentar=(kommentar.strip() or None), bilde=bilde_uri)
                     except db.JournalFeil as e:
                         st.error(str(e))
                     else:

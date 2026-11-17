@@ -181,7 +181,8 @@ class Lager:
         return self._kall("GET", sti)
 
     def legg_til_aksje(self, liste_id: str, ticker: str, bors: str,
-                       pivot=None, stop=None, mal=None) -> str:
+                       pivot=None, stop=None, mal=None,
+                       kommentar=None, bilde=None) -> str:
         """Returnerer 'ny' eller 'finnes' (aksjen lå allerede på lista)."""
         body = {
             "eier": EIER, "liste_id": liste_id,
@@ -190,6 +191,10 @@ class Lager:
         for felt, verdi in (("pivot", pivot), ("stop", stop), ("mal", mal)):
             if _tall(verdi) is not None:
                 body[felt] = _tall(verdi)
+        if kommentar:
+            body["kommentar"] = kommentar
+        if bilde:
+            body["bilde"] = bilde
         try:
             self._kall("POST", "/rest/v1/liste_aksjer", body, prefer="return=representation")
             return "ny"
