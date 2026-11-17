@@ -3553,7 +3553,10 @@ def vis_ticker_detalj(sok: str, *, kontekst: str = "sok", handel_data: dict | No
     if vis_klassisk3:
         _k3 = chart_kontroller(kontekst)
     else:
-        _k3 = {f: False for f in LAG_ID}
+        # Standardvisning (hover-fallback): bruk SAMME lag-standarder som det
+        # interaktive chartet (CHART_LAG), slik at bl.a. tegninger vises uten at
+        # du maa huke av "Klassisk chart".
+        _k3 = {_LAG_FLAGG[_n]: _p for _n, _p in CHART_LAG.items()}
         _k3.update(periode="2 år", ukentlig=False)
     periode3 = _k3["periode"]
     ukentlig3 = _k3["ukentlig"]
@@ -4450,7 +4453,10 @@ with fane2:
         if vis_klassisk:
             _k = chart_kontroller("chart")
         else:
-            _k = {f: False for f in LAG_ID}
+            # Standardvisning (hover-fallback): bruk SAMME lag-standarder som det
+            # interaktive chartet (CHART_LAG), slik at MA/52u/VCP/egne SMA og
+            # tegninger vises uten at du maa huke av "Klassisk chart".
+            _k = {_LAG_FLAGG[_n]: _p for _n, _p in CHART_LAG.items()}
             _k.update(periode="2 år", ukentlig=False)
         periode = _k["periode"]
         ukentlig = _k["ukentlig"]
