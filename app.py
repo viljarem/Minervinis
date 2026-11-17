@@ -267,6 +267,7 @@ CHART_LAG = {
     "RS-rating":        False,
     "EPS/omsetning":    False,
     "TrendScore":       False,
+    "Qullamaggie":      True,
 }
 # Oversetter pille-etikett → det interne vis_*-flagget.
 _LAG_FLAGG = {
@@ -275,6 +276,7 @@ _LAG_FLAGG = {
     "Historiske brudd": "vis_hist",   "Golden cross": "vis_golden",
     "Indeks":           "vis_indeks", "RS-rating":    "vis_rs_rating",
     "EPS/omsetning":    "vis_eps",    "TrendScore":   "vis_trendscore",
+    "Qullamaggie":      "vis_qm",
 }
 
 
@@ -1227,7 +1229,8 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                   graf_valuta: str = "",
                   vis_trendscore: bool = False,
                   trendscore_df: pd.DataFrame | None = None,
-                  handel_markorer: list | None = None) -> list | None:
+                  handel_markorer: list | None = None,
+                  qm_overlay: dict | None = None) -> list | None:
     """Bygger data-spesifikasjonen for lightweight-charts.
 
     Tar med alt det gamle Plotly-chartet hadde: candles, MA50/150/200, 52-ukers
@@ -1533,6 +1536,94 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                                        "priceLineVisible": False, "lastValueVisible": True,
                                        "title": "Stop"},
                            "legend": {"label": "Stop", "color": "#ef5350", "kind": "level"}})
+
+        # Qullamaggie-overlay: EMA10/20 (surfing) + konsolideringsboks (range) +
+        # utbruddsnivaa (QM), eller gap-nivaa + stop (EP). Eget lag "qm" slik at
+        # pillen kun dukker opp paa Qullamaggie-/EP-chartene.
+        if qm_overlay:
+            try:
+                _qm_e10 = indikatorer.ema(d["Close"], 10)
+                _qm_e20 = indikatorer.ema(d["Close"], 20)
+                _e10_data = [{"time": ti, "value": round(float(v), 4)}
+                             for ti, v in zip(t, _qm_e10) if pd.notna(v)]
+                _e20_data = [{"time": ti, "value": round(float(v), 4)}
+                             for ti, v in zip(t, _qm_e20) if pd.notna(v)]
+                serier.append({"type": "Line", "data": _e10_data,
+                               "options": {"color": "#26a69a", "lineWidth": 2, "lineStyle": 0,
+                                           "priceLineVisible": False, "lastValueVisible": False},
+                               "legend": {"label": "EMA10", "color": "#26a69a", "kind": "line"},
+                               "layer": "qm"})
+                serier.append({"type": "Line", "data": _e20_data,
+                               "options": {"color": "#fb8c00", "lineWidth": 2, "lineStyle": 0,
+                                           "priceLineVisible": False, "lastValueVisible": False},
+                               "legend": {"label": "EMA20", "color": "#fb8c00", "kind": "line"},
+                               "layer": "qm"})
+
+                # Konsolideringsboks + utbruddsnivaa (QM breakout)
+                _piv = qm_overlay.get("pivot")
+                _blav = qm_overlay.get("base_lav")
+                if _piv and _blav:
+                    _nbase = int(qm_overlay.get("n_base") or konfig.QM_BASE_VINDU)
+                    _base_t = t[-_nbase:] if _nbase < len(t) else t
+                    _piv = float(_piv); _blav = float(_blav)
+                    # Svak gul boks mellom base-lav og pivot over konsolideringen.
+                    serier.append({"type": "Baseline",
+                                   "data": [{"time": ti, "value": _piv} for ti in _base_t],
+                                   "options": {"baseValue": {"type": "price", "price": _blav},
+                                               "topLineColor": "rgba(0,0,0,0)",
+                                               "topFillColor1": "rgba(246,195,67,0.14)",
+                                               "topFillColor2": "rgba(246,195,67,0.14)",
+                                               "bottomLineColor": "rgba(0,0,0,0)",
+                                               "bottomFillColor1": "rgba(0,0,0,0)",
+                                               "bottomFillColor2": "rgba(0,0,0,0)",
+                                               "priceLineVisible": False, "lastValueVisible": False},
+                                   "layer": "qm"})
+                    serier.append({"type": "Line",
+                                   "data": [{"time": ti, "value": _piv} for ti in _base_t],
+                                   "options": {"color": "#f6c343", "lineWidth": 3, "lineStyle": 0,
+                                               "priceLineVisible": False, "lastValueVisible": True,
+                                               "title": "Utbrudd"},
+                                   "legend": {"label": "Utbrudd", "color": "#f6c343", "kind": "level"},
+                                   "layer": "qm"})
+                    serier.append({"type": "Line",
+                                   "data": [{"time": ti, "value": _blav} for ti in _base_t],
+                                   "options": {"color": "#f6c343", "lineWidth": 1, "lineStyle": 2,
+                                               "priceLineVisible": False, "lastValueVisible": False},
+                                   "layer": "qm"})
+
+                # Gap-nivaa + gap-dag markoer (EP)
+                _gapc = qm_overlay.get("gap_close")
+                _gapd = qm_overlay.get("gap_dato")
+                if _gapc:
+                    serier.append({"type": "Line",
+                                   "data": [{"time": ti, "value": float(_gapc)} for ti in t],
+                                   "options": {"color": "#f6c343", "lineWidth": 2, "lineStyle": 0,
+                                               "priceLineVisible": False, "lastValueVisible": True,
+                                               "title": "Gap-nivå"},
+                                   "legend": {"label": "Gap-nivå", "color": "#f6c343", "kind": "level"},
+                                   "layer": "qm"})
+                if _gapd:
+                    _gd = pd.Timestamp(_gapd).strftime("%Y-%m-%d")
+                    if _gd in t_sett:
+                        _eks = hoved.get("markers", [])
+                        hoved["markers"] = sorted(
+                            _eks + [{"time": _gd, "position": "belowBar",
+                                     "color": "#f6c343", "shape": "arrowUp",
+                                     "text": "GAP", "layer": "qm"}],
+                            key=lambda x: x["time"])
+
+                # Felles stop-linje (dagens/gap-dagens low)
+                _stp = qm_overlay.get("stop")
+                if _stp:
+                    serier.append({"type": "Line",
+                                   "data": [{"time": ti, "value": float(_stp)} for ti in t],
+                                   "options": {"color": "#ef5350", "lineWidth": 1, "lineStyle": 2,
+                                               "priceLineVisible": False, "lastValueVisible": True,
+                                               "title": "Stop"},
+                                   "legend": {"label": "Stop", "color": "#ef5350", "kind": "level"},
+                                   "layer": "qm"})
+            except Exception:
+                pass
 
         # Posisjon (long): inngang (blå solid), stop (rød stiplet) og mål (grønn
         # stiplet) som tydelige nivålinjer med pris-etikett til høyre.
@@ -1985,7 +2076,8 @@ def render_chart_spec(spec: list | None, *, key: str, morkt: bool = False,
 # rerun. Valgene huskes i nettleseren (localStorage) på tvers av aksjer.
 LAG_ID = {"vis_ma": "ma", "vis_52u": "52u", "vis_vcp": "vcp", "vis_7av7": "7av7",
           "vis_hist": "hist", "vis_golden": "golden", "vis_indeks": "indeks",
-          "vis_rs_rating": "rs", "vis_eps": "eps", "vis_trendscore": "ts"}
+          "vis_rs_rating": "rs", "vis_eps": "eps", "vis_trendscore": "ts",
+          "vis_qm": "qm"}
 
 
 def chart_interaktiv(serie: pd.DataFrame, res: dict | None, ticker: str, *,
@@ -1993,7 +2085,8 @@ def chart_interaktiv(serie: pd.DataFrame, res: dict | None, ticker: str, *,
                      indeks: pd.DataFrame | None = None, morkt: bool = False,
                      valuta: str = "", hoyde: int = 620, kontekst: str = "hoved",
                      standard: dict | None = None, minervini_lag: bool = True,
-                     handel_markorer: list | None = None) -> bool:
+                     handel_markorer: list | None = None,
+                     qm_overlay: dict | None = None) -> bool:
     """Tegner chartet med innebygde kontroller. Returnerer False hvis det feilet.
 
     kontekst = egen localStorage-nøkkel (så f.eks. golden cross-tabellen husker sine
@@ -2011,6 +2104,7 @@ def chart_interaktiv(serie: pd.DataFrame, res: dict | None, ticker: str, *,
                       indeks_navn=BORS.benchmark, pos=pos, morkt=morkt, tittel=ticker,
                       hoyde=hoyde,
                       handel_markorer=handel_markorer,
+                      qm_overlay=qm_overlay,
                       **_trendscore_chart_kwargs(ticker, True),
                       **_eps_chart_kwargs(ticker, True))
         dag = lag_chart_lwc(serie, res, 100_000, ukentlig=False, **felles)
@@ -2040,7 +2134,7 @@ def chart_interaktiv(serie: pd.DataFrame, res: dict | None, ticker: str, *,
 
 def tabell_chart(serie: pd.DataFrame, res: dict | None, ticker: str, *,
                  kontekst: str, hoyde: int = 460, standard: dict | None = None,
-                 minervini_lag: bool = True) -> bool:
+                 minervini_lag: bool = True, qm_overlay: dict | None = None) -> bool:
     """Interaktivt chart for tabellene (Hovedliste, TrendScore, Golden cross, IPO,
     Markedshelse). Henter RS-historikk og indeks selv (begge bufret)."""
     try:
@@ -2054,7 +2148,8 @@ def tabell_chart(serie: pd.DataFrame, res: dict | None, ticker: str, *,
         _idx = None
     return chart_interaktiv(serie, res, ticker, rs_serie=_rs, indeks=_idx, morkt=MORKT,
                             valuta=VALUTA, hoyde=hoyde, kontekst=kontekst,
-                            standard=standard, minervini_lag=minervini_lag)
+                            standard=standard, minervini_lag=minervini_lag,
+                            qm_overlay=qm_overlay)
 
 
 _INTERAKTIV_CHART_MAL = """
@@ -3426,13 +3521,23 @@ def vis_qullamaggie(qm_resultat):
         st.info(f"Viser de {_maks} første av {len(_qm_valgte)} valgte (for fartens skyld).")
         _qm_valgte = _qm_valgte[:_maks]
     st.subheader(f"📊 Chart for {len(_qm_valgte)} valgte")
+    st.caption("Gul boks = konsolideringen · tykk gul linje = **utbruddsnivå** (pivot) · "
+               "grønn/oransje = EMA10/EMA20 aksjen surfer på · rød stiplet = stop. "
+               "Slå laget av/på med **Qullamaggie**-pillen i chartet.")
     _qm_priser = last_priser(bors_navn, versjon)
     for _tk in _qm_valgte:
         _s = datamod.serie_for(_qm_priser, _tk)
         _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[aktiv_preset_navn])
+        _rad = qm_resultat[qm_resultat["ticker"] == _tk]
+        _ov = None
+        if not _rad.empty:
+            _rd = _rad.iloc[0]
+            _ov = {"pivot": _rd.get("pivot"), "base_lav": _rd.get("base_lav"),
+                   "stop": _rd.get("stop"), "n_base": konfig.QM_BASE_VINDU}
         st.markdown(f"**{_tk}**")
         if not tabell_chart(_s, _r, _tk, kontekst="qm",
-                            standard={"golden": False, "vcp": False, "7av7": False}):
+                            standard={"golden": False, "vcp": False, "7av7": False},
+                            qm_overlay=_ov):
             st.caption("Klarte ikke tegne chart for denne aksjen.")
 
 
@@ -3515,13 +3620,23 @@ def vis_episodic_pivot(ep_resultat):
         st.info(f"Viser de {_maks} første av {len(_ep_valgte)} valgte (for fartens skyld).")
         _ep_valgte = _ep_valgte[:_maks]
     st.subheader(f"📊 Chart for {len(_ep_valgte)} valgte")
+    st.caption("Gul pil = **gap-dagen** · gul linje = gap-dagens sluttkurs · "
+               "grønn/oransje = EMA10/EMA20 å traile på · rød stiplet = stop (gap-dagens low). "
+               "Slå laget av/på med **Qullamaggie**-pillen i chartet.")
     _ep_priser = last_priser(bors_navn, versjon)
     for _tk in _ep_valgte:
         _s = datamod.serie_for(_ep_priser, _tk)
         _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[aktiv_preset_navn])
+        _rad = ep_resultat[ep_resultat["ticker"] == _tk]
+        _ov = None
+        if not _rad.empty:
+            _rd = _rad.iloc[0]
+            _ov = {"gap_close": _rd.get("gap_close"), "gap_dato": _rd.get("gap_dato"),
+                   "stop": _rd.get("stop")}
         st.markdown(f"**{_tk}**")
         if not tabell_chart(_s, _r, _tk, kontekst="ep",
-                            standard={"golden": False, "vcp": False, "7av7": False}):
+                            standard={"golden": False, "vcp": False, "7av7": False},
+                            qm_overlay=_ov):
             st.caption("Klarte ikke tegne chart for denne aksjen.")
 
 

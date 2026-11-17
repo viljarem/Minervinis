@@ -387,8 +387,16 @@ STATUS 17.11:
       _kort_apne. 4 nye tester, 193 totalt groenne. App starter rent.
       Verifisert mot ekte data (selektivt): S&P 1 (APP +82%), Oslo 4
       (NTG +51%/5 groenne/23% over EMA10, 2020, EXTX, KLDVK).
-  [ ] Steg 6 NESTE: historisk chart-visning + konsolideringsboks/
-      utbruddsnivaa.
+  [x] Steg 6 FERDIG: Qullamaggie chart-overlay (lag "qm") i
+      lag_chart_lwc, threadet gjennom chart_interaktiv/tabell_chart.
+      QM-chart: gul konsolideringsboks (base_lav->pivot over base-vinduet)
+      + tykk gul utbruddslinje (pivot) + EMA10 (groenn) / EMA20 (oransje)
+      aksjen surfer paa + roed stiplet stop. EP-chart: gul GAP-pil paa
+      gap-dagen + gul gap-nivaa-linje + EMA10/20 + stop. Slaas av/paa med
+      "Qullamaggie"-pillen (vises kun paa QM/EP-chart via finnes-sjekk).
+      base_lav lagt til i nokkeltall/analyser_qm, gap_close i analyser_ep.
+      193 tester groenne, app starter rent. => M2 KOMPLETT (QM1 breakout +
+      QM2 EP + QM3 parabolsk-flagg + chart-visualisering).
 
 -----------------------------------------------------------------------
 VALIDERT MOT EKTE DATA 16.11 (verktoy/qm_prototype.py – engangstest)

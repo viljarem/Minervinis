@@ -103,6 +103,7 @@ def nokkeltall(d: pd.DataFrame) -> dict | None:
         "mom_3m": mom.get(f"m{konfig.QM_MOM_PERIODER[1]}", np.nan),
         "byks_pct": byks,
         "pivot": pivot,
+        "base_lav": base_lav,
         "avstand_pivot_pct": avstand_pivot,
         "range_pct": range_pct,
         "tightness": tightness,
