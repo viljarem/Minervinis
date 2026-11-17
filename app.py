@@ -3489,12 +3489,98 @@ HELE_BORSEN_HJELP = {
 }
 
 
+# Felt du kan filtrere «Hele borsen» på: visningsnavn -> (df-kolonne, steg, format,
+# hjelpetekst). Alt er tallkolonner, så hvert filter er «minst» (≥) eller «høyst» (≤).
+HB_FILTER_FELT = {
+    "Pris": ("pris", 1.0, "%.2f", "Siste sluttkurs."),
+    "Minervini-score (0–7)": ("score", 1.0, "%.0f", "Antall oppfylte trendkriterier."),
+    "RS-rating (1–99)": ("rs", 1.0, "%.0f", "Relativ styrke mot resten av børsen."),
+    "TrendScore (0–100)": ("trendscore", 1.0, "%.0f", "Styrke og sunnhet i opptrenden."),
+    "Relativt volum (RVol)": ("rel_volum", 0.1, "%.2f", "Siste dags volum / 50-dagers snitt."),
+    "ADR% (daglig svingning)": ("adr_pct", 0.1, "%.1f", "Gjennomsnittlig daglig prosentsving."),
+    "Utvikling 3 mnd (%)": ("utv_3m", 1.0, "%.1f", "Kursutvikling siste ~3 måneder."),
+    "Utvikling 6 mnd (%)": ("utv_6m", 1.0, "%.1f", "Kursutvikling siste ~6 måneder."),
+    "Utvikling 1 år (%)": ("utv_12m", 1.0, "%.1f", "Kursutvikling siste ~12 måneder."),
+    "Innenfor 52u høy (%)": ("pct_fra_52h", 1.0, "%.1f",
+                             "Avstand UNDER 52-ukers høy. «Høyst 20» = maks 20 % under toppen."),
+    "Over 52u lav (%)": ("pct_over_52l", 1.0, "%.1f", "Hvor langt over 52-ukers lav kursen er."),
+    "Dagsomsetning (kr)": ("dagsomsetning", 50000.0, "%.0f",
+                           "Gjennomsnittlig daglig omsetning i kroner."),
+}
+HB_FILTER_OP = {"minst (≥)": "min", "høyst (≤)": "maks"}
+
+
+def _hb_filtrer(df: pd.DataFrame, filtre: list) -> pd.DataFrame:
+    """Bruker de aktive filtrene på hele-børsen-tabellen (returnerer filtrert kopi)."""
+    ut = df
+    for f in filtre:
+        felt = f.get("felt")
+        if felt not in HB_FILTER_FELT:
+            continue
+        kol = HB_FILTER_FELT[felt][0]
+        if kol not in ut.columns:
+            continue
+        verdi = f.get("verdi", 0.0)
+        kolserie = pd.to_numeric(ut[kol], errors="coerce")
+        # NaN sammenlignes alltid False → aksjer uten tall faller ut av filteret.
+        if f.get("op") == "maks":
+            ut = ut[kolserie <= verdi]
+        else:
+            ut = ut[kolserie >= verdi]
+    return ut
+
+
+def _hb_filter_ui() -> list:
+    """Byggeren for avanserte filtre (lagres i session_state). Returnerer aktiv liste."""
+    if "hb_filtre" not in st.session_state:
+        st.session_state.hb_filtre = []
+    with st.expander(f"🔎 Avansert filter ({len(st.session_state.hb_filtre)} aktive)",
+                     expanded=bool(st.session_state.hb_filtre)):
+        st.caption("Legg til så mange kriterier du vil. Hvert kriterium er enten **minst** (≥) "
+                   "eller **høyst** (≤) en verdi. Eksempel: «Innenfor 52u høy – høyst 20» + "
+                   "«Dagsomsetning – minst 500000».")
+        _felter = list(HB_FILTER_FELT.keys())
+        _op_navn = list(HB_FILTER_OP.keys())
+        _fjern_idx = None
+        for _i, _f in enumerate(st.session_state.hb_filtre):
+            c1, c2, c3, c4 = st.columns([4, 3, 3, 1])
+            _felt = c1.selectbox("Indikator", _felter,
+                                 index=_felter.index(_f["felt"]) if _f.get("felt") in _felter else 0,
+                                 key=f"hb_filt_felt_{_i}", label_visibility="collapsed")
+            _opk = c2.selectbox("Retning", _op_navn,
+                                index=0 if _f.get("op", "min") == "min" else 1,
+                                key=f"hb_filt_op_{_i}", label_visibility="collapsed")
+            _steg = HB_FILTER_FELT[_felt][1]
+            _fmt = HB_FILTER_FELT[_felt][2]
+            _verdi = c3.number_input("Verdi", value=float(_f.get("verdi", 0.0)), step=_steg,
+                                     format=_fmt, key=f"hb_filt_verdi_{_i}",
+                                     label_visibility="collapsed")
+            if c4.button("🗑️", key=f"hb_filt_fjern_{_i}", help="Fjern dette filteret"):
+                _fjern_idx = _i
+            st.session_state.hb_filtre[_i] = {
+                "felt": _felt, "op": HB_FILTER_OP[_opk], "verdi": _verdi}
+            st.caption(f"↳ {HB_FILTER_FELT[_felt][3]}")
+        if _fjern_idx is not None:
+            st.session_state.hb_filtre.pop(_fjern_idx)
+            st.rerun()
+        b1, b2 = st.columns([1, 1])
+        if b1.button("➕ Legg til filter", key="hb_filt_legg", width="stretch"):
+            st.session_state.hb_filtre.append({"felt": _felter[0], "op": "min", "verdi": 0.0})
+            st.rerun()
+        if st.session_state.hb_filtre and b2.button("🧹 Nullstill alle", key="hb_filt_null",
+                                                    width="stretch"):
+            st.session_state.hb_filtre = []
+            st.rerun()
+    return st.session_state.hb_filtre
+
+
 def vis_hele_borsen(alle_resultat):
     """Rendrer «Hele borsen»-tabellen i Hovedliste-fanen (alle-modus)."""
     st.markdown("### 📊 Hele børsen")
-    st.caption("Alle aksjer i universet med samtlige indikatorer i én sorterbar tabell – "
-               "ingen filtrering. Klikk på en kolonneoverskrift for å sortere (f.eks. etter "
-               "RS, TrendScore, relativt volum eller utvikling). Uavhengig av Minervini-templaten.")
+    st.caption("Alle aksjer i universet med samtlige indikatorer i én sorterbar tabell. "
+               "Bruk **avansert filter** for å snevre inn (f.eks. innenfor 20 % av 52u-høy og "
+               "dagsomsetning over 500 000), og klikk på en kolonneoverskrift for å sortere. "
+               "Uavhengig av Minervini-templaten.")
     if alle_resultat is None:
         st.info(f"Trykk **🔍 Skann {BORS.navn}** i menyen til venstre for å laste hele børsen. "
                 "(Ingenting skannes automatisk – du velger når.)")
@@ -3502,9 +3588,19 @@ def vis_hele_borsen(alle_resultat):
     if alle_resultat.empty:
         st.info("Fant ingen aksjer med nok historikk til å vises.")
         return
-    st.markdown(f"**{len(alle_resultat)} aksjer** – sortert på TrendScore (fallende) som utgangspunkt.")
+    _filtre = _hb_filter_ui()
+    _vis_df = _hb_filtrer(alle_resultat, _filtre)
+    if _filtre:
+        st.markdown(f"**{len(_vis_df)} av {len(alle_resultat)} aksjer** passerer "
+                    f"{len(_filtre)} filter – sortert på TrendScore (fallende).")
+    else:
+        st.markdown(f"**{len(alle_resultat)} aksjer** – sortert på TrendScore (fallende) "
+                    "som utgangspunkt.")
+    if _vis_df.empty:
+        st.warning("Ingen aksjer passerer filtrene. Løsne på kriteriene over.")
+        return
     _ab_tab = st.dataframe(
-        _formater_hele_borsen(alle_resultat),
+        _formater_hele_borsen(_vis_df),
         width="stretch", hide_index=True, height=640, column_config=HELE_BORSEN_HJELP,
         on_select="rerun", selection_mode="multi-row", key="hele_borsen_tabell",
     )
@@ -3512,7 +3608,7 @@ def vis_hele_borsen(alle_resultat):
                "Minervini-lista). Eller bruk hurtigsøk-feltet øverst for full visning av én aksje.")
 
     _ab_rader = list(getattr(_ab_tab.selection, "rows", []) or [])
-    _ab_valgte = [alle_resultat.iloc[i]["ticker"] for i in _ab_rader if i < len(alle_resultat)]
+    _ab_valgte = [_vis_df.iloc[i]["ticker"] for i in _ab_rader if i < len(_vis_df)]
     if not _ab_valgte:
         st.caption("Ingen rader valgt ennå – huk av i tabellen over for å tegne chart her.")
         return
