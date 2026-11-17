@@ -455,6 +455,47 @@ def screen_ep(priser: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Parabolsk-flagg (QM3) – observasjon på aksjer du EIER, aldri kjøpssignal
+# ---------------------------------------------------------------------------
+def analyser_parabolsk(serie: pd.DataFrame) -> dict | None:
+    """Vurderer om én aksje ser parabolsk ut nå. None hvis for kort/ikke parabolsk.
+
+    Returnerer bare noe når flagget faktisk slår til (parabolsk=True), slik at
+    journalen kan vise et enkelt "vokt deg / ta gevinst"-varsel uten støy.
+    """
+    pb = qullamaggie.er_parabolsk(serie)
+    if pb is None or not pb.get("parabolsk"):
+        return None
+    return {
+        "opp_pct": None if pd.isna(pb["opp_pct"]) else round(float(pb["opp_pct"]), 1),
+        "gronne_rad": int(pb["gronne_rad"]),
+        "over_ema10_pct": None if pd.isna(pb["over_ema10_pct"]) else round(float(pb["over_ema10_pct"]), 1),
+        "pb1": pb["pb1"], "pb2": pb["pb2"], "pb3": pb["pb3"],
+    }
+
+
+def flagg_parabolske(priser: pd.DataFrame, tickere) -> dict:
+    """Returnerer {ticker: parabolsk-info} for de tickerne som er parabolske nå.
+
+    Brukes av journalen til å flagge åpne posisjoner. Tomt dict hvis ingen (eller
+    hvis data mangler) – journalen må aldri krasje av dette.
+    """
+    if priser is None or priser.empty or not tickere:
+        return {}
+    ut = {}
+    for t in tickere:
+        try:
+            res = analyser_parabolsk(datamod.serie_for(priser, t))
+        except Exception:
+            res = None
+        if res is not None:
+            ut[t] = res
+    return ut
+
+
+
+
+# ---------------------------------------------------------------------------
 # Golden cross-screener (SELVSTENDIG – IKKE Minervini-template)
 # ---------------------------------------------------------------------------
 # Denne screeneren leter kun etter forholdet mellom SMA50 og SMA200. Den bryr

@@ -205,3 +205,48 @@ def test_ep_lavt_volum_feiler_ek2():
 def test_ep_lite_gap_gir_none():
     """Gap under 10 % skal ikke regnes som EP i det hele tatt."""
     assert qullamaggie.finn_ep(_serie_med_ep(3, 3.0, strukket=False)) is None
+
+
+# ---------------------------------------------------------------------------
+# Parabolsk (er_parabolsk) – QM3, observasjonsflagg
+# ---------------------------------------------------------------------------
+def _serie_parabolsk() -> pd.DataFrame:
+    """60 dager: rolig flatt, så bratt parabolsk oppgang med grønne dager på rad."""
+    flat = np.full(45, 100.0)
+    # 15 grønne dager på rad, bratt opp til ~+60 %
+    rally = np.array([100.0 * (1.032 ** k) for k in range(1, 16)])
+    close = np.concatenate([flat, rally])
+    d = pd.DataFrame({
+        "Open": close, "High": close * 1.01, "Low": close * 0.99,
+        "Close": close, "Volume": np.full(len(close), 1_000_000.0),
+    }, index=pd.bdate_range("2024-01-01", periods=len(close)))
+    return d
+
+
+def _serie_rolig() -> pd.DataFrame:
+    """60 dager svakt stigende – skal IKKE flagges som parabolsk."""
+    close = np.linspace(100, 108, 60)
+    return pd.DataFrame({
+        "Open": close, "High": close * 1.01, "Low": close * 0.99,
+        "Close": close, "Volume": np.full(60, 1_000_000.0),
+    }, index=pd.bdate_range("2024-01-01", periods=60))
+
+
+def test_parabolsk_for_kort_gir_none():
+    assert qullamaggie.er_parabolsk(_serie_parabolsk().head(20)) is None
+
+
+def test_parabolsk_flagges():
+    pb = qullamaggie.er_parabolsk(_serie_parabolsk())
+    assert pb is not None
+    assert pb["parabolsk"] is True
+    assert pb["pb1"] is True                 # rask, bratt oppgang
+    assert pb["gronne_rad"] >= konfig.PB_GRONNE_MIN
+    assert pb["opp_pct"] >= konfig.PB_OPP_MIN
+
+
+def test_rolig_ikke_parabolsk():
+    pb = qullamaggie.er_parabolsk(_serie_rolig())
+    assert pb is not None
+    assert pb["parabolsk"] is False
+    assert pb["pb1"] is False                 # ingen rask oppgang

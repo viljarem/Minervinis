@@ -171,6 +171,14 @@ EP_FERSK_DAGER = 5          # gapet regnes som "ferskt" i så mange handelsdager
 EP_IKKE_STRUKKET = 50.0     # helst IKKE opp mer enn så mange % siste 6 mnd FØR gapet
 EP_MIN_DAGER = 60           # trenger minst så mange dager (kortere enn breakout)
 
+# Parabolsk (QM3) – KUN et "vokt deg / ta gevinst"-flagg på aksjer du EIER.
+# Dette er Qullamaggies SHORT-oppsett, så for oss er det aldri et kjøpssignal.
+PB_VINDU = 14               # måler den raske oppgangen over så mange handelsdager
+PB_OPP_MIN = 40.0           # opp minst så mange % i vinduet = parabolsk tempo
+PB_GRONNE_MIN = 4           # minst så mange grønne (opp) dager på rad på slutten
+PB_OVER_EMA10 = 10.0        # close minst så mange % over EMA10 = strukket langt ut
+PB_MIN_DAGER = 30           # trenger minst så mange dager for å vurderes
+
 
 # ---------------------------------------------------------------------------
 # Presets (ferdige oppsett du kan velge mellom i nettsiden)

@@ -375,8 +375,20 @@ STATUS 17.11:
       totalt groenne. App starter rent. Verifisert mot ekte data: Oslo
       4 gap (PLT.OL 12%/2.7x), S&P bekreftet 18 ekte EP-er med bredere
       vindu (ABNB/ACN/APP/PTC/IDXX/FSLR/CRM).
-  [ ] Steg 5 NESTE: QM3 parabolsk som flagg paa aapne posisjoner.
-  [ ] Steg 6: historisk chart-visning + konsolideringsboks/utbruddsnivaa.
+  [x] Steg 5 FERDIG: QM3 parabolsk som flagg paa aapne posisjoner i
+      journalen (IKKE kjoepssignal - Qullamaggies short-oppsett blir et
+      "vokt deg / ta gevinst"-varsel). qullamaggie.er_parabolsk (rask
+      oppgang pb1 + groenne dager pb2 + strukket over EMA10 pb3; flagg =
+      pb1 OG (pb2 ELLER pb3)) + PB-konstanter i konfig.
+      screener.analyser_parabolsk / flagg_parabolske. app.py:
+      kjor_parabolsk (cache) regner flagg for aapne tickere, sendes til
+      journal_ui.vis_dashboard (bakoverkompatibelt). journal_ui:
+      _parabolsk_varsel (gul badge + forklaring) paa kortene i
+      _kort_apne. 4 nye tester, 193 totalt groenne. App starter rent.
+      Verifisert mot ekte data (selektivt): S&P 1 (APP +82%), Oslo 4
+      (NTG +51%/5 groenne/23% over EMA10, 2020, EXTX, KLDVK).
+  [ ] Steg 6 NESTE: historisk chart-visning + konsolideringsboks/
+      utbruddsnivaa.
 
 -----------------------------------------------------------------------
 VALIDERT MOT EKTE DATA 16.11 (verktoy/qm_prototype.py – engangstest)

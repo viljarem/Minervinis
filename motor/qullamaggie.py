@@ -204,3 +204,70 @@ def finn_ep(d: pd.DataFrame) -> dict | None:
             }
     return None
 
+
+# ---------------------------------------------------------------------------
+# Parabolsk (QM3) – KUN et observasjonsflagg på aksjer du allerede EIER
+# ---------------------------------------------------------------------------
+# Qullamaggie bruker parabolske bevegelser som SHORT-oppsett. Vi handler ikke
+# short, så for oss er dette aldri et kjøpssignal – det er et "vokt deg / vurder
+# å ta gevinst"-varsel på åpne posisjoner: aksjen har gått parabolsk (rask,
+# bratt oppgang, mange grønne dager på rad, strukket langt over EMA10) og kan
+# stå foran en skarp korreksjon. Alt er rådata, ingen score.
+PB_KRITERIE_KOLONNER = ["pb1", "pb2", "pb3"]
+
+PB_KRITERIE_TEKST = {
+    "pb1": "Rask, bratt oppgang (vindu)",
+    "pb2": "Mange grønne dager på rad",
+    "pb3": "Strukket langt over EMA10",
+}
+
+
+def er_parabolsk(d: pd.DataFrame) -> dict | None:
+    """Vurderer om SISTE dag ser parabolsk ut. None hvis for kort historikk.
+
+    Returnerer rådata + kriteriene pb1–pb3 og et samlet `parabolsk`-flagg.
+    Flagget slår til når oppgangen er rask (pb1) OG minst ett av de to andre
+    tegnene er til stede (mange grønne dager på rad eller strukket over EMA10).
+    Dette er et OBSERVASJONSFLAGG for aksjer du eier – aldri et kjøpssignal.
+    """
+    if d is None or len(d) < konfig.PB_MIN_DAGER:
+        return None
+    c = d["Close"]
+    pris = float(c.iloc[-1])
+    if pris <= 0:
+        return None
+
+    # Rask oppgang: % opp over de siste PB_VINDU dagene (lav i vinduet → nå).
+    vindu = c.tail(konfig.PB_VINDU + 1)
+    start = float(vindu.min())
+    opp = (pris / start - 1.0) * 100.0 if start > 0 else np.nan
+
+    # Grønne dager på rad (siste dager der close > forrige close).
+    diff = c.diff()
+    gronne = 0
+    for v in reversed(diff.tolist()):
+        if pd.notna(v) and v > 0:
+            gronne += 1
+        else:
+            break
+
+    # Strukket: hvor langt over EMA10 close ligger nå.
+    e10 = indikatorer.ema(c, 10).iloc[-1]
+    over_ema10 = (pris / float(e10) - 1.0) * 100.0 if pd.notna(e10) and float(e10) > 0 else np.nan
+
+    pb1 = bool(pd.notna(opp) and opp >= konfig.PB_OPP_MIN)
+    pb2 = bool(gronne >= konfig.PB_GRONNE_MIN)
+    pb3 = bool(pd.notna(over_ema10) and over_ema10 >= konfig.PB_OVER_EMA10)
+
+    parabolsk = bool(pb1 and (pb2 or pb3))
+
+    return {
+        "pris": pris,
+        "opp_pct": opp,
+        "gronne_rad": int(gronne),
+        "over_ema10_pct": over_ema10,
+        "ema10": float(e10) if pd.notna(e10) else np.nan,
+        "parabolsk": parabolsk,
+        "pb1": pb1, "pb2": pb2, "pb3": pb3,
+    }
+

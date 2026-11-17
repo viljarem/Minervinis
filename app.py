@@ -111,6 +111,25 @@ def kjor_ep(bors_navn: str, versjon: float) -> pd.DataFrame:
     return _fn(priser) if _fn is not None else pd.DataFrame()
 
 @st.cache_data(show_spinner=False)
+def kjor_parabolsk(bors_navn: str, tickere: tuple, versjon: float) -> dict:
+    """Parabolsk-flagg (QM3) for valgte tickere – observasjon, ikke kjøpssignal.
+
+    Brukes av journalen til å flagge åpne posisjoner som har gått parabolsk
+    ("vokt deg / ta gevinst"). getattr-fallback om Streamlit Cloud ennå kjører
+    en gammel screener-modul uten funksjonen.
+    """
+    if not tickere:
+        return {}
+    _fn = getattr(screener, "flagg_parabolske", None)
+    if _fn is None:
+        return {}
+    try:
+        priser = datamod.les_priser(konfig.BORSER[bors_navn].priser_fil)
+        return _fn(priser, list(tickere))
+    except Exception:
+        return {}
+
+@st.cache_data(show_spinner=False)
 def trendscore_serie_cached(bors_navn: str, ticker: str, versjon: float) -> pd.DataFrame:
     """Full TrendScore-tidsserie for ÉN aksje (til subchartet). Bufret per ticker.
 
@@ -4343,6 +4362,21 @@ with fane5:
     except Exception:
         _journal_live = {}
 
+    # Parabolsk-flagg (QM3) paa aapne posisjoner: et "vokt deg / ta gevinst"-
+    # varsel, ALDRI et kjoepssignal. Pakket i try/except saa journalen aldri
+    # krasjer. Henter de aapne tickerne uavhengig av om borsen er aapen.
+    _journal_parabolsk = {}
+    try:
+        if journal_ui.innlogget():
+            _lg2 = journal_ui._lager()
+            if _lg2 is not None:
+                _apne_h2 = _lg2.hent_handler(status="OPEN")
+                _apne_t2 = tuple(sorted({h.get("ticker") for h in _apne_h2 if h.get("ticker")}))
+                if _apne_t2:
+                    _journal_parabolsk = kjor_parabolsk(bors_navn, _apne_t2[:80], versjon)
+    except Exception:
+        _journal_parabolsk = {}
+
     # Bakoverkompatibelt: send nye parametre kun hvis denne versjonen av
     # journal_ui stotter dem (unngaar TypeError hvis en gammel modul henger
     # igjen i minnet paa Streamlit Cloud for en reboot).
@@ -4355,6 +4389,8 @@ with fane5:
         _kw["live_kurser"] = _journal_live
     if "bors_apen" in _params:
         _kw["bors_apen"] = _journal_apen
+    if "parabolsk" in _params:
+        _kw["parabolsk"] = _journal_parabolsk
     journal_ui.vis_dashboard(bors_navn, journal_screening, vis_ticker_detalj, **_kw)
 
 with fane6:
