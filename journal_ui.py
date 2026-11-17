@@ -322,7 +322,8 @@ def vis_dashboard(bors_navn: str, screening, vis_ticker_fn=None,
                   datastatus: dict | None = None,
                   live_kurser: dict | None = None,
                   bors_apen: bool = False,
-                  parabolsk: dict | None = None) -> None:
+                  parabolsk: dict | None = None,
+                  metrikk_fn=None) -> None:
     _injiser_stil()
     if not tilgjengelig():
         st.subheader("📒 Journal")
@@ -375,7 +376,8 @@ def vis_dashboard(bors_navn: str, screening, vis_ticker_fn=None,
 
     kol_lister, kol_dagbok = st.columns([3, 2], gap="large")
     with kol_lister:
-        _vis_lister(lager, lister, alle_aksjer, bors_navn, skop, beregnet)
+        _vis_lister(lager, lister, alle_aksjer, bors_navn, skop, beregnet,
+                    metrikk_fn=metrikk_fn)
     with kol_dagbok:
         _vis_dagbok(lager, notater)
     st.divider()
@@ -466,32 +468,61 @@ def _vis_oversikt(beregnet: list[dict]) -> None:
 # 2a) MINE LISTER
 # ---------------------------------------------------------------------------
 _AKSJE_KOLONNER = {
-    "Pris": st.column_config.NumberColumn("Pris", format="%.2f"),
-    "RS": st.column_config.NumberColumn("RS", help="Relativ styrke 1–99 (fra siste skanning)."),
+    "Bilde": st.column_config.ImageColumn("Chart", help="Opplastet chart-bilde. Last opp under tabellen."),
+    "Pris": st.column_config.NumberColumn("Pris", format="%.2f", help="Siste sluttkurs (live, uavhengig av skanning)."),
+    "RVol": st.column_config.NumberColumn("RVol", format="%.2f", help="Relativt volum mot 50-dagers snittvolum. 1,0 = normalt, >1,4 = bruddvolum."),
+    "RS": st.column_config.NumberColumn("RS", help="Relativ styrke 1–99 (fra kursuniverset)."),
     "TS": st.column_config.NumberColumn("TS", format="%.0f", help="TrendScore 0–100."),
+    "7/7": st.column_config.TextColumn("7/7", help="Minervini-kriterier oppfylt."),
+    "Kommentar": st.column_config.TextColumn("Kommentar", help="Din fritekst. Rediger under tabellen.", width="medium"),
     "Min pivot": st.column_config.NumberColumn("Min pivot", format="%.2f"),
     "Min stop": st.column_config.NumberColumn("Min stop", format="%.2f"),
     "Mål": st.column_config.NumberColumn("Mål", format="%.2f"),
 }
 
 
-def _berik_aksjer(aksjer: list[dict], skop: dict) -> pd.DataFrame:
+def _berik_aksjer(aksjer: list[dict], metrikk: dict, skop: dict) -> pd.DataFrame:
+    """Bygger lista-tabellen med LIVE nokkeltall (skann-uavhengig).
+
+    `metrikk` = {ticker: {pris, rvol, rs, ts, score, status, statustekst}} fra
+    app.liste_metrikker. Faller tilbake til siste skanning (`skop`) kun der live-
+    tallet mangler, saa tabellen alltid viser noe.
+    """
     rader = []
     for a in aksjer:
-        s = skop.get(a["ticker"], {})
-        status = _verdi(s, "status") or ""
-        tekst = _verdi(s, "statustekst") or ""
+        t = a["ticker"]
+        m = metrikk.get(t, {})
+        s = skop.get(t, {})
+        pris = m.get("pris")
+        if pris is None:
+            pris = _verdi(s, "pris")
+        rvol = m.get("rvol")
+        if rvol is None:
+            rvol = _verdi(s, "rel_volum")
+        rs = m.get("rs")
+        if rs is None:
+            rs = _verdi(s, "rs")
+        ts = m.get("ts")
+        if ts is None:
+            ts = _verdi(s, "trendscore")
+        score = m.get("score")
+        if score is None:
+            score = _verdi(s, "score")
+        status = m.get("status") or _verdi(s, "status") or ""
+        tekst = m.get("statustekst") or _verdi(s, "statustekst") or ""
         setup = f"{status} {tekst}".strip() or "—"
-        score = _verdi(s, "score")
+        bilde = a.get("bilde") or None
         rader.append({
             "id": a["id"],
-            "Ticker": a["ticker"],
-            "Pris": _verdi(s, "pris"),
+            "Bilde": bilde,
+            "Ticker": t,
+            "Pris": pris,
+            "RVol": rvol,
+            "RS": rs,
+            "TS": ts,
+            "7/7": f"{int(score)}/7" if score is not None else "—",
             "Setup": setup,
-            "Til pivot": _til_pivot(_verdi(s, "avstand_pivot")),
-            "RS": _verdi(s, "rs"),
-            "TS": _verdi(s, "trendscore"),
-            "Kriterier": f"{int(score)}/7" if score is not None else "—",
+            "Kommentar": a.get("kommentar") or "",
             "Min pivot": a.get("pivot"),
             "Min stop": a.get("stop"),
             "Mål": a.get("mal"),
@@ -499,7 +530,8 @@ def _berik_aksjer(aksjer: list[dict], skop: dict) -> pd.DataFrame:
     return pd.DataFrame(rader)
 
 
-def _vis_lister(lager, lister, alle_aksjer, bors_navn, skop, beregnet=None) -> None:
+def _vis_lister(lager, lister, alle_aksjer, bors_navn, skop, beregnet=None,
+                metrikk_fn=None) -> None:
     st.subheader("⭐ Mine lister")
 
     per_liste: dict[str, list] = {}
@@ -529,7 +561,7 @@ def _vis_lister(lager, lister, alle_aksjer, bors_navn, skop, beregnet=None) -> N
     for fane, liste in zip(faner, lister):
         with fane:
             _vis_en_liste(lager, liste, lister, per_liste.get(liste["id"], []),
-                          bors_navn, skop)
+                          bors_navn, skop, metrikk_fn=metrikk_fn)
     for fane, (navn, tickere, ikon) in zip(faner[len(lister):], auto):
         with fane:
             _vis_auto_portefolje(navn, tickere, skop, beregnet,
@@ -654,7 +686,8 @@ def _administrer_lister(lager, lister) -> None:
             st.divider()
 
 
-def _vis_en_liste(lager, liste, alle_lister, aksjer, bors_navn, skop) -> None:
+def _vis_en_liste(lager, liste, alle_lister, aksjer, bors_navn, skop,
+                  metrikk_fn=None) -> None:
     with st.popover("＋ Legg til aksje", width="stretch"):
         with st.form(f"legg_til_{liste['id']}", clear_on_submit=True):
             ticker = st.text_input("Ticker", placeholder="EQNR eller AAPL",
@@ -687,11 +720,20 @@ def _vis_en_liste(lager, liste, alle_lister, aksjer, bors_navn, skop) -> None:
                    "i hovedlista etter en skanning.")
         return
 
-    df = _berik_aksjer(aksjer, skop)
+    # Live nokkeltall per ticker (skann-uavhengig). Faller stille tilbake til
+    # siste skanning om metrikk-funksjonen ikke er tilgjengelig (gammel app).
+    metrikk = {}
+    if metrikk_fn is not None:
+        try:
+            metrikk = metrikk_fn(bors_navn, [a["ticker"] for a in aksjer]) or {}
+        except Exception:
+            metrikk = {}
+
+    df = _berik_aksjer(aksjer, metrikk, skop)
     st.dataframe(df.drop(columns=["id"]), width="stretch", hide_index=True,
                  column_config=_AKSJE_KOLONNER)
-    if not skop:
-        st.caption("💡 Skann børsen for å fylle inn Pris, Setup, RS og TrendScore.")
+    if metrikk_fn is None and not skop:
+        st.caption("💡 Skann børsen for å fylle inn Pris, RS og TrendScore.")
 
     etikett = {a["ticker"]: a for a in aksjer}
     valgt = st.selectbox("Velg aksje", list(etikett), key=f"velg_{liste['id']}")
@@ -720,6 +762,62 @@ def _vis_en_liste(lager, liste, alle_lister, aksjer, bors_navn, skop) -> None:
             st.error(str(e))
         else:
             st.rerun()
+
+    # Kommentar + chart-bilde for den valgte aksjen.
+    _rediger_kommentar_bilde(lager, rad, liste["id"])
+
+
+def _rediger_kommentar_bilde(lager, rad: dict, liste_id: str) -> None:
+    """Fritekst-kommentar og opplasting/visning av chart-bilde for én aksje."""
+    with st.expander(f"✏️ Kommentar & chart-bilde for {rad['ticker']}", expanded=False):
+        # --- Fritekst ---
+        ny_kommentar = st.text_area(
+            "Kommentar", value=rad.get("kommentar") or "",
+            key=f"komm_{rad['id']}", height=90,
+            placeholder="Hva ser du? Plan, nivåer, hvorfor den er på lista …")
+        if st.button("💾 Lagre kommentar", key=f"lagre_komm_{rad['id']}"):
+            try:
+                lager.oppdater_aksje(rad["id"], kommentar=ny_kommentar.strip() or None)
+            except db.JournalFeil as e:
+                st.error(str(e))
+            else:
+                st.success("Kommentar lagret.")
+                st.rerun()
+
+        st.divider()
+        # --- Chart-bilde ---
+        if rad.get("bilde"):
+            st.image(rad["bilde"], caption="Lagret chart-bilde", width="stretch")
+            if st.button("🗑 Fjern bilde", key=f"slett_bilde_{rad['id']}"):
+                try:
+                    lager.oppdater_aksje(rad["id"], bilde=None)
+                except db.JournalFeil as e:
+                    st.error(str(e))
+                else:
+                    st.rerun()
+        opplastet = st.file_uploader(
+            "Last opp chart-bilde (PNG/JPG)", type=["png", "jpg", "jpeg"],
+            key=f"opp_bilde_{rad['id']}",
+            help="Lagres i databasen og vises som miniatyr i tabellen. "
+                 "Hold filen under ~1,5 MB.")
+        if opplastet is not None:
+            data = opplastet.getvalue()
+            if len(data) > 1_800_000:
+                st.warning("Bildet er for stort (>1,7 MB). Ta et mindre skjermbilde "
+                           "eller komprimer det først.")
+            else:
+                import base64
+                mime = opplastet.type or "image/png"
+                data_uri = f"data:{mime};base64," + base64.b64encode(data).decode()
+                if st.button("💾 Lagre bilde", key=f"lagre_bilde_{rad['id']}",
+                             type="primary"):
+                    try:
+                        lager.oppdater_aksje(rad["id"], bilde=data_uri)
+                    except db.JournalFeil as e:
+                        st.error(str(e))
+                    else:
+                        st.success("Bilde lagret.")
+                        st.rerun()
 
 
 # ---------------------------------------------------------------------------

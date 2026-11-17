@@ -146,6 +146,65 @@ def trendscore_serie_cached(bors_navn: str, ticker: str, versjon: float) -> pd.D
     return _fn(serie, indeks)
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def liste_metrikker(bors_navn: str, tickere: tuple[str, ...], versjon: float) -> dict:
+    """Live, skann-uavhengige nokkeltall for aksjene i journal-listene.
+
+    For HVER ticker (uansett om en Minervini-skann er kjort) regnes:
+      pris        = siste sluttkurs
+      rvol        = relativt volum mot 50-dagers snittvolum (1,0 = normalt)
+      score       = Minervini 7/7 (antall oppfylte kriterier)
+      status/tekst= bruddstatus-emoji + tekst
+      ts          = TrendScore 0-100 (siste_trendscore)
+      rs          = RS-rating 1-99 (fra den bufrede universet, ikke en skann)
+    Alt i try/except per ticker saa en raar aksje aldri velter lista. Cachet 10 min.
+    """
+    if not tickere:
+        return {}
+    try:
+        priser = datamod.les_priser(konfig.BORSER[bors_navn].priser_fil)
+    except Exception:
+        priser = pd.DataFrame()
+    bm = konfig.BORSER[bors_navn].benchmark or konfig.BENCHMARK
+    indeks = datamod.serie_for(priser, bm) if not priser.empty else None
+    # RS-rating 1-99 per ticker fra siste rad i den bufrede historikken.
+    rs_siste = {}
+    try:
+        _rs_mat = rs_rating_historikk(bors_navn, versjon)
+        if not _rs_mat.empty:
+            _siste_rad = _rs_mat.ffill().iloc[-1]
+            rs_siste = {t: (None if pd.isna(_siste_rad.get(t)) else int(_siste_rad.get(t)))
+                        for t in tickere if t in _rs_mat.columns}
+    except Exception:
+        rs_siste = {}
+    ut = {}
+    for t in tickere:
+        rad = {"pris": None, "rvol": None, "score": None, "status": None,
+               "statustekst": None, "ts": None, "rs": rs_siste.get(t)}
+        try:
+            serie = datamod.serie_for(priser, t) if not priser.empty else None
+            if serie is None or serie.empty:
+                serie = datamod.hent_live(t)
+            if serie is not None and not serie.empty:
+                res = screener.analyser_ticker(serie, t, konfig.STANDARD)
+                if res is not None:
+                    rad["pris"] = res.get("pris")
+                    rad["rvol"] = res.get("rel_volum")
+                    rad["score"] = res.get("score")
+                    rad["status"] = res.get("status")
+                    rad["statustekst"] = res.get("statustekst")
+                else:
+                    # For kort historikk til 7/7, men vis iallfall pris/rvol.
+                    rad["pris"] = round(float(serie["Close"].iloc[-1]), 2)
+                _ts = trendscore.siste_trendscore(serie, indeks)
+                if _ts is not None:
+                    rad["ts"] = _ts.get("score")
+        except Exception:
+            pass
+        ut[t] = rad
+    return ut
+
+
 @st.cache_data(show_spinner="Leter etter nye noteringer ...")
 def kjor_nye_ipoer(bors_navn: str, versjon: float) -> pd.DataFrame:
     """Ferske noteringer (for kort historikk til full analyse).
@@ -4812,6 +4871,8 @@ with fane5:
         _kw["bors_apen"] = _journal_apen
     if "parabolsk" in _params:
         _kw["parabolsk"] = _journal_parabolsk
+    if "metrikk_fn" in _params:
+        _kw["metrikk_fn"] = lambda _b, _t: liste_metrikker(_b, tuple(_t), versjon)
     journal_ui.vis_dashboard(bors_navn, journal_screening, vis_ticker_detalj, **_kw)
 
 with fane6:

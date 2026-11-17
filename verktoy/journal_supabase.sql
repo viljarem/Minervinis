@@ -102,6 +102,12 @@ drop trigger if exists liste_aksjer_oppdatert on public.liste_aksjer;
 create trigger liste_aksjer_oppdatert before update on public.liste_aksjer
   for each row execute function public.sett_oppdatert();
 
+-- Tilleggskolonner (kjor pa nytt pa eksisterende base - idempotent):
+--   kommentar = fritekst-notat du skriver rett i lista
+--   bilde     = base64 data-URI (chart-skjermbilde) vist som miniatyr i tabellen
+alter table public.liste_aksjer add column if not exists kommentar text;
+alter table public.liste_aksjer add column if not exists bilde text;
+
 
 -- ---------------------------------------------------------------------
 -- 4) NOTATER – dagbok. Mange daterte notater per aksje; gamle består.

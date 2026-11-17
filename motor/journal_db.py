@@ -204,6 +204,11 @@ class Lager:
 
     def oppdater_aksje(self, rad_id: str, **felt) -> None:
         body = {k: _tall(felt[k]) for k in ("pivot", "stop", "mal") if k in felt}
+        # Fritekst-kommentar og chart-bilde (base64 data-URI) lagres som de er.
+        # None tillates eksplisitt (brukes for aa nullstille/fjerne).
+        for k in ("kommentar", "bilde"):
+            if k in felt:
+                body[k] = felt[k]
         if body:
             self._kall("PATCH", f"/rest/v1/liste_aksjer?id=eq.{rad_id}", body,
                        prefer="return=minimal")
