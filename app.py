@@ -3320,6 +3320,25 @@ if journal_screening is None:
     except Exception:
         journal_screening = resultat
 
+# --- Globalt ticker-søk (over fanene, alltid synlig) ---------------------
+# Slå opp en hvilken som helst ticker og få full detaljvisning (chart + info +
+# notat + handler) med én gang, uten å klikke deg inn i en fane. Selve
+# detaljen tegnes i en reservert container LENGER NEDE (etter at
+# vis_ticker_detalj er definert), men vises her oppe over fanene.
+with st.container():
+    _gsok_kol = st.columns([6, 1])
+    _gsok = _gsok_kol[0].text_input(
+        "🔎 Hurtigsøk", value=st.session_state.get("global_sok", ""),
+        placeholder="Slå opp en ticker (f.eks. EQNR.OL, AAPL, NVDA) – hopp rett til chart/info/notat",
+        label_visibility="collapsed", key="global_sok_felt")
+    if _gsok_kol[1].button("Tøm", width="stretch", key="global_sok_tom"):
+        st.session_state["global_sok"] = ""
+        st.session_state.pop("global_sok_felt", None)
+        st.rerun()
+    st.session_state["global_sok"] = _gsok
+_gsok_ticker = (_gsok or "").strip().upper()
+_global_detalj_boks = st.container()   # fylles etter at vis_ticker_detalj finnes
+
 fane1, fane2, fane3, fane4, fane5, fane6 = st.tabs(
     ["📋 Hovedliste", "📊 Chart", "🔎 Søk", "🌡️ Markedshelse", "📒 Journal", "⚙️ Innstillinger"])
 
@@ -3441,6 +3460,16 @@ def vis_ticker_detalj(sok: str, *, kontekst: str = "sok", handel_data: dict | No
     st.divider()
     posisjon_verktoy(res, f"{kontekst}_{sok}", VALUTA)
     return res
+
+
+# Fyll det globale hurtigsøk-feltet (reservert over fanene) nå som
+# vis_ticker_detalj finnes. Vises øverst, over alle fanene.
+if _gsok_ticker:
+    with _global_detalj_boks:
+        with st.container(border=True):
+            st.caption(f"🔎 Hurtigsøk: **{_gsok_ticker}** – full visning. Tøm feltet for å skjule.")
+            vis_ticker_detalj(_gsok_ticker, kontekst="global_sok")
+        st.divider()
 
 
 
