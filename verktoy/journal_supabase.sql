@@ -134,7 +134,7 @@ create trigger notater_oppdatert before update on public.notater
 -- 5) HANDLER – én rad per handel. Delsalg ligger i egen tabell under,
 --    så en handel kan selges i flere biter og stop kan traile.
 --    status: 'OPEN' mens den lever, 'CLOSED' når alt er solgt.
---    kilde: fri tekst ('minervini','golden_cross','qullamaggie', ...)
+--    kilde: fri tekst ('minervini','golden_cross','trendscore', ...)
 --    setup: fri tekst ('VCP','breakout','momentum', ...)
 -- ---------------------------------------------------------------------
 create table if not exists public.handler (

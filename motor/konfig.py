@@ -148,36 +148,9 @@ TS_MIN_DAGER = 252
 
 
 # ---------------------------------------------------------------------------
-# Qullamaggie-screener (momentum-ledere i breakout-setup)
+# ADR% (Average Daily Range) – brukt av «Hele borsen»-screeneren
 # ---------------------------------------------------------------------------
-# Setup-variant (IKKE score): hvert kriterium passerer/feiler, og vi viser
-# avstand til utbrudd (pivot) + historiske brudd på chart – som Minervini.
-# Validert mot ekte data 16.11: finner ekte ledere, få falske. Se todos.txt.
 QM_ADR_VINDU = 20              # ADR% = snitt av (High/Low) siste 20 dager
-QM_EMA_PERIODER = (10, 20, 50)  # EMA-er aksjen "surfer" på i konsolideringen
-QM_MOM_PERIODER = (21, 63, 126)  # momentum-vinduer: ~1M / 3M / 6M (handelsdager)
-QM_MOM_PERSENTIL = 0.90       # momentum-leder = topp 10 % på 3M i universet
-QM_BYKS_VINDU = 63            # se etter et reelt byks siste ~3 mnd
-QM_BYKS_MIN = 30.0            # bykset må være minst så mange % (lav→høy i vindu)
-QM_BASE_VINDU = 20            # konsolideringen måles over siste N dager
-QM_STRAM_MAKS = 5.0           # stram base: range/ADR under dette (tuning-knapp)
-QM_ADR_MIN = 3.0              # ADR% minst så høy (nok bevegelse til store R)
-QM_MIN_DAGER = 150            # trenger minst så mange dager for å vurderes
-
-# Episodic Pivot (EP) – nyhets-/resultatgap (QM2)
-EP_GAP_MIN = 10.0            # gap opp minst så mange % (åpning mot forrige close)
-EP_VOLUM_FAKTOR = 2.0        # gap-dagens volum minst så mange x 50-dagers snitt
-EP_FERSK_DAGER = 5          # gapet regnes som "ferskt" i så mange handelsdager
-EP_IKKE_STRUKKET = 50.0     # helst IKKE opp mer enn så mange % siste 6 mnd FØR gapet
-EP_MIN_DAGER = 60           # trenger minst så mange dager (kortere enn breakout)
-
-# Parabolsk (QM3) – KUN et "vokt deg / ta gevinst"-flagg på aksjer du EIER.
-# Dette er Qullamaggies SHORT-oppsett, så for oss er det aldri et kjøpssignal.
-PB_VINDU = 14               # måler den raske oppgangen over så mange handelsdager
-PB_OPP_MIN = 40.0           # opp minst så mange % i vinduet = parabolsk tempo
-PB_GRONNE_MIN = 4           # minst så mange grønne (opp) dager på rad på slutten
-PB_OVER_EMA10 = 10.0        # close minst så mange % over EMA10 = strukket langt ut
-PB_MIN_DAGER = 30           # trenger minst så mange dager for å vurderes
 
 
 # ---------------------------------------------------------------------------

@@ -199,22 +199,13 @@ def rs_avkastning(close: pd.Series) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Qullamaggie-indikatorer (ADR%, EMA, momentum) – brukt av motor/qullamaggie.py
+# ADR% og avkastning – brukt av «Hele borsen»-screeneren (screen_alle)
 # ---------------------------------------------------------------------------
-def ema(close: pd.Series, periode: int) -> pd.Series:
-    """Eksponentielt glidende snitt (EMA). Legger mest vekt på ferske dager.
-
-    Qullamaggie bruker EMA10/20 (og 50) som aksjen "surfer" på i konsolideringen
-    og som trailing-stop. EMA reagerer raskere enn SMA på nye kurser.
-    """
-    return close.ewm(span=periode, adjust=False).mean()
-
-
 def adr_prosent(d: pd.DataFrame, vindu: int = konfig.QM_ADR_VINDU) -> float:
-    """ADR% (Average Daily Range i prosent) for siste dag – Qullamaggies #1 mål.
+    """ADR% (Average Daily Range i prosent) for siste dag.
 
     ADR% = (snitt av (High/Low) over N dager − 1) · 100. Høy ADR% = mye
-    "krutt" (stor daglig bevegelse) = rom for store R. Returnerer NaN hvis
+    "krutt" (stor daglig bevegelse) = rom for store utslag. Returnerer NaN hvis
     for kort historikk eller ugyldige verdier.
     """
     if d is None or len(d) < vindu:
@@ -235,12 +226,3 @@ def avkastning_vindu(close: pd.Series, dager: int) -> float:
     if foer <= 0:
         return float("nan")
     return (naa / foer - 1.0) * 100.0
-
-
-def momentum(close: pd.Series, perioder: tuple = konfig.QM_MOM_PERIODER) -> dict:
-    """Avkastning over flere vinduer (1M/3M/6M som standard).
-
-    Returnerer {"m<dager>": prosent, ...}, f.eks. {"m21":.., "m63":.., "m126":..}.
-    Brukes til å finne momentum-ledere (topp X % i universet).
-    """
-    return {f"m{n}": avkastning_vindu(close, n) for n in perioder}

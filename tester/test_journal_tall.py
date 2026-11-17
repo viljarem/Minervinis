@@ -51,7 +51,7 @@ def test_tap_gir_negativ_r():
 
 
 def test_time_value_er_prosent_per_dag():
-    # Time Value = P/D (prosent avkastning / handelsdager). Qullamaggie-stil.
+    # Time Value = P/D (prosent avkastning / handelsdager).
     # 10 % på 3 handelsdager → 3.33.  Kjøp man 2/11, selg ons 4/11 (man-ons = 3 dager).
     t = jt.handelstall(100, 1, 90, kjop_dato="2026-11-02",
                        delsalg=[{"salg_kurs": 110, "antall": 1, "salg_dato": "2026-11-04"}])
