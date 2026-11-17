@@ -99,6 +99,17 @@ def kjor_qm(bors_navn: str, versjon: float) -> pd.DataFrame:
     _fn = getattr(screener, "screen_qm", None)
     return _fn(priser) if _fn is not None else pd.DataFrame()
 
+@st.cache_data(show_spinner="Søker etter Episodic Pivots (gap-ups) i hele børsen ...")
+def kjor_ep(bors_navn: str, versjon: float) -> pd.DataFrame:
+    """Episodic Pivots (ferske gap-ups på stort volum) for hele børsen.
+
+    getattr-fallback om Streamlit Cloud ennå kjører en gammel, bufret
+    screener-modul uten funksjonen (kan skje det første minuttet etter utrulling).
+    """
+    priser = datamod.les_priser(konfig.BORSER[bors_navn].priser_fil)
+    _fn = getattr(screener, "screen_ep", None)
+    return _fn(priser) if _fn is not None else pd.DataFrame()
+
 @st.cache_data(show_spinner=False)
 def trendscore_serie_cached(bors_navn: str, ticker: str, versjon: float) -> pd.DataFrame:
     """Full TrendScore-tidsserie for ÉN aksje (til subchartet). Bufret per ticker.
@@ -2979,21 +2990,24 @@ GOLDEN_VALG = "✨ Golden Cross"
 IPO_VALG = "🆕 Nye IPO-er"
 TRENDSCORE_VALG = "📈 TrendScore"
 QM_VALG = "🚀 Qullamaggie"
+EP_VALG = "⚡ Episodic Pivot"
 with st.sidebar:
     st.header("Filtre")
     preset_navn = st.selectbox(
-        "Oppsett", list(konfig.PRESETS.keys()) + [GOLDEN_VALG, TRENDSCORE_VALG, QM_VALG, IPO_VALG],
+        "Oppsett", list(konfig.PRESETS.keys()) + [GOLDEN_VALG, TRENDSCORE_VALG, QM_VALG, EP_VALG, IPO_VALG],
         help="Velg hva skanningen skal lete etter: Minervini-template (standard), "
              "golden cross (SMA50 over SMA200 + aksjer som venter på kryss), TrendScore "
              "(0–100-rangering av trendstyrke for hele børsen), Qullamaggie (momentum-ledere "
-             "i stram konsolidering, klare for utbrudd), eller "
+             "i stram konsolidering, klare for utbrudd), Episodic Pivot (ferske gap-ups på "
+             "stort volum – nyhets-/resultatdrevet), eller "
              "nye IPO-er (ferske noteringer med for kort historikk til full analyse).")
     er_golden = preset_navn == GOLDEN_VALG
     er_ipo = preset_navn == IPO_VALG
     er_trendscore = preset_navn == TRENDSCORE_VALG
     er_qm = preset_navn == QM_VALG
-    # Trygt preset-navn for Minervini-analyser (chart/søk) også i golden-/ipo-/ts-/qm-modus.
-    aktiv_preset_navn = konfig.STANDARD.navn if (er_golden or er_ipo or er_trendscore or er_qm) else preset_navn
+    er_ep = preset_navn == EP_VALG
+    # Trygt preset-navn for Minervini-analyser (chart/søk) også i spesialmodus.
+    aktiv_preset_navn = konfig.STANDARD.navn if (er_golden or er_ipo or er_trendscore or er_qm or er_ep) else preset_navn
 
     # Standardverdier så variablene finnes uansett modus.
     bruker_dato = None
@@ -3017,6 +3031,11 @@ with st.sidebar:
                    "har bykset og nå konsoliderer stramt på stigende EMA10/20, klare for utbrudd. "
                    "Setup-variant: 7 kriterier passerer/feiler (ingen score), sortert nærmest "
                    "utbrudd. Minervini-filtrene under er skrudd av.")
+    elif er_ep:
+        st.caption("⚡ **Episodic Pivot-modus** – ferske gap-ups (≥ 10 %) på stort volum, typisk "
+                   "resultat-/nyhetsdrevet. Størst edge når aksjen IKKE allerede har gått mye "
+                   "(overraskelse). 3 kriterier passerer/feiler, sortert ferskest øverst. "
+                   "Minervini-filtrene under er skrudd av.")
     elif er_ipo:
         st.caption("🆕 **Nye IPO-er** – ferske noteringer som ennå har for kort historikk "
                    f"(< {konfig.MIN_HANDELSDAGER} handelsdager) til full Minervini-analyse. "
@@ -3076,39 +3095,23 @@ def _skann_skriv_cache(oppsett_navn, df) -> None:
         pass
 
 
+gc_resultat = ts_resultat = qm_resultat = ep_resultat = ipo_resultat = resultat = None
 if er_golden:
     gc_resultat = kjor_golden_cross(bors_navn, versjon) if skannet_na else None
     _skann_skriv_cache("Golden Cross", gc_resultat)
-    resultat = None
-    ipo_resultat = None
-    ts_resultat = None
-    qm_resultat = None
 elif er_trendscore:
     ts_resultat = kjor_trendscore(bors_navn, versjon) if skannet_na else None
     _skann_skriv_cache("TrendScore", ts_resultat)
-    gc_resultat = None
-    resultat = None
-    ipo_resultat = None
-    qm_resultat = None
 elif er_qm:
     qm_resultat = kjor_qm(bors_navn, versjon) if skannet_na else None
     _skann_skriv_cache("Qullamaggie", qm_resultat)
-    gc_resultat = None
-    resultat = None
-    ipo_resultat = None
-    ts_resultat = None
+elif er_ep:
+    ep_resultat = kjor_ep(bors_navn, versjon) if skannet_na else None
+    _skann_skriv_cache("Episodic Pivot", ep_resultat)
 elif er_ipo:
     ipo_resultat = kjor_nye_ipoer(bors_navn, versjon) if skannet_na else None
     _skann_skriv_cache("Nye IPO-er", ipo_resultat)
-    gc_resultat = None
-    resultat = None
-    ts_resultat = None
-    qm_resultat = None
 else:
-    gc_resultat = None
-    ipo_resultat = None
-    ts_resultat = None
-    qm_resultat = None
     if bruker_dato:
         resultat = kjor_screening_retrospektiv(bors_navn, preset_navn, pd.Timestamp(bruker_dato), versjon)
     else:
@@ -3410,6 +3413,95 @@ def vis_qullamaggie(qm_resultat):
         _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[aktiv_preset_navn])
         st.markdown(f"**{_tk}**")
         if not tabell_chart(_s, _r, _tk, kontekst="qm",
+                            standard={"golden": False, "vcp": False, "7av7": False}):
+            st.caption("Klarte ikke tegne chart for denne aksjen.")
+
+
+def _formater_ep_tabell(df: pd.DataFrame) -> pd.DataFrame:
+    """Bygger visningstabellen for Episodic Pivot-screeneren."""
+    vis = pd.DataFrame()
+    vis["Ticker"] = df["ticker"]
+    vis["Status"] = df["status"] + " " + df["statustekst"]
+    vis["Pris"] = df["pris"]
+    vis["Gap"] = df["gap_pct"].map(lambda p: f"{p:+.1f}%" if pd.notna(p) else "—")
+    vis["Volum"] = df["volum_x"].map(lambda v: f"{v:.1f}x" if pd.notna(v) else "—")
+    vis["Dager siden"] = df["dager_siden"].map(lambda d: "i dag" if d == 0 else f"{int(d)}d")
+    vis["Siden gap"] = df["siden_gap_pct"].map(lambda p: f"{p:+.1f}%" if pd.notna(p) else "—")
+    vis["Stop"] = df["stop"]
+    vis["Før-gap 6m"] = df["strukket_6m"].map(lambda p: f"{p:+.0f}%" if pd.notna(p) else "—")
+    # De 3 kriteriene som ✅/❌ (transparent, etterprøvbart).
+    vis["Gap≥10%"] = df["ek1"].map(_ja_nei)
+    vis["Volum✓"] = df["ek2"].map(_ja_nei)
+    vis["Ikke strukket"] = df["ek3"].map(_ja_nei)
+    return vis
+
+
+EP_TABELL_HJELP = {
+    "Pris": st.column_config.NumberColumn("Pris", format="%.2f", help="Siste sluttkurs."),
+    "Status": st.column_config.TextColumn(
+        "Status", help="🟢 Klar EP (3/3) · 🟡 Delvis (gap, men mangler volum eller er strukket)."),
+    "Gap": st.column_config.TextColumn(
+        "Gap", help="Gap opp = gap-dagens åpning mot forrige sluttkurs. Qullamaggie vil se ≥ 10 %."),
+    "Volum": st.column_config.TextColumn(
+        "Volum", help="Gap-dagens volum delt på 50-dagers snitt. Qullamaggie vil se flere x snittet."),
+    "Dager siden": st.column_config.TextColumn(
+        "Dager siden", help="Handelsdager siden gap-dagen. «i dag» = gappet nettopp."),
+    "Siden gap": st.column_config.TextColumn(
+        "Siden gap", help="Kursutvikling fra gap-dagens close til nå."),
+    "Stop": st.column_config.NumberColumn(
+        "Stop", format="%.2f", help="Qullamaggie-stop = gap-dagens laveste kurs (lows of the day)."),
+    "Før-gap 6m": st.column_config.TextColumn(
+        "Før-gap 6m", help="Hvor mye aksjen hadde gått de 6 mnd FØR gapet. Lavt/negativt = "
+        "overraskelse (størst edge). Høyt = allerede strukket (svakere EP)."),
+    "Gap≥10%": st.column_config.TextColumn("Gap≥10%", help="ek1: gap opp minst 10 %."),
+    "Volum✓": st.column_config.TextColumn("Volum✓", help="ek2: stort volum (≥ 2x 50-dagers snitt)."),
+    "Ikke strukket": st.column_config.TextColumn(
+        "Ikke strukket", help="ek3: aksjen hadde ikke allerede gått mye (≤ 50 % siste 6 mnd)."),
+}
+
+
+def vis_episodic_pivot(ep_resultat):
+    """Rendrer Episodic Pivot-tabellen + chart i Hovedliste-fanen (ep-modus)."""
+    st.markdown("### ⚡ Episodic Pivot-screener")
+    st.caption("Ferske gap-ups (≥ 10 %) på stort volum – typisk resultat-/nyhetsdrevet. "
+               "Størst edge når aksjen IKKE allerede har gått mye (overraskelse for markedet). "
+               "**3 kriterier passerer/feiler**, sortert ferskest øverst. Uavhengig av Minervini.")
+    if ep_resultat is None:
+        st.info(f"Trykk **🔍 Skann {BORS.navn}** i menyen til venstre for å søke gjennom hele "
+                "børsen etter Episodic Pivots. (Ingenting skannes automatisk – du velger når.)")
+        return
+    if ep_resultat.empty:
+        st.info("Fant ingen ferske gap-ups akkurat nå. (EP-er kommer typisk i resultatsesongen.)")
+        return
+    _gyldige = int(ep_resultat["gyldig_ep"].sum())
+    st.markdown(
+        f"**{len(ep_resultat)} gap funnet** – 🟢 {_gyldige} klare EP-er (gap + volum + ikke strukket). "
+        "Sortert med klare EP-er først, så ferskest."
+    )
+    _ep_tab = st.dataframe(
+        _formater_ep_tabell(ep_resultat),
+        width="stretch", hide_index=True, height=560, column_config=EP_TABELL_HJELP,
+        on_select="rerun", selection_mode="multi-row", key="ep_tabell",
+    )
+    st.caption("💡 **Huk av én eller flere rader** for å tegne chart under.")
+
+    _ep_rader = list(getattr(_ep_tab.selection, "rows", []) or [])
+    _ep_valgte = [ep_resultat.iloc[i]["ticker"] for i in _ep_rader if i < len(ep_resultat)]
+    if not _ep_valgte:
+        st.caption("Ingen rader valgt ennå – huk av i tabellen over for å tegne chart her.")
+        return
+    st.divider()
+    _maks = 15
+    if len(_ep_valgte) > _maks:
+        st.info(f"Viser de {_maks} første av {len(_ep_valgte)} valgte (for fartens skyld).")
+        _ep_valgte = _ep_valgte[:_maks]
+    st.subheader(f"📊 Chart for {len(_ep_valgte)} valgte")
+    _ep_priser = last_priser(bors_navn, versjon)
+    for _tk in _ep_valgte:
+        _s = datamod.serie_for(_ep_priser, _tk)
+        _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[aktiv_preset_navn])
+        st.markdown(f"**{_tk}**")
+        if not tabell_chart(_s, _r, _tk, kontekst="ep",
                             standard={"golden": False, "vcp": False, "7av7": False}):
             st.caption("Klarte ikke tegne chart for denne aksjen.")
 
@@ -3739,6 +3831,8 @@ with fane1:
         vis_trendscore(ts_resultat)
     elif er_qm:
         vis_qullamaggie(qm_resultat)
+    elif er_ep:
+        vis_episodic_pivot(ep_resultat)
     elif er_ipo:
         vis_nye_ipoer(ipo_resultat)
     elif resultat is None:

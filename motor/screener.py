@@ -381,6 +381,78 @@ def screen_qm(priser: pd.DataFrame) -> pd.DataFrame:
     return df.drop(columns=["_naer", "_mom_3m_raw"])
 
 
+# ---------------------------------------------------------------------------
+# Episodic Pivot-screener (QM2 – nyhets-/resultatgap)
+# ---------------------------------------------------------------------------
+EP_STATUS_FULL = "🟢"     # gap + volum + ikke strukket = klar EP
+EP_STATUS_DELVIS = "🟡"   # gap, men mangler volum eller er strukket
+
+
+def analyser_ep(serie: pd.DataFrame, ticker: str) -> dict | None:
+    """Finner nyeste EP for én aksje og pakker den til tabellen. None hvis ingen."""
+    ep = qullamaggie.finn_ep(serie)
+    if ep is None:
+        return None
+    d = serie
+    dagsomsetning = float((d["Close"] * d["Volume"]).rolling(konfig.OMSETNING_VINDU).mean().iloc[-1])
+    antall_ok = int(bool(ep["ek1"]) + bool(ep["ek2"]) + bool(ep["ek3"]))
+    if antall_ok >= 3:
+        status, statustekst = EP_STATUS_FULL, "Klar EP (3/3)"
+    else:
+        status, statustekst = EP_STATUS_DELVIS, f"Delvis ({antall_ok}/3)"
+    return {
+        "ticker": ticker,
+        "pris": round(ep["pris"], 2),
+        "gap_pct": round(float(ep["gap_pct"]), 1),
+        "volum_x": None if pd.isna(ep["volum_x"]) else round(float(ep["volum_x"]), 1),
+        "strukket_6m": None if pd.isna(ep["strukket_6m"]) else round(float(ep["strukket_6m"]), 1),
+        "dager_siden": int(ep["dager_siden"]),
+        "siden_gap_pct": None if pd.isna(ep["siden_gap_pct"]) else round(float(ep["siden_gap_pct"]), 1),
+        "stop": round(float(ep["stop"]), 2),
+        "gap_dato": pd.Timestamp(ep["gap_dato"]).date().isoformat(),
+        "ek1": ep["ek1"], "ek2": ep["ek2"], "ek3": ep["ek3"],
+        "antall_ok": antall_ok,
+        "status": status,
+        "statustekst": statustekst,
+        "gyldig_ep": bool(antall_ok >= 3),
+        "dagsomsetning": dagsomsetning,
+    }
+
+
+def screen_ep(priser: pd.DataFrame) -> pd.DataFrame:
+    """Episodic Pivot-screener: ferske gap-ups på stort volum i hele universet.
+
+    Sortert med klare EP-er først, deretter ferskest (minst dager siden gapet).
+    """
+    if priser is None or priser.empty:
+        return pd.DataFrame()
+
+    benchmarks = {b.benchmark for b in konfig.BORSER.values() if b.benchmark}
+    benchmarks.add(konfig.BENCHMARK)
+    tickere = [t for t in sorted(priser["Ticker"].unique()) if t not in benchmarks]
+
+    rader = []
+    for t in tickere:
+        res = analyser_ep(datamod.serie_for(priser, t), t)
+        if res is not None:
+            rader.append(res)
+
+    df = pd.DataFrame(rader)
+    if df.empty:
+        return df
+
+    df = df[df["dagsomsetning"] >= konfig.MIN_DAGSOMSETNING].copy()
+    if df.empty:
+        return df
+
+    df = df.sort_values(
+        ["gyldig_ep", "antall_ok", "dager_siden"],
+        ascending=[False, False, True], kind="mergesort",
+    ).reset_index(drop=True)
+    return df
+
+
+
 
 # ---------------------------------------------------------------------------
 # Golden cross-screener (SELVSTENDIG – IKKE Minervini-template)

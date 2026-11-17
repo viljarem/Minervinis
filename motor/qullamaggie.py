@@ -125,3 +125,82 @@ def antall_oppfylt(n: dict, inkluder_qk1: bool = True) -> int:
 def er_gyldig_setup(n: dict) -> bool:
     """True når ALLE 7 qk-kriterier er oppfylt (inkl. qk1 fra screeneren)."""
     return all(bool(n.get(k)) for k in QM_KRITERIE_KOLONNER)
+
+
+# ---------------------------------------------------------------------------
+# Episodic Pivot (EP, QM2) – nyhets-/resultatgap
+# ---------------------------------------------------------------------------
+# Qullamaggies EP: en aksje gapper opp 10 %+ på stort volum (typisk resultat/
+# nyhet) – ofte starten på en lang bevegelse. Edge er størst når aksjen IKKE
+# allerede har gått mye (overraskelse). Vi dekker det teknisk (gap + volum +
+# "ikke strukket"); fundamentale vekst-tall kan legges på senere.
+EP_KRITERIE_KOLONNER = ["ek1", "ek2", "ek3"]
+
+EP_KRITERIE_TEKST = {
+    "ek1": "Gap opp ≥ 10 %",
+    "ek2": "Stort volum (≥ 2x snitt)",
+    "ek3": "Ikke allerede strukket",
+}
+
+
+def finn_ep(d: pd.DataFrame) -> dict | None:
+    """Finner nyeste EP (gap-up på stort volum) de siste EP_FERSK_DAGER. None ellers.
+
+    Ser bakover fra siste dag: for hver dag regnes gap% (dagens open mot forrige
+    close) og volum mot 50-dagers snitt (før gap-dagen). Returnerer nøkkeltall
+    for det nyeste kvalifiserende gapet, inkl. kriteriene ek1–ek3.
+    """
+    if d is None or len(d) < konfig.EP_MIN_DAGER:
+        return None
+
+    snitt50 = d["Volume"].rolling(50, min_periods=20).mean().shift(1)
+    c = d["Close"]
+    pris = float(c.iloc[-1])
+    if pris <= 0:
+        return None
+
+    n = len(d)
+    sok = min(konfig.EP_FERSK_DAGER, n - 1)
+    for tilbake in range(sok):
+        i = n - 1 - tilbake
+        if i < 1:
+            break
+        forrige_close = float(c.iloc[i - 1])
+        aapning = float(d["Open"].iloc[i])
+        if forrige_close <= 0:
+            continue
+        gap = (aapning / forrige_close - 1.0) * 100.0
+        vol = float(d["Volume"].iloc[i])
+        vsnitt = float(snitt50.iloc[i]) if pd.notna(snitt50.iloc[i]) else np.nan
+        vol_x = vol / vsnitt if vsnitt and vsnitt > 0 else np.nan
+
+        # "Ikke allerede strukket": avkastning de 6 mnd FØR gapet (fram til dagen før).
+        før = c.iloc[:i]
+        strukket = np.nan
+        if len(før) > 126:
+            base = float(før.iloc[-127])
+            if base > 0:
+                strukket = (float(før.iloc[-1]) / base - 1.0) * 100.0
+
+        ek1 = bool(gap >= konfig.EP_GAP_MIN)
+        ek2 = bool(pd.notna(vol_x) and vol_x >= konfig.EP_VOLUM_FAKTOR)
+        ek3 = bool(pd.isna(strukket) or strukket <= konfig.EP_IKKE_STRUKKET)
+
+        if ek1:  # et reelt gap – rapporter nyeste slike (selv om volum/strukket svikter)
+            gapdag = d.index[i]
+            dag_lav = float(d["Low"].iloc[i])
+            siden = (pris / float(c.iloc[i]) - 1.0) * 100.0 if float(c.iloc[i]) > 0 else np.nan
+            return {
+                "gap_dato": gapdag,
+                "gap_pct": gap,
+                "volum_x": vol_x,
+                "strukket_6m": strukket,
+                "dager_siden": int(tilbake),
+                "pris": pris,
+                "gap_close": float(c.iloc[i]),
+                "stop": dag_lav,
+                "siden_gap_pct": siden,
+                "ek1": ek1, "ek2": ek2, "ek3": ek3,
+            }
+    return None
+

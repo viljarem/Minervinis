@@ -147,3 +147,61 @@ def test_er_gyldig_setup_krever_alle():
     assert qullamaggie.er_gyldig_setup(alle) is True
     alle["qk5"] = False
     assert qullamaggie.er_gyldig_setup(alle) is False
+
+
+# ---------------------------------------------------------------------------
+# Episodic Pivot (finn_ep)
+# ---------------------------------------------------------------------------
+def _serie_med_ep(gap_pct: float, vol_x: float, strukket: bool) -> pd.DataFrame:
+    """200 dager: rolig (ev. strukket) → ett gap-up på gap_pct med vol_x volum i går."""
+    dager = pd.bdate_range("2024-01-01", periods=200)
+    if strukket:
+        base = np.concatenate([np.full(72, 100.0), np.linspace(100, 180, 126)])  # +80 % siste 6 mnd
+    else:
+        base = np.concatenate([np.full(120, 100.0), np.linspace(100, 104, 78)])  # flat
+    # Gap-dag (nest siste): åpner gap_pct over forrige close
+    forrige = base[-1]
+    gap_open = forrige * (1 + gap_pct / 100)
+    gap_close = gap_open * 1.01
+    close = np.concatenate([base, [gap_close], [gap_close * 1.005]])
+    open_ = np.concatenate([base, [gap_open], [gap_close]])
+    high = close * 1.01
+    low = np.concatenate([base * 0.99, [forrige * 1.005], [gap_close * 0.99]])
+    vol = np.full(200, 1_000_000.0)
+    vol[-2] = 1_000_000.0 * vol_x               # stort volum på gap-dagen
+    return pd.DataFrame(
+        {"Open": open_, "High": high, "Low": low, "Close": close, "Volume": vol},
+        index=dager,
+    )
+
+
+def test_ep_for_kort_gir_none():
+    assert qullamaggie.finn_ep(_serie_med_ep(15, 3, False).head(40)) is None
+
+
+def test_ep_gyldig_gap_volum_ikke_strukket():
+    ep = qullamaggie.finn_ep(_serie_med_ep(15, 3.0, strukket=False))
+    assert ep is not None
+    assert ep["ek1"] is True            # gap ≥ 10 %
+    assert ep["ek2"] is True            # volum ≥ 2x
+    assert ep["ek3"] is True            # ikke strukket
+    assert ep["gap_pct"] >= 10
+
+
+def test_ep_strukket_feiler_ek3():
+    ep = qullamaggie.finn_ep(_serie_med_ep(15, 3.0, strukket=True))
+    assert ep is not None
+    assert ep["ek1"] is True
+    assert ep["ek3"] is False           # allerede gått for mye
+
+
+def test_ep_lavt_volum_feiler_ek2():
+    ep = qullamaggie.finn_ep(_serie_med_ep(15, 1.0, strukket=False))
+    assert ep is not None
+    assert ep["ek1"] is True
+    assert ep["ek2"] is False           # ikke nok volum
+
+
+def test_ep_lite_gap_gir_none():
+    """Gap under 10 % skal ikke regnes som EP i det hele tatt."""
+    assert qullamaggie.finn_ep(_serie_med_ep(3, 3.0, strukket=False)) is None

@@ -365,8 +365,17 @@ STATUS 17.11:
       185 tester groenne. Verifisert mot ekte data: S&P 5 gyldige
       (VRSK/BBY/FDS/CDW/ACN), Oslo 2 (OMDA/OKEA) + gode nesten
       (HUNT/NKR/SMOP/APP).
-  [ ] Steg 4 NESTE: QM2 EP (gap+volum) som andre preset.
-  [ ] Steg 5: QM3 parabolsk som flagg paa aapne posisjoner.
+  [x] Steg 4 FERDIG: QM2 Episodic Pivot (gap+volum) som nytt preset.
+      qullamaggie.finn_ep (nyeste gap-opp siste EP_FERSK_DAGER: gap%,
+      volum_x vs 50d-snitt, strukket_6m foer gap -> ek1/ek2/ek3).
+      screener.analyser_ep / screen_ep. Koblet inn i app.py som
+      "⚡ Episodic Pivot": sidebar-valg + caption, kjor_ep (cache),
+      write-through, vis_episodic_pivot (tabell med gap/volum/dager
+      siden/stop + ✅/❌ pr. kriterium + chart). 5 nye EP-tester, 190
+      totalt groenne. App starter rent. Verifisert mot ekte data: Oslo
+      4 gap (PLT.OL 12%/2.7x), S&P bekreftet 18 ekte EP-er med bredere
+      vindu (ABNB/ACN/APP/PTC/IDXX/FSLR/CRM).
+  [ ] Steg 5 NESTE: QM3 parabolsk som flagg paa aapne posisjoner.
   [ ] Steg 6: historisk chart-visning + konsolideringsboks/utbruddsnivaa.
 
 -----------------------------------------------------------------------
