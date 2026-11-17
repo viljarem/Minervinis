@@ -148,6 +148,24 @@ TS_MIN_DAGER = 252
 
 
 # ---------------------------------------------------------------------------
+# Qullamaggie-screener (momentum-ledere i breakout-setup)
+# ---------------------------------------------------------------------------
+# Setup-variant (IKKE score): hvert kriterium passerer/feiler, og vi viser
+# avstand til utbrudd (pivot) + historiske brudd på chart – som Minervini.
+# Validert mot ekte data 16.11: finner ekte ledere, få falske. Se todos.txt.
+QM_ADR_VINDU = 20              # ADR% = snitt av (High/Low) siste 20 dager
+QM_EMA_PERIODER = (10, 20, 50)  # EMA-er aksjen "surfer" på i konsolideringen
+QM_MOM_PERIODER = (21, 63, 126)  # momentum-vinduer: ~1M / 3M / 6M (handelsdager)
+QM_MOM_PERSENTIL = 0.90       # momentum-leder = topp 10 % på 3M i universet
+QM_BYKS_VINDU = 63            # se etter et reelt byks siste ~3 mnd
+QM_BYKS_MIN = 30.0            # bykset må være minst så mange % (lav→høy i vindu)
+QM_BASE_VINDU = 20            # konsolideringen måles over siste N dager
+QM_STRAM_MAKS = 5.0           # stram base: range/ADR under dette (tuning-knapp)
+QM_ADR_MIN = 3.0              # ADR% minst så høy (nok bevegelse til store R)
+QM_MIN_DAGER = 150            # trenger minst så mange dager for å vurderes
+
+
+# ---------------------------------------------------------------------------
 # Presets (ferdige oppsett du kan velge mellom i nettsiden)
 # ---------------------------------------------------------------------------
 @dataclass

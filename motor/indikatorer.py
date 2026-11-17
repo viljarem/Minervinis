@@ -196,3 +196,51 @@ def rs_avkastning(close: pd.Series) -> float:
             return float("nan")
         sum_vektet += vekt * (naa / for_lenge_siden - 1.0)
     return float(sum_vektet)
+
+
+# ---------------------------------------------------------------------------
+# Qullamaggie-indikatorer (ADR%, EMA, momentum) – brukt av motor/qullamaggie.py
+# ---------------------------------------------------------------------------
+def ema(close: pd.Series, periode: int) -> pd.Series:
+    """Eksponentielt glidende snitt (EMA). Legger mest vekt på ferske dager.
+
+    Qullamaggie bruker EMA10/20 (og 50) som aksjen "surfer" på i konsolideringen
+    og som trailing-stop. EMA reagerer raskere enn SMA på nye kurser.
+    """
+    return close.ewm(span=periode, adjust=False).mean()
+
+
+def adr_prosent(d: pd.DataFrame, vindu: int = konfig.QM_ADR_VINDU) -> float:
+    """ADR% (Average Daily Range i prosent) for siste dag – Qullamaggies #1 mål.
+
+    ADR% = (snitt av (High/Low) over N dager − 1) · 100. Høy ADR% = mye
+    "krutt" (stor daglig bevegelse) = rom for store R. Returnerer NaN hvis
+    for kort historikk eller ugyldige verdier.
+    """
+    if d is None or len(d) < vindu:
+        return float("nan")
+    forhold = (d["High"] / d["Low"]).tail(vindu)
+    forhold = forhold.replace([np.inf, -np.inf], np.nan).dropna()
+    if forhold.empty:
+        return float("nan")
+    return float((forhold.mean() - 1.0) * 100.0)
+
+
+def avkastning_vindu(close: pd.Series, dager: int) -> float:
+    """Ren prosentavkastning over de siste N handelsdagene. NaN hvis for kort."""
+    if close is None or len(close) <= dager:
+        return float("nan")
+    naa = float(close.iloc[-1])
+    foer = float(close.iloc[-1 - dager])
+    if foer <= 0:
+        return float("nan")
+    return (naa / foer - 1.0) * 100.0
+
+
+def momentum(close: pd.Series, perioder: tuple = konfig.QM_MOM_PERIODER) -> dict:
+    """Avkastning over flere vinduer (1M/3M/6M som standard).
+
+    Returnerer {"m<dager>": prosent, ...}, f.eks. {"m21":.., "m63":.., "m126":..}.
+    Brukes til å finne momentum-ledere (topp X % i universet).
+    """
+    return {f"m{n}": avkastning_vindu(close, n) for n in perioder}
