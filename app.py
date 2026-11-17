@@ -3443,6 +3443,12 @@ def _tegninger_ui(sok: str, serie, tegn: list, *, kontekst: str) -> None:
         if _lg is None:
             st.caption("Logg inn i Journal-fanen for aa lagre egne tegninger.")
             return
+        # Robust mot gammel/cachet journal_db uten tegne-metodene (f.eks. rett
+        # etter en utrulling der modulen enda ikke er lastet paa nytt).
+        if not (hasattr(_lg, "lagre_tegninger") and hasattr(_lg, "hent_tegninger")):
+            st.caption("Tegne-lagring er ikke klar ennaa (appen ruller ut en ny versjon "
+                       "– prov «Rerun» eller «Reboot app» om litt).")
+            return
         # Dato-grenser fra serien (for trend/kanal/tekst).
         try:
             _d_min = serie.index.min().date()
@@ -3595,7 +3601,7 @@ def vis_ticker_detalj(sok: str, *, kontekst: str = "sok", handel_data: dict | No
         _tegn = []
         try:
             _lg_t = journal_ui._lager()
-            if _lg_t is not None:
+            if _lg_t is not None and hasattr(_lg_t, "hent_tegninger"):
                 _tegn = _lg_t.hent_tegninger(sok, bors_navn)
         except Exception:
             _tegn = []
@@ -4498,7 +4504,7 @@ with fane2:
             _tegn_c = []
             try:
                 _lg_c = journal_ui._lager()
-                if _lg_c is not None:
+                if _lg_c is not None and hasattr(_lg_c, "hent_tegninger"):
                     _tegn_c = _lg_c.hent_tegninger(valg, bors_navn)
             except Exception:
                 _tegn_c = []
