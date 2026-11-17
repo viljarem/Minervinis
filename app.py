@@ -269,6 +269,7 @@ CHART_LAG = {
     "TrendScore":       False,
     "Qullamaggie":      False,
     "Egne SMA":         True,
+    "Tegninger":        True,
 }
 # Oversetter pille-etikett → det interne vis_*-flagget.
 _LAG_FLAGG = {
@@ -279,6 +280,7 @@ _LAG_FLAGG = {
     "EPS/omsetning":    "vis_eps",    "TrendScore":   "vis_trendscore",
     "Qullamaggie":      "vis_qm",
     "Egne SMA":         "vis_egne_sma",
+    "Tegninger":        "vis_tegning",
 }
 
 
@@ -1247,7 +1249,9 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                   vis_qm: bool = True,
                   qm_overlay: dict | None = None,
                   vis_egne_sma: bool = True,
-                  egne_sma: list | None = None) -> list | None:
+                  egne_sma: list | None = None,
+                  vis_tegning: bool = True,
+                  tegninger: list | None = None) -> list | None:
     """Bygger data-spesifikasjonen for lightweight-charts.
 
     Tar med alt det gamle Plotly-chartet hadde: candles, MA50/150/200, 52-ukers
@@ -1681,6 +1685,75 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                                    "layer": "qm"})
             except Exception:
                 pass
+
+        # Egne tegninger (M4/S3): vannrette nivaaer, trendlinjer, kanal og tekst
+        # lagret i Supabase. Eget lag "tegning" styrt av "Tegninger"-pillen. Alt i
+        # try/except saa en skakk tegning aldri velter chartet.
+        if vis_tegning and tegninger:
+            def _snap(dato_str):
+                """Naermeste synlige handelsdag >= dato (ellers siste). None hvis utenfor."""
+                try:
+                    ds = str(dato_str)[:10]
+                except Exception:
+                    return None
+                if ds in t_sett:
+                    return ds
+                etter = [ti for ti in t if ti >= ds]
+                if etter:
+                    return etter[0]
+                return t[-1] if t else None
+            for _tg in tegninger:
+                try:
+                    _typ = _tg.get("type")
+                    _farge = _tg.get("farge") or "#8e24aa"
+                    _label = _tg.get("label") or ""
+                    _pts = _tg.get("points") or []
+                    if _typ == "hlinje" and _pts:
+                        _pr = float(_pts[0].get("price"))
+                        serier.append({"type": "Line",
+                                       "data": [{"time": ti, "value": _pr} for ti in t],
+                                       "options": {"color": _farge, "lineWidth": 1, "lineStyle": 0,
+                                                   "priceLineVisible": False, "lastValueVisible": True,
+                                                   "title": _label or "Nivå"},
+                                       "legend": {"label": _label or f"Nivå {_pr:g}",
+                                                  "color": _farge, "kind": "level"},
+                                       "layer": "tegning"})
+                    elif _typ in ("trend", "kanal") and len(_pts) >= 2:
+                        _t1 = _snap(_pts[0].get("time")); _t2 = _snap(_pts[1].get("time"))
+                        _p1 = float(_pts[0].get("price")); _p2 = float(_pts[1].get("price"))
+                        if _t1 and _t2 and _t1 != _t2:
+                            _lo, _hi = sorted([(_t1, _p1), (_t2, _p2)], key=lambda x: x[0])
+                            serier.append({"type": "Line",
+                                           "data": [{"time": _lo[0], "value": _lo[1]},
+                                                    {"time": _hi[0], "value": _hi[1]}],
+                                           "options": {"color": _farge, "lineWidth": 2, "lineStyle": 0,
+                                                       "priceLineVisible": False,
+                                                       "lastValueVisible": False},
+                                           "legend": {"label": _label or "Trend",
+                                                      "color": _farge, "kind": "line"},
+                                           "layer": "tegning"})
+                            if _typ == "kanal":
+                                _bredde = float(_tg.get("bredde") or 0)
+                                if _bredde:
+                                    serier.append({"type": "Line",
+                                                   "data": [{"time": _lo[0], "value": _lo[1] + _bredde},
+                                                            {"time": _hi[0], "value": _hi[1] + _bredde}],
+                                                   "options": {"color": _farge, "lineWidth": 2,
+                                                               "lineStyle": 0,
+                                                               "priceLineVisible": False,
+                                                               "lastValueVisible": False},
+                                                   "layer": "tegning"})
+                    elif _typ == "tekst" and _pts:
+                        _tt = _snap(_pts[0].get("time"))
+                        if _tt:
+                            _eks = hoved.get("markers", [])
+                            hoved["markers"] = sorted(
+                                _eks + [{"time": _tt, "position": "aboveBar",
+                                         "color": _farge, "shape": "circle",
+                                         "text": _label or "notat", "layer": "tegning"}],
+                                key=lambda x: x["time"])
+                except Exception:
+                    continue
 
         # Posisjon (long): inngang (blå solid), stop (rød stiplet) og mål (grønn
         # stiplet) som tydelige nivålinjer med pris-etikett til høyre.
@@ -2134,7 +2207,7 @@ def render_chart_spec(spec: list | None, *, key: str, morkt: bool = False,
 LAG_ID = {"vis_ma": "ma", "vis_52u": "52u", "vis_vcp": "vcp", "vis_7av7": "7av7",
           "vis_hist": "hist", "vis_golden": "golden", "vis_indeks": "indeks",
           "vis_rs_rating": "rs", "vis_eps": "eps", "vis_trendscore": "ts",
-          "vis_qm": "qm", "vis_egne_sma": "egne_sma"}
+          "vis_qm": "qm", "vis_egne_sma": "egne_sma", "vis_tegning": "tegning"}
 
 
 def chart_interaktiv(serie: pd.DataFrame, res: dict | None, ticker: str, *,
@@ -2143,7 +2216,8 @@ def chart_interaktiv(serie: pd.DataFrame, res: dict | None, ticker: str, *,
                      valuta: str = "", hoyde: int = 620, kontekst: str = "hoved",
                      standard: dict | None = None, minervini_lag: bool = True,
                      handel_markorer: list | None = None,
-                     qm_overlay: dict | None = None) -> bool:
+                     qm_overlay: dict | None = None,
+                     tegninger: list | None = None) -> bool:
     """Tegner chartet med innebygde kontroller. Returnerer False hvis det feilet.
 
     kontekst = egen localStorage-nøkkel (så f.eks. golden cross-tabellen husker sine
@@ -2162,6 +2236,7 @@ def chart_interaktiv(serie: pd.DataFrame, res: dict | None, ticker: str, *,
                       hoyde=hoyde,
                       handel_markorer=handel_markorer,
                       qm_overlay=qm_overlay,
+                      tegninger=tegninger,
                       **_trendscore_chart_kwargs(ticker, True),
                       **_eps_chart_kwargs(ticker, True))
         dag = lag_chart_lwc(serie, res, 100_000, ukentlig=False, **felles)
@@ -3351,6 +3426,102 @@ MORKT = _er_morkt()
 TEMA = "d" if MORKT else "l"
 
 
+def _tegninger_ui(sok: str, serie, tegn: list, *, kontekst: str) -> None:
+    """Skjema for aa legge til / slette egne tegninger (lagres i Supabase).
+
+    Siden chart-komponenten er enveis (ingen klikk tilbake til Python), legger
+    du til tegninger via dette skjemaet: velg type, pris(er) og evt. dato(er).
+    `tegn` er lista som ble lastet (muteres ved lagring). Vises som en expander
+    under chartet slik at Minervini-bildet ellers er uforstyrret.
+    """
+    _lg = None
+    try:
+        _lg = journal_ui._lager()
+    except Exception:
+        _lg = None
+    with st.expander(f"✏️ Tegninger ({len(tegn)})", expanded=False):
+        if _lg is None:
+            st.caption("Logg inn i Journal-fanen for aa lagre egne tegninger.")
+            return
+        # Dato-grenser fra serien (for trend/kanal/tekst).
+        try:
+            _d_min = serie.index.min().date()
+            _d_maks = serie.index.max().date()
+        except Exception:
+            import datetime as _dt
+            _d_min = _dt.date(2000, 1, 1)
+            _d_maks = _dt.date.today()
+        _pris_std = float(serie["Close"].iloc[-1]) if not serie.empty else 0.0
+
+        # Eksisterende tegninger med slett-knapp.
+        if tegn:
+            st.caption("**Dine tegninger**")
+            for _i, _t in enumerate(list(tegn)):
+                _c1, _c2 = st.columns([5, 1])
+                _navn = {"hlinje": "Nivaa", "trend": "Trendlinje",
+                         "kanal": "Kanal", "tekst": "Tekst"}.get(_t.get("type"), _t.get("type"))
+                _etik = _t.get("label") or ""
+                _pkt = _t.get("points", [])
+                if _t.get("type") == "hlinje" and _pkt:
+                    _info = f"{_pkt[0].get('price')}"
+                elif _pkt:
+                    _info = " \u2192 ".join(f"{p.get('time')}:{p.get('price')}" for p in _pkt)
+                else:
+                    _info = ""
+                _c1.write(f"{_navn} · {_info} {('· ' + _etik) if _etik else ''}")
+                if _c2.button("🗑️", key=f"{kontekst}_{sok}_slett_tegn_{_i}"):
+                    tegn.pop(_i)
+                    _lg.lagre_tegninger(sok, bors_navn, tegn)
+                    st.rerun()
+            st.divider()
+
+        # Legg til ny.
+        st.caption("**Legg til ny**")
+        _typ = st.selectbox("Type", ["Nivaalinje", "Trendlinje", "Kanal", "Tekst"],
+                            key=f"{kontekst}_{sok}_ny_tegn_type")
+        _farge = st.color_picker("Farge", "#8e24aa", key=f"{kontekst}_{sok}_ny_tegn_farge")
+        _label = st.text_input("Etikett (valgfritt)", key=f"{kontekst}_{sok}_ny_tegn_label")
+        _ny = None
+        if _typ == "Nivaalinje":
+            _p = st.number_input("Pris", value=_pris_std, step=0.1,
+                                 key=f"{kontekst}_{sok}_ny_tegn_pris")
+            _ny = {"type": "hlinje", "points": [{"price": float(_p)}]}
+        elif _typ == "Tekst":
+            _dt1 = st.date_input("Dato", value=_d_maks, min_value=_d_min, max_value=_d_maks,
+                                 key=f"{kontekst}_{sok}_ny_tegn_dato")
+            _p = st.number_input("Pris (hoyde)", value=_pris_std, step=0.1,
+                                 key=f"{kontekst}_{sok}_ny_tegn_pris")
+            _ny = {"type": "tekst",
+                   "points": [{"time": str(_dt1), "price": float(_p)}]}
+        else:  # Trendlinje / Kanal
+            _ca, _cb = st.columns(2)
+            _dt1 = _ca.date_input("Fra dato", value=_d_min, min_value=_d_min, max_value=_d_maks,
+                                  key=f"{kontekst}_{sok}_ny_tegn_dato1")
+            _pp1 = _ca.number_input("Fra pris", value=_pris_std, step=0.1,
+                                    key=f"{kontekst}_{sok}_ny_tegn_pris1")
+            _dt2 = _cb.date_input("Til dato", value=_d_maks, min_value=_d_min, max_value=_d_maks,
+                                  key=f"{kontekst}_{sok}_ny_tegn_dato2")
+            _pp2 = _cb.number_input("Til pris", value=_pris_std, step=0.1,
+                                    key=f"{kontekst}_{sok}_ny_tegn_pris2")
+            _ny = {"type": "trend" if _typ == "Trendlinje" else "kanal",
+                   "points": [{"time": str(_dt1), "price": float(_pp1)},
+                              {"time": str(_dt2), "price": float(_pp2)}]}
+            if _typ == "Kanal":
+                _br = st.number_input("Kanal-bredde (pris)", value=round(_pris_std * 0.05, 2),
+                                      step=0.1, key=f"{kontekst}_{sok}_ny_tegn_bredde")
+                _ny["bredde"] = float(_br)
+        if st.button("➕ Legg til", key=f"{kontekst}_{sok}_ny_tegn_legg"):
+            import uuid as _uuid
+            _ny["id"] = _uuid.uuid4().hex[:8]
+            _ny["farge"] = _farge
+            if _label.strip():
+                _ny["label"] = _label.strip()
+            tegn.append(_ny)
+            _lg.lagre_tegninger(sok, bors_navn, tegn)
+            st.success("Tegning lagt til.")
+            st.rerun()
+
+
 def vis_ticker_detalj(sok: str, *, kontekst: str = "sok", handel_data: dict | None = None) -> dict | None:
     """Felles aksjevisning: chart + all Minervini-info + fundamenta + posisjonsverktøy.
 
@@ -3417,6 +3588,14 @@ def vis_ticker_detalj(sok: str, *, kontekst: str = "sok", handel_data: dict | No
                 pos3 = handel_data["pos"]
                 pos_suffix3 = "_handel"
             _handel_mark = handel_data.get("markorer")
+        # Egne tegninger (nivaalinjer/trend/kanal/tekst) lagret i Supabase.
+        _tegn = []
+        try:
+            _lg_t = journal_ui._lager()
+            if _lg_t is not None:
+                _tegn = _lg_t.hent_tegninger(sok, bors_navn)
+        except Exception:
+            _tegn = []
         _rs_serie3 = None
         if vis_rs_rating3:
             _rs_mat3 = rs_rating_historikk(bors_navn, versjon)
@@ -3430,7 +3609,7 @@ def vis_ticker_detalj(sok: str, *, kontekst: str = "sok", handel_data: dict | No
                 serie, res, sok, pos=pos3,
                 rs_serie=_rs_mat_s[sok].dropna() if sok in _rs_mat_s.columns else None,
                 indeks=datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark),
-                morkt=MORKT, valuta=VALUTA, handel_markorer=_handel_mark)
+                morkt=MORKT, valuta=VALUTA, handel_markorer=_handel_mark, tegninger=_tegn)
         spec3 = None if _ok3 else lag_chart_lwc(serie, res, PERIODER_VALG[periode3],
                               vis_ma=vis_ma3, vis_52u=vis_52u3, vis_vcp=vis_vcp3,
                               vis_7av7=vis_7av7_3, vis_hist=vis_hist3, vis_golden=vis_golden3,
@@ -3439,6 +3618,7 @@ def vis_ticker_detalj(sok: str, *, kontekst: str = "sok", handel_data: dict | No
                               ukentlig=ukentlig3, pos=pos3, morkt=MORKT, tittel=sok,
                               handel_markorer=_handel_mark, vis_qm=_k3["vis_qm"],
                               vis_egne_sma=_k3["vis_egne_sma"],
+                              vis_tegning=_k3["vis_tegning"], tegninger=_tegn,
                               **_trendscore_chart_kwargs(sok, vis_trendscore3),
                               **_eps_chart_kwargs(sok, vis_eps3))
         if _ok3:
@@ -3455,6 +3635,7 @@ def vis_ticker_detalj(sok: str, *, kontekst: str = "sok", handel_data: dict | No
                 renderLightweightCharts(
                     spec3,
                     key=f"{kontekst}_{sok}_{periode3}_{tidsramme3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{vis_rs_rating3}{vis_indeks3}{vis_eps3}{vis_trendscore3}{pos_suffix3}_{TEMA}")
+        _tegninger_ui(sok, serie, _tegn, kontekst=kontekst)
     vis_vcp_boks(res)
     fundamenta_seksjon(sok, f"{kontekst}_{sok}")
     st.divider()
@@ -4308,6 +4489,13 @@ with fane2:
             _indeks = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark) if vis_indeks else None
             _eps_kw = _eps_chart_kwargs(valg, vis_eps)
             _ts_kw = _trendscore_chart_kwargs(valg, vis_trendscore_c)
+            _tegn_c = []
+            try:
+                _lg_c = journal_ui._lager()
+                if _lg_c is not None:
+                    _tegn_c = _lg_c.hent_tegninger(valg, bors_navn)
+            except Exception:
+                _tegn_c = []
             _interaktiv_ok = False
             if not vis_klassisk:
                 _rs_mat_i = rs_rating_historikk(bors_navn, versjon)
@@ -4315,7 +4503,7 @@ with fane2:
                     serie, res, valg, pos=pos,
                     rs_serie=_rs_mat_i[valg].dropna() if valg in _rs_mat_i.columns else None,
                     indeks=datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark),
-                    morkt=MORKT, valuta=VALUTA)
+                    morkt=MORKT, valuta=VALUTA, tegninger=_tegn_c)
                 if _interaktiv_ok:
                     st.caption("Velg periode, tidsramme og lag rett i chartet – valgene huskes. "
                                "Beveg musa for verdier under pekeren, dra for å panorere, rull for å zoome.")
@@ -4326,6 +4514,7 @@ with fane2:
                                  vis_indeks=vis_indeks, indeks=_indeks, indeks_navn=BORS.benchmark,
                                  ukentlig=ukentlig, pos=pos, morkt=MORKT, tittel=valg,
                                  vis_qm=_k["vis_qm"], vis_egne_sma=_k["vis_egne_sma"],
+                                 vis_tegning=_k["vis_tegning"], tegninger=_tegn_c,
                                  **_ts_kw, **_eps_kw)
             if spec is None and not _interaktiv_ok:
                 st.info("Klarte ikke bygge chartet for denne aksjen.")
@@ -4360,6 +4549,7 @@ with fane2:
                 fundamenta_seksjon(valg, f"chart_{valg}")
                 st.divider()
                 posisjon_verktoy(res, f"chart_{valg}", VALUTA)
+            _tegninger_ui(valg, serie, _tegn_c, kontekst=f"chart_{valg}")
 
 # --- Fane 3: Søk ---
 with fane3:

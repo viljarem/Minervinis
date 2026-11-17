@@ -369,3 +369,44 @@ class Lager:
         except JournalFeil:
             raise
 
+    # ===================================================================
+    # TEGNINGER (chart-annotasjoner: nivaaer, trendlinjer, kanal, tekst)
+    # ===================================================================
+    # Én rad per ticker+bors (aktiv arbeidslag). 'data' er en liste av
+    # tegne-objekter: {id, type, points, farge, label}. Alt synkes paa
+    # tvers av enheter. Appen takler at tabellen mangler (faller tilbake
+    # til ingen tegninger).
+    def hent_tegninger(self, ticker: str, bors: str) -> list[dict]:
+        """Henter lista med tegninger for én aksje. Tom liste hvis ingen/feil."""
+        t = (ticker or "").strip().upper()
+        try:
+            rader = self._kall(
+                "GET",
+                f"/rest/v1/tegninger?ticker=eq.{urllib.parse.quote(t)}"
+                f"&bors=eq.{urllib.parse.quote(bors)}&aktiv=eq.true&select=id,data")
+        except JournalFeil:
+            return []
+        if rader and isinstance(rader[0].get("data"), list):
+            return rader[0]["data"]
+        return []
+
+    def lagre_tegninger(self, ticker: str, bors: str, data: list) -> None:
+        """Lagrer (upsert) hele tegne-lista for en aksje. Oppretter raden ved behov."""
+        t = (ticker or "").strip().upper()
+        data = data or []
+        try:
+            rader = self._kall(
+                "GET",
+                f"/rest/v1/tegninger?ticker=eq.{urllib.parse.quote(t)}"
+                f"&bors=eq.{urllib.parse.quote(bors)}&aktiv=eq.true&select=id")
+        except JournalFeil:
+            rader = []
+        if rader:
+            rad_id = rader[0]["id"]
+            self._kall("PATCH", f"/rest/v1/tegninger?id=eq.{rad_id}",
+                       {"data": data}, prefer="return=minimal")
+        else:
+            body = {"eier": EIER, "ticker": t, "bors": bors,
+                    "aktiv": True, "data": data}
+            self._kall("POST", "/rest/v1/tegninger", body, prefer="return=minimal")
+
