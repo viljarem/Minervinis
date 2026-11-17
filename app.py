@@ -17,7 +17,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import json
 
-from motor import konfig, data as datamod, fundamenta, indikatorer, minervini, posisjon, screener, sektor, univers, vcp, aksjeinfo, trendscore
+from motor import konfig, data as datamod, fundamenta, indikatorer, minervini, posisjon, screener, sektor, univers, vcp, aksjeinfo, trendscore, qullamaggie
 from motor import skann_cache
 from motor import markedstid
 import journal_ui
@@ -50,7 +50,7 @@ def _er_morkt() -> bool:
 # ---------------------------------------------------------------------------
 # Øk denne når screener-/tabell-logikken endres, så @st.cache_data-bufferet for
 # screening automatisk invalideres (slipper å tømme cache manuelt etter deploy).
-KODE_VERSJON = 7
+KODE_VERSJON = 8
 
 
 def data_versjon(bors: "konfig.Bors" = konfig.OSLO_BORS) -> float:
@@ -267,7 +267,7 @@ CHART_LAG = {
     "RS-rating":        False,
     "EPS/omsetning":    False,
     "TrendScore":       False,
-    "Qullamaggie":      True,
+    "Qullamaggie":      False,
 }
 # Oversetter pille-etikett → det interne vis_*-flagget.
 _LAG_FLAGG = {
@@ -1230,6 +1230,7 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                   vis_trendscore: bool = False,
                   trendscore_df: pd.DataFrame | None = None,
                   handel_markorer: list | None = None,
+                  vis_qm: bool = True,
                   qm_overlay: dict | None = None) -> list | None:
     """Bygger data-spesifikasjonen for lightweight-charts.
 
@@ -1538,9 +1539,21 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                            "legend": {"label": "Stop", "color": "#ef5350", "kind": "level"}})
 
         # Qullamaggie-overlay: EMA10/20 (surfing) + konsolideringsboks (range) +
-        # utbruddsnivaa (QM), eller gap-nivaa + stop (EP). Eget lag "qm" slik at
-        # pillen kun dukker opp paa Qullamaggie-/EP-chartene.
-        if qm_overlay:
+        # utbruddsnivaa (QM), eller gap-nivaa + stop (EP). Eget lag "qm" som kan
+        # slaas av/paa med "Qullamaggie"-pillen paa ALLE chart. Overlayet regnes
+        # automatisk fra kursserien naar det ikke er sendt inn (slik at pillen
+        # finnes og virker overalt, ikke bare paa QM/EP-fanene); eksplisitt
+        # overlay fra screeneren (med gap-info) vinner.
+        _qm = qm_overlay
+        if vis_qm and _qm is None:
+            try:
+                _nk = qullamaggie.nokkeltall(serie)
+                if _nk is not None:
+                    _qm = {"pivot": _nk.get("pivot"), "base_lav": _nk.get("base_lav"),
+                           "stop": _nk.get("stop"), "n_base": konfig.QM_BASE_VINDU}
+            except Exception:
+                _qm = None
+        if vis_qm and _qm:
             try:
                 _qm_e10 = indikatorer.ema(d["Close"], 10)
                 _qm_e20 = indikatorer.ema(d["Close"], 20)
@@ -1560,10 +1573,12 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                                "layer": "qm"})
 
                 # Konsolideringsboks + utbruddsnivaa (QM breakout)
-                _piv = qm_overlay.get("pivot")
-                _blav = qm_overlay.get("base_lav")
+                _piv = _qm.get("pivot")
+                _blav = _qm.get("base_lav")
                 if _piv and _blav:
-                    _nbase = int(qm_overlay.get("n_base") or konfig.QM_BASE_VINDU)
+                    _nbase = int(_qm.get("n_base") or konfig.QM_BASE_VINDU)
+                    if ukentlig:
+                        _nbase = max(_nbase // 5, 4)
                     _base_t = t[-_nbase:] if _nbase < len(t) else t
                     _piv = float(_piv); _blav = float(_blav)
                     # Svak gul boks mellom base-lav og pivot over konsolideringen.
@@ -1592,8 +1607,8 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                                    "layer": "qm"})
 
                 # Gap-nivaa + gap-dag markoer (EP)
-                _gapc = qm_overlay.get("gap_close")
-                _gapd = qm_overlay.get("gap_dato")
+                _gapc = _qm.get("gap_close")
+                _gapd = _qm.get("gap_dato")
                 if _gapc:
                     serier.append({"type": "Line",
                                    "data": [{"time": ti, "value": float(_gapc)} for ti in t],
@@ -1613,7 +1628,7 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                             key=lambda x: x["time"])
 
                 # Felles stop-linje (dagens/gap-dagens low)
-                _stp = qm_overlay.get("stop")
+                _stp = _qm.get("stop")
                 if _stp:
                     serier.append({"type": "Line",
                                    "data": [{"time": ti, "value": float(_stp)} for ti in t],
@@ -3346,7 +3361,7 @@ def vis_ticker_detalj(sok: str, *, kontekst: str = "sok", handel_data: dict | No
                               vis_rs_rating=vis_rs_rating3, rs_rating=_rs_serie3,
                               vis_indeks=vis_indeks3, indeks=_indeks3, indeks_navn=BORS.benchmark,
                               ukentlig=ukentlig3, pos=pos3, morkt=MORKT, tittel=sok,
-                              handel_markorer=_handel_mark,
+                              handel_markorer=_handel_mark, vis_qm=_k3["vis_qm"],
                               **_trendscore_chart_kwargs(sok, vis_trendscore3),
                               **_eps_chart_kwargs(sok, vis_eps3))
         if _ok3:
@@ -3536,7 +3551,7 @@ def vis_qullamaggie(qm_resultat):
                    "stop": _rd.get("stop"), "n_base": konfig.QM_BASE_VINDU}
         st.markdown(f"**{_tk}**")
         if not tabell_chart(_s, _r, _tk, kontekst="qm",
-                            standard={"golden": False, "vcp": False, "7av7": False},
+                            standard={"golden": False, "vcp": False, "7av7": False, "qm": True},
                             qm_overlay=_ov):
             st.caption("Klarte ikke tegne chart for denne aksjen.")
 
@@ -3635,7 +3650,7 @@ def vis_episodic_pivot(ep_resultat):
                    "stop": _rd.get("stop")}
         st.markdown(f"**{_tk}**")
         if not tabell_chart(_s, _r, _tk, kontekst="ep",
-                            standard={"golden": False, "vcp": False, "7av7": False},
+                            standard={"golden": False, "vcp": False, "7av7": False, "qm": True},
                             qm_overlay=_ov):
             st.caption("Klarte ikke tegne chart for denne aksjen.")
 
@@ -4222,7 +4237,8 @@ with fane2:
                                  vis_7av7=vis_7av7, vis_hist=vis_hist, vis_golden=vis_golden,
                                  vis_rs_rating=vis_rs_rating, rs_rating=_rs_serie,
                                  vis_indeks=vis_indeks, indeks=_indeks, indeks_navn=BORS.benchmark,
-                                 ukentlig=ukentlig, pos=pos, morkt=MORKT, tittel=valg, **_ts_kw, **_eps_kw)
+                                 ukentlig=ukentlig, pos=pos, morkt=MORKT, tittel=valg,
+                                 vis_qm=_k["vis_qm"], **_ts_kw, **_eps_kw)
             if spec is None and not _interaktiv_ok:
                 st.info("Klarte ikke bygge chartet for denne aksjen.")
             else:
