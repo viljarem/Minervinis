@@ -356,7 +356,18 @@ STATUS 17.11:
   [x] Steg 2 FERDIG: motor/qullamaggie.py (nokkeltall + qk2-qk7 +
       pivot/stop/avstand, INGEN score). 13 nye tester (test_qullamaggie
       .py), 185 totalt groenne. qk1 (momentum-leder) settes i screeneren.
-  [ ] Steg 3 NESTE: QM_BREAKOUT-preset + koble inn i screener/app.
+  [x] Steg 3 FERDIG: screener.screen_qm (qk1 momentum-persentil paa
+      tvers av universet + qk2-qk7 per aksje, likviditetsfilter, sortert
+      naermest utbrudd). Koblet inn i app.py som nytt "Oppsett"
+      (🚀 Qullamaggie): sidebar-valg + caption, kjor_qm (cache),
+      write-through til skann_cache, vis_qullamaggie (tabell med ✅/❌ pr.
+      kriterium + "til utbrudd" + pivot/stop + chart). App starter rent,
+      185 tester groenne. Verifisert mot ekte data: S&P 5 gyldige
+      (VRSK/BBY/FDS/CDW/ACN), Oslo 2 (OMDA/OKEA) + gode nesten
+      (HUNT/NKR/SMOP/APP).
+  [ ] Steg 4 NESTE: QM2 EP (gap+volum) som andre preset.
+  [ ] Steg 5: QM3 parabolsk som flagg paa aapne posisjoner.
+  [ ] Steg 6: historisk chart-visning + konsolideringsboks/utbruddsnivaa.
 
 -----------------------------------------------------------------------
 VALIDERT MOT EKTE DATA 16.11 (verktoy/qm_prototype.py – engangstest)

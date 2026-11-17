@@ -88,6 +88,16 @@ def kjor_trendscore(bors_navn: str, versjon: float) -> pd.DataFrame:
     _fn = getattr(screener, "screen_trendscore", None)
     return _fn(priser) if _fn is not None else pd.DataFrame()
 
+@st.cache_data(show_spinner="Søker etter Qullamaggie-setup i hele børsen ...")
+def kjor_qm(bors_navn: str, versjon: float) -> pd.DataFrame:
+    """Qullamaggie breakout-setup (momentum-ledere i konsolidering) for hele børsen.
+
+    getattr-fallback om Streamlit Cloud ennå kjører en gammel, bufret
+    screener-modul uten funksjonen (kan skje det første minuttet etter utrulling).
+    """
+    priser = datamod.les_priser(konfig.BORSER[bors_navn].priser_fil)
+    _fn = getattr(screener, "screen_qm", None)
+    return _fn(priser) if _fn is not None else pd.DataFrame()
 
 @st.cache_data(show_spinner=False)
 def trendscore_serie_cached(bors_navn: str, ticker: str, versjon: float) -> pd.DataFrame:
@@ -2968,19 +2978,22 @@ visning og rører **aldri** kursdataene screeningen bygger på.
 GOLDEN_VALG = "✨ Golden Cross"
 IPO_VALG = "🆕 Nye IPO-er"
 TRENDSCORE_VALG = "📈 TrendScore"
+QM_VALG = "🚀 Qullamaggie"
 with st.sidebar:
     st.header("Filtre")
     preset_navn = st.selectbox(
-        "Oppsett", list(konfig.PRESETS.keys()) + [GOLDEN_VALG, TRENDSCORE_VALG, IPO_VALG],
+        "Oppsett", list(konfig.PRESETS.keys()) + [GOLDEN_VALG, TRENDSCORE_VALG, QM_VALG, IPO_VALG],
         help="Velg hva skanningen skal lete etter: Minervini-template (standard), "
              "golden cross (SMA50 over SMA200 + aksjer som venter på kryss), TrendScore "
-             "(0–100-rangering av trendstyrke for hele børsen), eller "
+             "(0–100-rangering av trendstyrke for hele børsen), Qullamaggie (momentum-ledere "
+             "i stram konsolidering, klare for utbrudd), eller "
              "nye IPO-er (ferske noteringer med for kort historikk til full analyse).")
     er_golden = preset_navn == GOLDEN_VALG
     er_ipo = preset_navn == IPO_VALG
     er_trendscore = preset_navn == TRENDSCORE_VALG
-    # Trygt preset-navn for Minervini-analyser (chart/søk) også i golden-/ipo-/ts-modus.
-    aktiv_preset_navn = konfig.STANDARD.navn if (er_golden or er_ipo or er_trendscore) else preset_navn
+    er_qm = preset_navn == QM_VALG
+    # Trygt preset-navn for Minervini-analyser (chart/søk) også i golden-/ipo-/ts-/qm-modus.
+    aktiv_preset_navn = konfig.STANDARD.navn if (er_golden or er_ipo or er_trendscore or er_qm) else preset_navn
 
     # Standardverdier så variablene finnes uansett modus.
     bruker_dato = None
@@ -2999,6 +3012,11 @@ with st.sidebar:
         st.caption("📈 **TrendScore-modus** – rangerer HELE børsen 0–100 etter hvor sterk og "
                    "sunn opptrenden er (momentum, relativ styrke, trendstruktur og ADX). "
                    "Høyest score øverst. Minervini-filtrene under er skrudd av.")
+    elif er_qm:
+        st.caption("🚀 **Qullamaggie-modus** – finner momentum-ledere (topp på 1/3/6 mnd) som "
+                   "har bykset og nå konsoliderer stramt på stigende EMA10/20, klare for utbrudd. "
+                   "Setup-variant: 7 kriterier passerer/feiler (ingen score), sortert nærmest "
+                   "utbrudd. Minervini-filtrene under er skrudd av.")
     elif er_ipo:
         st.caption("🆕 **Nye IPO-er** – ferske noteringer som ennå har for kort historikk "
                    f"(< {konfig.MIN_HANDELSDAGER} handelsdager) til full Minervini-analyse. "
@@ -3064,22 +3082,33 @@ if er_golden:
     resultat = None
     ipo_resultat = None
     ts_resultat = None
+    qm_resultat = None
 elif er_trendscore:
     ts_resultat = kjor_trendscore(bors_navn, versjon) if skannet_na else None
     _skann_skriv_cache("TrendScore", ts_resultat)
     gc_resultat = None
     resultat = None
     ipo_resultat = None
+    qm_resultat = None
+elif er_qm:
+    qm_resultat = kjor_qm(bors_navn, versjon) if skannet_na else None
+    _skann_skriv_cache("Qullamaggie", qm_resultat)
+    gc_resultat = None
+    resultat = None
+    ipo_resultat = None
+    ts_resultat = None
 elif er_ipo:
     ipo_resultat = kjor_nye_ipoer(bors_navn, versjon) if skannet_na else None
     _skann_skriv_cache("Nye IPO-er", ipo_resultat)
     gc_resultat = None
     resultat = None
     ts_resultat = None
+    qm_resultat = None
 else:
     gc_resultat = None
     ipo_resultat = None
     ts_resultat = None
+    qm_resultat = None
     if bruker_dato:
         resultat = kjor_screening_retrospektiv(bors_navn, preset_navn, pd.Timestamp(bruker_dato), versjon)
     else:
@@ -3276,6 +3305,113 @@ GC_TABELL_HJELP = {
         help="TrendScore 0–100: hvor sterk og sunn opptrenden er. Samme tall som i TrendScore-fanen. "
         "🟢 ≥ 70 · 🟡 40–69 · 🔴 < 40."),
 }
+
+
+def _ja_nei(v) -> str:
+    """✅/❌ for et bool-kriterium (til QM-tabellen)."""
+    return "✅" if bool(v) else "❌"
+
+
+def _formater_qm_tabell(df: pd.DataFrame) -> pd.DataFrame:
+    """Bygger visningstabellen for Qullamaggie-screeneren (setup-variant)."""
+    vis = pd.DataFrame()
+    vis["Ticker"] = df["ticker"]
+    vis["Status"] = df["status"] + " " + df["statustekst"]
+    vis["Pris"] = df["pris"]
+    vis["Til utbrudd"] = df["avstand_pivot"].map(
+        lambda p: f"{p:+.1f}%" if pd.notna(p) else "—")
+    vis["Pivot"] = df["pivot"]
+    vis["Stop"] = df["stop"]
+    vis["3M"] = df["mom_3m"].map(lambda p: f"{p:+.0f}%" if pd.notna(p) else "—")
+    vis["Byks"] = df["byks_pct"].map(lambda p: f"{p:+.0f}%" if pd.notna(p) else "—")
+    vis["ADR%"] = df["adr_pct"]
+    vis["Stramhet"] = df["tightness"]
+    # De 7 kriteriene som ✅/❌ (transparent, etterprøvbart – som Minervini).
+    vis["Leder"] = df["qk1"].map(_ja_nei)
+    vis["Byks✓"] = df["qk2"].map(_ja_nei)
+    vis["EMA"] = df["qk3"].map(_ja_nei)
+    vis["H.bunner"] = df["qk4"].map(_ja_nei)
+    vis["Stram"] = df["qk5"].map(_ja_nei)
+    vis["ADR✓"] = df["qk6"].map(_ja_nei)
+    vis["Stop✓"] = df["qk7"].map(_ja_nei)
+    return vis
+
+
+QM_TABELL_HJELP = {
+    "Pris": st.column_config.NumberColumn("Pris", format="%.2f", help="Siste sluttkurs."),
+    "Status": st.column_config.TextColumn(
+        "Status", help="🟢 Klart setup (7/7) · 🟡 Nesten (5–6/7) · ⚪ Ikke i setup (<5/7)."),
+    "Til utbrudd": st.column_config.TextColumn(
+        "Til utbrudd", help="Hvor langt UNDER pivot (toppen av konsolideringen) kursen er. "
+        "Lavt tall = står på kanten av utbrudd. Negativt = allerede over pivot."),
+    "Pivot": st.column_config.NumberColumn(
+        "Pivot", format="%.2f", help="Toppen av konsolideringen – motstanden aksjen skal bryte."),
+    "Stop": st.column_config.NumberColumn(
+        "Stop", format="%.2f", help="Qullamaggie-stop = dagens laveste kurs (lows of the day)."),
+    "3M": st.column_config.TextColumn("3M", help="Avkastning siste 3 måneder (momentum-lederskap)."),
+    "Byks": st.column_config.TextColumn(
+        "Byks", help="Største byks (lav→høy) siste ~3 mnd – beviset på at aksjen kan løpe."),
+    "ADR%": st.column_config.NumberColumn(
+        "ADR%", format="%.1f", help="Average Daily Range i prosent – hvor mye aksjen typisk "
+        "beveger seg per dag. Høyt = mer rom for store gevinster."),
+    "Stramhet": st.column_config.NumberColumn(
+        "Stramhet", format="%.1f", help="Konsolideringens range delt på ADR. Lavt = stram base "
+        "(kontraksjon) = kraftigere utbrudd når det kommer."),
+    "Leder": st.column_config.TextColumn("Leder", help="qk1: momentum-leder (topp på 3M i universet)."),
+    "Byks✓": st.column_config.TextColumn("Byks✓", help="qk2: reelt byks ≥ 30 % siste ~3 mnd."),
+    "EMA": st.column_config.TextColumn("EMA", help="qk3: surfer stigende EMA (Close≥EMA20, 10>20>50)."),
+    "H.bunner": st.column_config.TextColumn("H.bunner", help="qk4: høyere bunner i konsolideringen."),
+    "Stram": st.column_config.TextColumn("Stram", help="qk5: stram base (range/ADR under grensen)."),
+    "ADR✓": st.column_config.TextColumn("ADR✓", help="qk6: nok daglig bevegelse (ADR% over gulvet)."),
+    "Stop✓": st.column_config.TextColumn("Stop✓", help="qk7: tight stop (dagens low ≤ ADR%)."),
+}
+
+
+def vis_qullamaggie(qm_resultat):
+    """Rendrer Qullamaggie-tabellen + chart i Hovedliste-fanen (qm-modus)."""
+    st.markdown("### 🚀 Qullamaggie-screener")
+    st.caption("Finner momentum-ledere som har bykset og nå konsoliderer stramt på stigende "
+               "EMA10/20 – klare for neste utbrudd. **Setup-variant:** 7 kriterier passerer/feiler "
+               "(ingen score), sortert nærmest utbrudd. Uavhengig av Minervini-templaten.")
+    if qm_resultat is None:
+        st.info(f"Trykk **🔍 Skann {BORS.navn}** i menyen til venstre for å søke gjennom hele "
+                "børsen etter Qullamaggie-setup. (Ingenting skannes automatisk – du velger når.)")
+        return
+    if qm_resultat.empty:
+        st.info("Fant ingen Qullamaggie-setup akkurat nå (markedet mangler kanskje klare ledere).")
+        return
+    _gyldige = int(qm_resultat["gyldig_setup"].sum())
+    _nesten = int((qm_resultat["antall_ok"] == 6).sum()) + int((qm_resultat["antall_ok"] == 5).sum())
+    st.markdown(
+        f"**{len(qm_resultat)} analysert** – 🟢 {_gyldige} klare setup (7/7) · "
+        f"🟡 {_nesten} nesten (5–6/7). Sortert med klare setup øverst, så nærmest utbrudd."
+    )
+    _qm_tab = st.dataframe(
+        _formater_qm_tabell(qm_resultat),
+        width="stretch", hide_index=True, height=560, column_config=QM_TABELL_HJELP,
+        on_select="rerun", selection_mode="multi-row", key="qm_tabell",
+    )
+    st.caption("💡 **Huk av én eller flere rader** for å tegne chart med EMA10/20/50 under.")
+
+    _qm_rader = list(getattr(_qm_tab.selection, "rows", []) or [])
+    _qm_valgte = [qm_resultat.iloc[i]["ticker"] for i in _qm_rader if i < len(qm_resultat)]
+    if not _qm_valgte:
+        st.caption("Ingen rader valgt ennå – huk av i tabellen over for å tegne chart her.")
+        return
+    st.divider()
+    _maks = 15
+    if len(_qm_valgte) > _maks:
+        st.info(f"Viser de {_maks} første av {len(_qm_valgte)} valgte (for fartens skyld).")
+        _qm_valgte = _qm_valgte[:_maks]
+    st.subheader(f"📊 Chart for {len(_qm_valgte)} valgte")
+    _qm_priser = last_priser(bors_navn, versjon)
+    for _tk in _qm_valgte:
+        _s = datamod.serie_for(_qm_priser, _tk)
+        _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[aktiv_preset_navn])
+        st.markdown(f"**{_tk}**")
+        if not tabell_chart(_s, _r, _tk, kontekst="qm",
+                            standard={"golden": False, "vcp": False, "7av7": False}):
+            st.caption("Klarte ikke tegne chart for denne aksjen.")
 
 
 def vis_golden_cross(gc_resultat):
@@ -3601,6 +3737,8 @@ with fane1:
         vis_golden_cross(gc_resultat)
     elif er_trendscore:
         vis_trendscore(ts_resultat)
+    elif er_qm:
+        vis_qullamaggie(qm_resultat)
     elif er_ipo:
         vis_nye_ipoer(ipo_resultat)
     elif resultat is None:

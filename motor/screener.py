@@ -15,7 +15,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from . import konfig, data as datamod, indikatorer, minervini, trendscore, vcp
+from . import konfig, data as datamod, indikatorer, minervini, qullamaggie, trendscore, vcp
 from .konfig import Preset
 
 
@@ -275,6 +275,111 @@ def screen(priser: pd.DataFrame, preset: Preset = konfig.STANDARD) -> pd.DataFra
 
     df = df.sort_values(["oppfyller", "score", "rs"], ascending=False).reset_index(drop=True)
     return df
+
+
+# ---------------------------------------------------------------------------
+# Qullamaggie-screener (SELVSTENDIG – IKKE Minervini-template)
+# ---------------------------------------------------------------------------
+# Setup-variant (ingen score): hvert av 7 kriterier passerer/feiler. qk1
+# (momentum-leder) avgjøres på tvers av universet her; qk2–qk7 per aksje i
+# motor/qullamaggie.py. Vi viser avstand til utbrudd (pivot) som Minervini.
+QM_STATUS_GYLDIG = "🟢"    # alle 7 kriterier oppfylt = klart setup
+QM_STATUS_NESTEN = "🟡"    # 5–6 av 7 = nesten (verdt å følge)
+QM_STATUS_SVAK = "⚪"      # under 5 = ikke i setup nå
+
+
+def _qm_status(antall_ok: int) -> tuple[str, str]:
+    """(emoji, tekst) ut fra hvor mange av de 7 QM-kriteriene som er oppfylt."""
+    if antall_ok >= 7:
+        return QM_STATUS_GYLDIG, "Klart setup (7/7)"
+    if antall_ok >= 5:
+        return QM_STATUS_NESTEN, f"Nesten ({antall_ok}/7)"
+    return QM_STATUS_SVAK, f"Ikke i setup ({antall_ok}/7)"
+
+
+def analyser_qm(serie: pd.DataFrame, ticker: str) -> dict | None:
+    """Regner Qullamaggie-nøkkeltall for én aksje (uten qk1 – settes i screen_qm).
+
+    Returnerer en flat dict klar for tabellen, eller None hvis for kort historikk.
+    """
+    n = qullamaggie.nokkeltall(serie)
+    if n is None:
+        return None
+    d = serie
+    pris = n["pris"]
+    dagsomsetning = float((d["Close"] * d["Volume"]).rolling(konfig.OMSETNING_VINDU).mean().iloc[-1])
+    return {
+        "ticker": ticker,
+        "pris": round(pris, 2),
+        "adr_pct": None if pd.isna(n["adr_pct"]) else round(float(n["adr_pct"]), 1),
+        "mom_1m": None if pd.isna(n["mom"].get("m21", np.nan)) else round(float(n["mom"]["m21"]), 1),
+        "mom_3m": None if pd.isna(n["mom_3m"]) else round(float(n["mom_3m"]), 1),
+        "mom_6m": None if pd.isna(n["mom"].get("m126", np.nan)) else round(float(n["mom"]["m126"]), 1),
+        "byks_pct": None if pd.isna(n["byks_pct"]) else round(float(n["byks_pct"]), 1),
+        "pivot": None if pd.isna(n["pivot"]) else round(float(n["pivot"]), 2),
+        "stop": None if pd.isna(n["stop"]) else round(float(n["stop"]), 2),
+        "avstand_pivot": None if pd.isna(n["avstand_pivot_pct"]) else round(float(n["avstand_pivot_pct"]), 1),
+        "tightness": None if pd.isna(n["tightness"]) else round(float(n["tightness"]), 1),
+        "stop_bredde": None if pd.isna(n["stop_bredde_pct"]) else round(float(n["stop_bredde_pct"]), 1),
+        "ema10": None if pd.isna(n["ema10"]) else round(float(n["ema10"]), 2),
+        "ema20": None if pd.isna(n["ema20"]) else round(float(n["ema20"]), 2),
+        "ema50": None if pd.isna(n["ema50"]) else round(float(n["ema50"]), 2),
+        "qk2": n["qk2"], "qk3": n["qk3"], "qk4": n["qk4"],
+        "qk5": n["qk5"], "qk6": n["qk6"], "qk7": n["qk7"],
+        "dagsomsetning": dagsomsetning,
+        "_mom_3m_raw": float(n["mom_3m"]) if pd.notna(n["mom_3m"]) else np.nan,
+    }
+
+
+def screen_qm(priser: pd.DataFrame) -> pd.DataFrame:
+    """Qullamaggie breakout-screener for hele universet (setup-variant, ingen score).
+
+    Steg:
+      1. Regn QM-nøkkeltall + qk2–qk7 per aksje.
+      2. Likviditetsfilter (samme gulv som Minervini).
+      3. qk1 = momentum-leder: topp (1 − QM_MOM_PERSENTIL) på 3M i universet.
+      4. Tell oppfylte kriterier, sett status, sorter nærmest utbrudd øverst.
+    """
+    if priser is None or priser.empty:
+        return pd.DataFrame()
+
+    benchmarks = {b.benchmark for b in konfig.BORSER.values() if b.benchmark}
+    benchmarks.add(konfig.BENCHMARK)
+    tickere = [t for t in sorted(priser["Ticker"].unique()) if t not in benchmarks]
+
+    rader = []
+    for t in tickere:
+        res = analyser_qm(datamod.serie_for(priser, t), t)
+        if res is not None:
+            rader.append(res)
+
+    df = pd.DataFrame(rader)
+    if df.empty:
+        return df
+
+    # Likviditetsfilter
+    df = df[df["dagsomsetning"] >= konfig.MIN_DAGSOMSETNING].copy()
+    if df.empty:
+        return df
+
+    # qk1: momentum-leder (topp X % på 3M i universet)
+    terskel = df["_mom_3m_raw"].quantile(konfig.QM_MOM_PERSENTIL)
+    df["qk1"] = df["_mom_3m_raw"] >= terskel
+
+    qk_kol = ["qk1", "qk2", "qk3", "qk4", "qk5", "qk6", "qk7"]
+    df["antall_ok"] = df[qk_kol].sum(axis=1).astype(int)
+    df["gyldig_setup"] = df[qk_kol].all(axis=1)
+    df[["status", "statustekst"]] = df["antall_ok"].apply(
+        lambda a: pd.Series(_qm_status(int(a))))
+
+    # Sorter: gyldige setup først, deretter nærmest utbrudd (minst avstand til pivot).
+    df["_naer"] = df["avstand_pivot"].abs().fillna(float("inf"))
+    df = df.sort_values(
+        ["gyldig_setup", "antall_ok", "_naer"],
+        ascending=[False, False, True], kind="mergesort",
+    ).reset_index(drop=True)
+    return df.drop(columns=["_naer", "_mom_3m_raw"])
+
 
 
 # ---------------------------------------------------------------------------
