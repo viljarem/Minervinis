@@ -268,6 +268,7 @@ CHART_LAG = {
     "EPS/omsetning":    False,
     "TrendScore":       False,
     "Qullamaggie":      False,
+    "Egne SMA":         True,
 }
 # Oversetter pille-etikett → det interne vis_*-flagget.
 _LAG_FLAGG = {
@@ -277,6 +278,7 @@ _LAG_FLAGG = {
     "Indeks":           "vis_indeks", "RS-rating":    "vis_rs_rating",
     "EPS/omsetning":    "vis_eps",    "TrendScore":   "vis_trendscore",
     "Qullamaggie":      "vis_qm",
+    "Egne SMA":         "vis_egne_sma",
 }
 
 
@@ -1216,6 +1218,18 @@ def posisjon_verktoy(res: dict, nokkel: str, valuta: str = "kr") -> None:
 # ---------------------------------------------------------------------------
 # Chart 2.0 (test) – TradingViews lightweight-charts
 # ---------------------------------------------------------------------------
+def _egne_sma_liste() -> list:
+    """Brukervalgte SMA-perioder fra session_state (f.eks. [10, 20, 100]).
+
+    Tom liste hvis ingen er satt. Leses av chart-motoren slik at egne SMA-linjer
+    tegnes paa ALLE chart uten aa maatte tres gjennom hvert kall.
+    """
+    try:
+        return list(st.session_state.get("egne_sma_perioder", []))
+    except Exception:
+        return []
+
+
 def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                   vis_ma: bool = True, vis_52u: bool = True, vis_vcp: bool = True,
                   vis_7av7: bool = True, vis_hist: bool = False, vis_golden: bool = False,
@@ -1231,7 +1245,9 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                   trendscore_df: pd.DataFrame | None = None,
                   handel_markorer: list | None = None,
                   vis_qm: bool = True,
-                  qm_overlay: dict | None = None) -> list | None:
+                  qm_overlay: dict | None = None,
+                  vis_egne_sma: bool = True,
+                  egne_sma: list | None = None) -> list | None:
     """Bygger data-spesifikasjonen for lightweight-charts.
 
     Tar med alt det gamle Plotly-chartet hadde: candles, MA50/150/200, 52-ukers
@@ -1426,6 +1442,32 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
             for _m in (_ma50, _ma150, _ma200):
                 _m["layer"] = "ma"
             serier += [_ma50, _ma150, _ma200]
+
+        # Egne SMA-linjer (brukervalgte perioder, f.eks. 10/20/100). Regnes paa
+        # hele serien (full) foer vinduet, saa de er korrekte helt til venstre kant.
+        # Eget lag "egne_sma" styres av "Egne SMA"-pillen. Faller tilbake til
+        # periodene i session_state naar ikke sendt eksplisitt.
+        _egne = egne_sma if egne_sma is not None else _egne_sma_liste()
+        if vis_egne_sma and _egne:
+            _sma_farger = ["#00bcd4", "#e91e63", "#8bc34a", "#ffc107", "#795548"]
+            for _i, _p in enumerate(_egne):
+                try:
+                    _pp = int(_p)
+                    if _pp < 2 or _pp > 1000:
+                        continue
+                    _snitt = full["Close"].rolling(_pp).mean().reindex(d.index)
+                    _data = [{"time": ti, "value": round(float(v), 4)}
+                             for ti, v in zip(t, _snitt) if pd.notna(v)]
+                    if not _data:
+                        continue
+                    _farge = _sma_farger[_i % len(_sma_farger)]
+                    serier.append({"type": "Line", "data": _data,
+                                   "options": {"color": _farge, "lineWidth": 1, "lineStyle": 0,
+                                               "priceLineVisible": False, "lastValueVisible": False},
+                                   "legend": {"label": f"SMA{_pp}", "color": _farge, "kind": "line"},
+                                   "layer": "egne_sma"})
+                except (TypeError, ValueError):
+                    continue
 
         # 52-ukers høy/lav (grå stiplede referanselinjer – kriterium 6 og 7)
         if vis_52u:
@@ -2092,7 +2134,7 @@ def render_chart_spec(spec: list | None, *, key: str, morkt: bool = False,
 LAG_ID = {"vis_ma": "ma", "vis_52u": "52u", "vis_vcp": "vcp", "vis_7av7": "7av7",
           "vis_hist": "hist", "vis_golden": "golden", "vis_indeks": "indeks",
           "vis_rs_rating": "rs", "vis_eps": "eps", "vis_trendscore": "ts",
-          "vis_qm": "qm"}
+          "vis_qm": "qm", "vis_egne_sma": "egne_sma"}
 
 
 def chart_interaktiv(serie: pd.DataFrame, res: dict | None, ticker: str, *,
@@ -3023,6 +3065,21 @@ with st.sidebar:
                  help="Søk gjennom hele børsen. Hva det søkes etter styres av «Oppsett» "
                       "under Filtre (Minervini-template eller golden cross)."):
         st.session_state["skannet_bors"] = bors_navn
+    # Egne SMA-linjer: skriv inn perioder (f.eks. 10, 20, 100) som tegnes paa
+    # ALLE chart. Togglbart med "Egne SMA"-pillen inne i chartet.
+    _sma_tekst = st.text_input(
+        "Egne SMA-linjer", value=st.session_state.get("egne_sma_tekst", ""),
+        placeholder="f.eks. 10, 20, 100",
+        help="Kommaseparerte perioder. Tegnes som egne glidende snitt paa alle chart. "
+             "Slaa av/paa med «Egne SMA»-pillen i chartet.")
+    st.session_state["egne_sma_tekst"] = _sma_tekst
+    _sma_perioder = []
+    for _bit in _sma_tekst.replace(";", ",").split(","):
+        _bit = _bit.strip()
+        if _bit.isdigit() and 2 <= int(_bit) <= 1000:
+            _sma_perioder.append(int(_bit))
+    # Behold rekkefolge, fjern duplikater.
+    st.session_state["egne_sma_perioder"] = list(dict.fromkeys(_sma_perioder))
     st.divider()
 
 skannet_na = st.session_state.get("skannet_bors") == bors_navn
@@ -3362,6 +3419,7 @@ def vis_ticker_detalj(sok: str, *, kontekst: str = "sok", handel_data: dict | No
                               vis_indeks=vis_indeks3, indeks=_indeks3, indeks_navn=BORS.benchmark,
                               ukentlig=ukentlig3, pos=pos3, morkt=MORKT, tittel=sok,
                               handel_markorer=_handel_mark, vis_qm=_k3["vis_qm"],
+                              vis_egne_sma=_k3["vis_egne_sma"],
                               **_trendscore_chart_kwargs(sok, vis_trendscore3),
                               **_eps_chart_kwargs(sok, vis_eps3))
         if _ok3:
@@ -4238,7 +4296,8 @@ with fane2:
                                  vis_rs_rating=vis_rs_rating, rs_rating=_rs_serie,
                                  vis_indeks=vis_indeks, indeks=_indeks, indeks_navn=BORS.benchmark,
                                  ukentlig=ukentlig, pos=pos, morkt=MORKT, tittel=valg,
-                                 vis_qm=_k["vis_qm"], **_ts_kw, **_eps_kw)
+                                 vis_qm=_k["vis_qm"], vis_egne_sma=_k["vis_egne_sma"],
+                                 **_ts_kw, **_eps_kw)
             if spec is None and not _interaktiv_ok:
                 st.info("Klarte ikke bygge chartet for denne aksjen.")
             else:
