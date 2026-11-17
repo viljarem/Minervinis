@@ -290,6 +290,7 @@ def screen_alle(priser: pd.DataFrame) -> pd.DataFrame:
 
     Rebruker analyser_ticker (samme tall som Minervini-lista) og legger på:
       utv_3m / utv_6m / utv_12m  – ren kursavkastning over 63/126/252 dager
+      adr_pct                    – Average Daily Range i prosent (daglig svingning)
       rs                         – RS-rating 1–99 på tvers av universet
       trendscore                 – TrendScore 0–100
     pct_fra_52h / pct_over_52l kommer allerede fra analyser_ticker.
@@ -312,6 +313,7 @@ def screen_alle(priser: pd.DataFrame) -> pd.DataFrame:
         res["utv_3m"] = indikatorer.avkastning_vindu(close, 63)
         res["utv_6m"] = indikatorer.avkastning_vindu(close, 126)
         res["utv_12m"] = indikatorer.avkastning_vindu(close, 252)
+        res["adr_pct"] = indikatorer.adr_prosent(serie)
         rader.append(res)
 
     df = pd.DataFrame(rader)
@@ -325,6 +327,7 @@ def screen_alle(priser: pd.DataFrame) -> pd.DataFrame:
     # Rund av utviklingstallene for visning (behold NaN).
     for kol in ("utv_3m", "utv_6m", "utv_12m"):
         df[kol] = df[kol].round(1)
+    df["adr_pct"] = df["adr_pct"].round(1)
 
     df = df.sort_values("trendscore", ascending=False, na_position="last").reset_index(drop=True)
     return df

@@ -3449,6 +3449,7 @@ def _formater_hele_borsen(df: pd.DataFrame) -> pd.DataFrame:
     vis["RS"] = df["rs"]
     vis["TS"] = df["trendscore"]
     vis["RVol"] = df["rel_volum"]
+    vis["ADR%"] = df["adr_pct"]
     vis["3 mnd"] = df["utv_3m"]
     vis["6 mnd"] = df["utv_6m"]
     vis["1 ar"] = df["utv_12m"]
@@ -3470,6 +3471,9 @@ HELE_BORSEN_HJELP = {
         "TS", format="%d", help="TrendScore 0–100 (styrke og sunnhet i opptrenden)."),
     "RVol": st.column_config.NumberColumn(
         "RVol", format="%.2f", help="Relativt volum: siste dags volum delt pa 50-dagers snitt."),
+    "ADR%": st.column_config.NumberColumn(
+        "ADR%", format="%.1f%%", help="Average Daily Range: hvor mange prosent aksjen i snitt "
+        "svinger mellom hoy og lav per dag (siste ~20 dager). Hoyt = mye daglig bevegelse."),
     "3 mnd": st.column_config.NumberColumn(
         "3 mnd", format="%.1f%%", help="Kursutvikling siste ~3 maneder (63 handelsdager)."),
     "6 mnd": st.column_config.NumberColumn(
@@ -3499,11 +3503,32 @@ def vis_hele_borsen(alle_resultat):
         st.info("Fant ingen aksjer med nok historikk til å vises.")
         return
     st.markdown(f"**{len(alle_resultat)} aksjer** – sortert på TrendScore (fallende) som utgangspunkt.")
-    st.dataframe(
+    _ab_tab = st.dataframe(
         _formater_hele_borsen(alle_resultat),
         width="stretch", hide_index=True, height=640, column_config=HELE_BORSEN_HJELP,
+        on_select="rerun", selection_mode="multi-row", key="hele_borsen_tabell",
     )
-    st.caption("💡 Bruk hurtigsøk-feltet øverst for å åpne full chart-visning av en enkelt aksje.")
+    st.caption("💡 **Huk av én eller flere rader** for å tegne chart under (samme som i "
+               "Minervini-lista). Eller bruk hurtigsøk-feltet øverst for full visning av én aksje.")
+
+    _ab_rader = list(getattr(_ab_tab.selection, "rows", []) or [])
+    _ab_valgte = [alle_resultat.iloc[i]["ticker"] for i in _ab_rader if i < len(alle_resultat)]
+    if not _ab_valgte:
+        st.caption("Ingen rader valgt ennå – huk av i tabellen over for å tegne chart her.")
+        return
+    st.divider()
+    _maks = 15
+    if len(_ab_valgte) > _maks:
+        st.info(f"Viser de {_maks} første av {len(_ab_valgte)} valgte (for fartens skyld).")
+        _ab_valgte = _ab_valgte[:_maks]
+    st.subheader(f"📊 Chart for {len(_ab_valgte)} valgte")
+    _ab_priser = last_priser(bors_navn, versjon)
+    for _tk in _ab_valgte:
+        _s = datamod.serie_for(_ab_priser, _tk)
+        _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[aktiv_preset_navn])
+        st.markdown(f"**{_tk}**")
+        if not tabell_chart(_s, _r, _tk, kontekst="alle"):
+            st.caption("Klarte ikke tegne chart for denne aksjen.")
 
 
 
