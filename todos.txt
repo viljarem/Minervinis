@@ -61,10 +61,16 @@ CHART-TEGNING – teknisk avklaring (lightweight-charts):
          Oslo/S&P) + live-kurser for aapne posisjoner naar borsen er
          aapen. Lukkede handler uroert. Alt i try/except; faller tilbake
          til sluttkurs. 🔴 Live-indikator paa kort + topptekst.)
-[ ] M2: Qullamaggie-screener (samme motor-moenster som Minervini:
+[x] M2: Qullamaggie-screener (samme motor-moenster som Minervini:
         episodic pivots, breakouts, parabolske utbrudd, MA10/20-trail).
         Historiske resultat i chart paa samme maate som Minervini.
         >>> DETALJERT DESIGN NEDERST: se "M2-DESIGN: QULLAMAGGIE" <<<
+        (FERDIG - commits 259b173/ec0e855/4ddd4ea/6d5c5e8/fb690d9/
+         7a425d8/4b4b69b. Setup-variant UTEN score: QM1 breakout
+         (🚀 Qullamaggie) + QM2 Episodic Pivot (⚡) som egne Oppsett, QM3
+         parabolsk som "vokt deg"-flagg paa aapne posisjoner i journalen,
+         chart-overlay (konsolideringsboks/utbrudd/EMA10-20/stop)
+         togglbart paa ALLE chart via "Qullamaggie"-pille. 193 tester.)
 [ ] M3: Uke-/maanedsevaluering: fritekst-vurdering per periode (egen
         tabell), ved siden av eksisterende uke/maaned-statistikk.
 [ ] M4: Chart-linjer: vannrette nivaaer + skraalinjer/kanal, lagres i
