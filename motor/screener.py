@@ -15,7 +15,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from . import konfig, data as datamod, indikatorer, minervini, qullamaggie, trendscore, vcp
+from . import konfig, data as datamod, indikatorer, minervini, trendscore, vcp
 from .konfig import Preset
 
 
@@ -278,68 +278,22 @@ def screen(priser: pd.DataFrame, preset: Preset = konfig.STANDARD) -> pd.DataFra
 
 
 # ---------------------------------------------------------------------------
-# Qullamaggie-screener (SELVSTENDIG – IKKE Minervini-template)
+# Hele børsen-screener – ALLE aksjer, alle indikatorer, ingen filtrering
 # ---------------------------------------------------------------------------
-# Setup-variant (ingen score): hvert av 7 kriterier passerer/feiler. qk1
-# (momentum-leder) avgjøres på tvers av universet her; qk2–qk7 per aksje i
-# motor/qullamaggie.py. Vi viser avstand til utbrudd (pivot) som Minervini.
-QM_STATUS_GYLDIG = "🟢"    # alle 7 kriterier oppfylt = klart setup
-QM_STATUS_NESTEN = "🟡"    # 5–6 av 7 = nesten (verdt å følge)
-QM_STATUS_SVAK = "⚪"      # under 5 = ikke i setup nå
+# Erstatter de gamle Qullamaggie-/EP-screenerne. Her slipper HELE universet
+# gjennom (kun benchmark-indekser holdes utenfor), og vi beriker hver aksje med
+# alt vi har: Minervini-score, RS, TrendScore, relativt volum, utvikling 3/6/12
+# mnd og avstand til 52-ukers høy/lav. Tabellen er sorterbar i appen, så du kan
+# selv rangere på det du vil.
+def screen_alle(priser: pd.DataFrame) -> pd.DataFrame:
+    """Alle aksjer i universet med alle tilgjengelige indikatorer (ufiltrert).
 
-
-def _qm_status(antall_ok: int) -> tuple[str, str]:
-    """(emoji, tekst) ut fra hvor mange av de 7 QM-kriteriene som er oppfylt."""
-    if antall_ok >= 7:
-        return QM_STATUS_GYLDIG, "Klart setup (7/7)"
-    if antall_ok >= 5:
-        return QM_STATUS_NESTEN, f"Nesten ({antall_ok}/7)"
-    return QM_STATUS_SVAK, f"Ikke i setup ({antall_ok}/7)"
-
-
-def analyser_qm(serie: pd.DataFrame, ticker: str) -> dict | None:
-    """Regner Qullamaggie-nøkkeltall for én aksje (uten qk1 – settes i screen_qm).
-
-    Returnerer en flat dict klar for tabellen, eller None hvis for kort historikk.
-    """
-    n = qullamaggie.nokkeltall(serie)
-    if n is None:
-        return None
-    d = serie
-    pris = n["pris"]
-    dagsomsetning = float((d["Close"] * d["Volume"]).rolling(konfig.OMSETNING_VINDU).mean().iloc[-1])
-    return {
-        "ticker": ticker,
-        "pris": round(pris, 2),
-        "adr_pct": None if pd.isna(n["adr_pct"]) else round(float(n["adr_pct"]), 1),
-        "mom_1m": None if pd.isna(n["mom"].get("m21", np.nan)) else round(float(n["mom"]["m21"]), 1),
-        "mom_3m": None if pd.isna(n["mom_3m"]) else round(float(n["mom_3m"]), 1),
-        "mom_6m": None if pd.isna(n["mom"].get("m126", np.nan)) else round(float(n["mom"]["m126"]), 1),
-        "byks_pct": None if pd.isna(n["byks_pct"]) else round(float(n["byks_pct"]), 1),
-        "pivot": None if pd.isna(n["pivot"]) else round(float(n["pivot"]), 2),
-        "base_lav": None if pd.isna(n["base_lav"]) else round(float(n["base_lav"]), 2),
-        "stop": None if pd.isna(n["stop"]) else round(float(n["stop"]), 2),
-        "avstand_pivot": None if pd.isna(n["avstand_pivot_pct"]) else round(float(n["avstand_pivot_pct"]), 1),
-        "tightness": None if pd.isna(n["tightness"]) else round(float(n["tightness"]), 1),
-        "stop_bredde": None if pd.isna(n["stop_bredde_pct"]) else round(float(n["stop_bredde_pct"]), 1),
-        "ema10": None if pd.isna(n["ema10"]) else round(float(n["ema10"]), 2),
-        "ema20": None if pd.isna(n["ema20"]) else round(float(n["ema20"]), 2),
-        "ema50": None if pd.isna(n["ema50"]) else round(float(n["ema50"]), 2),
-        "qk2": n["qk2"], "qk3": n["qk3"], "qk4": n["qk4"],
-        "qk5": n["qk5"], "qk6": n["qk6"], "qk7": n["qk7"],
-        "dagsomsetning": dagsomsetning,
-        "_mom_3m_raw": float(n["mom_3m"]) if pd.notna(n["mom_3m"]) else np.nan,
-    }
-
-
-def screen_qm(priser: pd.DataFrame) -> pd.DataFrame:
-    """Qullamaggie breakout-screener for hele universet (setup-variant, ingen score).
-
-    Steg:
-      1. Regn QM-nøkkeltall + qk2–qk7 per aksje.
-      2. Likviditetsfilter (samme gulv som Minervini).
-      3. qk1 = momentum-leder: topp (1 − QM_MOM_PERSENTIL) på 3M i universet.
-      4. Tell oppfylte kriterier, sett status, sorter nærmest utbrudd øverst.
+    Rebruker analyser_ticker (samme tall som Minervini-lista) og legger på:
+      utv_3m / utv_6m / utv_12m  – ren kursavkastning over 63/126/252 dager
+      rs                         – RS-rating 1–99 på tvers av universet
+      trendscore                 – TrendScore 0–100
+    pct_fra_52h / pct_over_52l kommer allerede fra analyser_ticker.
+    Returneres sortert på TrendScore (fallende), men appen lar deg sortere fritt.
     """
     if priser is None or priser.empty:
         return pd.DataFrame()
@@ -350,151 +304,30 @@ def screen_qm(priser: pd.DataFrame) -> pd.DataFrame:
 
     rader = []
     for t in tickere:
-        res = analyser_qm(datamod.serie_for(priser, t), t)
-        if res is not None:
-            rader.append(res)
+        serie = datamod.serie_for(priser, t)
+        res = analyser_ticker(serie, t, konfig.STANDARD)
+        if res is None:
+            continue
+        close = serie["Close"]
+        res["utv_3m"] = indikatorer.avkastning_vindu(close, 63)
+        res["utv_6m"] = indikatorer.avkastning_vindu(close, 126)
+        res["utv_12m"] = indikatorer.avkastning_vindu(close, 252)
+        rader.append(res)
 
     df = pd.DataFrame(rader)
     if df.empty:
         return df
 
-    # Likviditetsfilter
-    df = df[df["dagsomsetning"] >= konfig.MIN_DAGSOMSETNING].copy()
-    if df.empty:
-        return df
+    # RS-rating (1–99) og TrendScore (0–100) på tvers av hele universet.
+    df["rs"] = _persentil(df["rs_avkastning"]).astype("Int64")
+    df["trendscore"] = df["ticker"].map(_trendscore_oppslag(priser, df["ticker"].tolist()))
 
-    # qk1: momentum-leder (topp X % på 3M i universet)
-    terskel = df["_mom_3m_raw"].quantile(konfig.QM_MOM_PERSENTIL)
-    df["qk1"] = df["_mom_3m_raw"] >= terskel
+    # Rund av utviklingstallene for visning (behold NaN).
+    for kol in ("utv_3m", "utv_6m", "utv_12m"):
+        df[kol] = df[kol].round(1)
 
-    qk_kol = ["qk1", "qk2", "qk3", "qk4", "qk5", "qk6", "qk7"]
-    df["antall_ok"] = df[qk_kol].sum(axis=1).astype(int)
-    df["gyldig_setup"] = df[qk_kol].all(axis=1)
-    df[["status", "statustekst"]] = df["antall_ok"].apply(
-        lambda a: pd.Series(_qm_status(int(a))))
-
-    # Sorter: gyldige setup først, deretter nærmest utbrudd (minst avstand til pivot).
-    df["_naer"] = df["avstand_pivot"].abs().fillna(float("inf"))
-    df = df.sort_values(
-        ["gyldig_setup", "antall_ok", "_naer"],
-        ascending=[False, False, True], kind="mergesort",
-    ).reset_index(drop=True)
-    return df.drop(columns=["_naer", "_mom_3m_raw"])
-
-
-# ---------------------------------------------------------------------------
-# Episodic Pivot-screener (QM2 – nyhets-/resultatgap)
-# ---------------------------------------------------------------------------
-EP_STATUS_FULL = "🟢"     # gap + volum + ikke strukket = klar EP
-EP_STATUS_DELVIS = "🟡"   # gap, men mangler volum eller er strukket
-
-
-def analyser_ep(serie: pd.DataFrame, ticker: str) -> dict | None:
-    """Finner nyeste EP for én aksje og pakker den til tabellen. None hvis ingen."""
-    ep = qullamaggie.finn_ep(serie)
-    if ep is None:
-        return None
-    d = serie
-    dagsomsetning = float((d["Close"] * d["Volume"]).rolling(konfig.OMSETNING_VINDU).mean().iloc[-1])
-    antall_ok = int(bool(ep["ek1"]) + bool(ep["ek2"]) + bool(ep["ek3"]))
-    if antall_ok >= 3:
-        status, statustekst = EP_STATUS_FULL, "Klar EP (3/3)"
-    else:
-        status, statustekst = EP_STATUS_DELVIS, f"Delvis ({antall_ok}/3)"
-    return {
-        "ticker": ticker,
-        "pris": round(ep["pris"], 2),
-        "gap_pct": round(float(ep["gap_pct"]), 1),
-        "volum_x": None if pd.isna(ep["volum_x"]) else round(float(ep["volum_x"]), 1),
-        "strukket_6m": None if pd.isna(ep["strukket_6m"]) else round(float(ep["strukket_6m"]), 1),
-        "dager_siden": int(ep["dager_siden"]),
-        "siden_gap_pct": None if pd.isna(ep["siden_gap_pct"]) else round(float(ep["siden_gap_pct"]), 1),
-        "stop": round(float(ep["stop"]), 2),
-        "gap_close": round(float(ep["gap_close"]), 2),
-        "gap_dato": pd.Timestamp(ep["gap_dato"]).date().isoformat(),
-        "ek1": ep["ek1"], "ek2": ep["ek2"], "ek3": ep["ek3"],
-        "antall_ok": antall_ok,
-        "status": status,
-        "statustekst": statustekst,
-        "gyldig_ep": bool(antall_ok >= 3),
-        "dagsomsetning": dagsomsetning,
-    }
-
-
-def screen_ep(priser: pd.DataFrame) -> pd.DataFrame:
-    """Episodic Pivot-screener: ferske gap-ups på stort volum i hele universet.
-
-    Sortert med klare EP-er først, deretter ferskest (minst dager siden gapet).
-    """
-    if priser is None or priser.empty:
-        return pd.DataFrame()
-
-    benchmarks = {b.benchmark for b in konfig.BORSER.values() if b.benchmark}
-    benchmarks.add(konfig.BENCHMARK)
-    tickere = [t for t in sorted(priser["Ticker"].unique()) if t not in benchmarks]
-
-    rader = []
-    for t in tickere:
-        res = analyser_ep(datamod.serie_for(priser, t), t)
-        if res is not None:
-            rader.append(res)
-
-    df = pd.DataFrame(rader)
-    if df.empty:
-        return df
-
-    df = df[df["dagsomsetning"] >= konfig.MIN_DAGSOMSETNING].copy()
-    if df.empty:
-        return df
-
-    df = df.sort_values(
-        ["gyldig_ep", "antall_ok", "dager_siden"],
-        ascending=[False, False, True], kind="mergesort",
-    ).reset_index(drop=True)
+    df = df.sort_values("trendscore", ascending=False, na_position="last").reset_index(drop=True)
     return df
-
-
-
-
-# ---------------------------------------------------------------------------
-# Parabolsk-flagg (QM3) – observasjon på aksjer du EIER, aldri kjøpssignal
-# ---------------------------------------------------------------------------
-def analyser_parabolsk(serie: pd.DataFrame) -> dict | None:
-    """Vurderer om én aksje ser parabolsk ut nå. None hvis for kort/ikke parabolsk.
-
-    Returnerer bare noe når flagget faktisk slår til (parabolsk=True), slik at
-    journalen kan vise et enkelt "vokt deg / ta gevinst"-varsel uten støy.
-    """
-    pb = qullamaggie.er_parabolsk(serie)
-    if pb is None or not pb.get("parabolsk"):
-        return None
-    return {
-        "opp_pct": None if pd.isna(pb["opp_pct"]) else round(float(pb["opp_pct"]), 1),
-        "gronne_rad": int(pb["gronne_rad"]),
-        "over_ema10_pct": None if pd.isna(pb["over_ema10_pct"]) else round(float(pb["over_ema10_pct"]), 1),
-        "pb1": pb["pb1"], "pb2": pb["pb2"], "pb3": pb["pb3"],
-    }
-
-
-def flagg_parabolske(priser: pd.DataFrame, tickere) -> dict:
-    """Returnerer {ticker: parabolsk-info} for de tickerne som er parabolske nå.
-
-    Brukes av journalen til å flagge åpne posisjoner. Tomt dict hvis ingen (eller
-    hvis data mangler) – journalen må aldri krasje av dette.
-    """
-    if priser is None or priser.empty or not tickere:
-        return {}
-    ut = {}
-    for t in tickere:
-        try:
-            res = analyser_parabolsk(datamod.serie_for(priser, t))
-        except Exception:
-            res = None
-        if res is not None:
-            ut[t] = res
-    return ut
-
-
 
 
 # ---------------------------------------------------------------------------

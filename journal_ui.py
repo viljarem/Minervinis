@@ -322,7 +322,6 @@ def vis_dashboard(bors_navn: str, screening, vis_ticker_fn=None,
                   datastatus: dict | None = None,
                   live_kurser: dict | None = None,
                   bors_apen: bool = False,
-                  parabolsk: dict | None = None,
                   metrikk_fn=None) -> None:
     _injiser_stil()
     if not tilgjengelig():
@@ -382,7 +381,7 @@ def vis_dashboard(bors_navn: str, screening, vis_ticker_fn=None,
         _vis_dagbok(lager, notater)
     st.divider()
 
-    _vis_trades(lager, beregnet, bors_navn, skop, parabolsk)
+    _vis_trades(lager, beregnet, bors_navn, skop)
 
 
 # ---------------------------------------------------------------------------
@@ -930,7 +929,7 @@ def _farg_tall(df: pd.DataFrame, kolonner: list[str]):
     return df.style.map(_stil, subset=finnes)
 
 
-def _vis_trades(lager, beregnet, bors_navn, skop, parabolsk=None) -> None:
+def _vis_trades(lager, beregnet, bors_navn, skop) -> None:
     st.subheader("💼 Trades")
 
     v1, v2 = st.columns(2)
@@ -946,7 +945,7 @@ def _vis_trades(lager, beregnet, bors_navn, skop, parabolsk=None) -> None:
     if not apne:
         st.caption("Ingen åpne posisjoner. Loggfør et kjøp over.")
     else:
-        _kort_apne(lager, apne, skop, parabolsk)
+        _kort_apne(lager, apne, skop)
 
     st.markdown(f"**Lukkede handler ({len(lukket)})**")
     if not lukket:
@@ -1006,29 +1005,6 @@ def _setup_badge(setup: str | None) -> None:
     st.badge(setup, color=farge)
 
 
-def _parabolsk_varsel(pb: dict | None) -> None:
-    """Gult "vokt deg / ta gevinst"-flagg når en åpen posisjon har gått parabolsk.
-
-    Dette er Qullamaggies SHORT-oppsett – for oss KUN en observasjon på aksjer vi
-    eier, aldri et handelssignal. Viser rådataene bak flagget i en tooltip.
-    """
-    if not pb:
-        return
-    biter = []
-    if pb.get("opp_pct") is not None:
-        biter.append(f"+{pb['opp_pct']:.0f} % på kort tid")
-    if pb.get("gronne_rad"):
-        biter.append(f"{pb['gronne_rad']} grønne dager på rad")
-    if pb.get("over_ema10_pct") is not None:
-        biter.append(f"{pb['over_ema10_pct']:.0f} % over EMA10")
-    hjelp = ("Parabolsk bevegelse (QM3): " + ", ".join(biter) + ". "
-             "Dette er et observasjonsflagg – vurder å ta delgevinst eller "
-             "stramme stop. IKKE et kjøpssignal.") if biter else None
-    st.badge("Parabolsk – vokt deg", color="orange", icon=":material/warning:")
-    if hjelp:
-        st.caption(f"⚠️ {hjelp}")
-
-
 def _fremdrift(kjop, naa, stop, mal) -> tuple[float, str]:
     """Hvor langt fra stop (0) mot mål (1) ligger kursen nå? Returnerer (andel, tekst)."""
     try:
@@ -1044,8 +1020,7 @@ def _fremdrift(kjop, naa, stop, mal) -> tuple[float, str]:
     return andel, f"Stop {lav:.2f} → Mål {hoy:.2f}"
 
 
-def _kort_apne(lager, apne, skop, parabolsk=None) -> None:
-    parabolsk = parabolsk or {}
+def _kort_apne(lager, apne, skop) -> None:
     kolonner = st.columns(2, gap="medium")
     for i, h in enumerate(apne):
         with kolonner[i % 2]:
@@ -1063,7 +1038,6 @@ def _kort_apne(lager, apne, skop, parabolsk=None) -> None:
                         st.badge(f"{r:+.2f} R", color=farge, icon=":material/trending_up:")
 
                 _setup_badge(h.get("setup"))
-                _parabolsk_varsel(parabolsk.get(h.get("ticker")))
 
                 # Nøkkeltall i tre små kolonner.
                 m = st.columns(3)

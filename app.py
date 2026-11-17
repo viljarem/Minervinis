@@ -17,7 +17,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import json
 
-from motor import konfig, data as datamod, fundamenta, indikatorer, minervini, posisjon, screener, sektor, univers, vcp, aksjeinfo, trendscore, qullamaggie
+from motor import konfig, data as datamod, fundamenta, indikatorer, minervini, posisjon, screener, sektor, univers, vcp, aksjeinfo, trendscore
 from motor import skann_cache
 from motor import markedstid
 import journal_ui
@@ -88,46 +88,17 @@ def kjor_trendscore(bors_navn: str, versjon: float) -> pd.DataFrame:
     _fn = getattr(screener, "screen_trendscore", None)
     return _fn(priser) if _fn is not None else pd.DataFrame()
 
-@st.cache_data(show_spinner="Søker etter Qullamaggie-setup i hele børsen ...")
-def kjor_qm(bors_navn: str, versjon: float) -> pd.DataFrame:
-    """Qullamaggie breakout-setup (momentum-ledere i konsolidering) for hele børsen.
+@st.cache_data(show_spinner="Skanner hele børsen ...")
+def kjor_alle(bors_navn: str, versjon: float) -> pd.DataFrame:
+    """Hele børsen – alle aksjer med alle indikatorer (ufiltrert, sorterbar).
 
     getattr-fallback om Streamlit Cloud ennå kjører en gammel, bufret
     screener-modul uten funksjonen (kan skje det første minuttet etter utrulling).
     """
     priser = datamod.les_priser(konfig.BORSER[bors_navn].priser_fil)
-    _fn = getattr(screener, "screen_qm", None)
+    _fn = getattr(screener, "screen_alle", None)
     return _fn(priser) if _fn is not None else pd.DataFrame()
 
-@st.cache_data(show_spinner="Søker etter Episodic Pivots (gap-ups) i hele børsen ...")
-def kjor_ep(bors_navn: str, versjon: float) -> pd.DataFrame:
-    """Episodic Pivots (ferske gap-ups på stort volum) for hele børsen.
-
-    getattr-fallback om Streamlit Cloud ennå kjører en gammel, bufret
-    screener-modul uten funksjonen (kan skje det første minuttet etter utrulling).
-    """
-    priser = datamod.les_priser(konfig.BORSER[bors_navn].priser_fil)
-    _fn = getattr(screener, "screen_ep", None)
-    return _fn(priser) if _fn is not None else pd.DataFrame()
-
-@st.cache_data(show_spinner=False)
-def kjor_parabolsk(bors_navn: str, tickere: tuple, versjon: float) -> dict:
-    """Parabolsk-flagg (QM3) for valgte tickere – observasjon, ikke kjøpssignal.
-
-    Brukes av journalen til å flagge åpne posisjoner som har gått parabolsk
-    ("vokt deg / ta gevinst"). getattr-fallback om Streamlit Cloud ennå kjører
-    en gammel screener-modul uten funksjonen.
-    """
-    if not tickere:
-        return {}
-    _fn = getattr(screener, "flagg_parabolske", None)
-    if _fn is None:
-        return {}
-    try:
-        priser = datamod.les_priser(konfig.BORSER[bors_navn].priser_fil)
-        return _fn(priser, list(tickere))
-    except Exception:
-        return {}
 
 @st.cache_data(show_spinner=False)
 def trendscore_serie_cached(bors_navn: str, ticker: str, versjon: float) -> pd.DataFrame:
@@ -326,9 +297,7 @@ CHART_LAG = {
     "RS-rating":        False,
     "EPS/omsetning":    False,
     "TrendScore":       False,
-    "Qullamaggie":      False,
     "Egne SMA":         True,
-    "Tegninger":        True,
 }
 # Oversetter pille-etikett → det interne vis_*-flagget.
 _LAG_FLAGG = {
@@ -337,9 +306,7 @@ _LAG_FLAGG = {
     "Historiske brudd": "vis_hist",   "Golden cross": "vis_golden",
     "Indeks":           "vis_indeks", "RS-rating":    "vis_rs_rating",
     "EPS/omsetning":    "vis_eps",    "TrendScore":   "vis_trendscore",
-    "Qullamaggie":      "vis_qm",
     "Egne SMA":         "vis_egne_sma",
-    "Tegninger":        "vis_tegning",
 }
 
 
@@ -1305,12 +1272,8 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                   vis_trendscore: bool = False,
                   trendscore_df: pd.DataFrame | None = None,
                   handel_markorer: list | None = None,
-                  vis_qm: bool = True,
-                  qm_overlay: dict | None = None,
                   vis_egne_sma: bool = True,
-                  egne_sma: list | None = None,
-                  vis_tegning: bool = True,
-                  tegninger: list | None = None) -> list | None:
+                  egne_sma: list | None = None) -> list | None:
     """Bygger data-spesifikasjonen for lightweight-charts.
 
     Tar med alt det gamle Plotly-chartet hadde: candles, MA50/150/200, 52-ukers
@@ -1642,177 +1605,6 @@ def lag_chart_lwc(serie: pd.DataFrame, res: dict | None, dager: int = 504, *,
                                        "priceLineVisible": False, "lastValueVisible": True,
                                        "title": "Stop"},
                            "legend": {"label": "Stop", "color": "#ef5350", "kind": "level"}})
-
-        # Qullamaggie-overlay: EMA10/20 (surfing) + konsolideringsboks (range) +
-        # utbruddsnivaa (QM), eller gap-nivaa + stop (EP). Eget lag "qm" som kan
-        # slaas av/paa med "Qullamaggie"-pillen paa ALLE chart. Overlayet regnes
-        # automatisk fra kursserien naar det ikke er sendt inn (slik at pillen
-        # finnes og virker overalt, ikke bare paa QM/EP-fanene); eksplisitt
-        # overlay fra screeneren (med gap-info) vinner.
-        _qm = qm_overlay
-        if vis_qm and _qm is None:
-            try:
-                _nk = qullamaggie.nokkeltall(serie)
-                if _nk is not None:
-                    _qm = {"pivot": _nk.get("pivot"), "base_lav": _nk.get("base_lav"),
-                           "stop": _nk.get("stop"), "n_base": konfig.QM_BASE_VINDU}
-            except Exception:
-                _qm = None
-        if vis_qm and _qm:
-            try:
-                _qm_e10 = indikatorer.ema(d["Close"], 10)
-                _qm_e20 = indikatorer.ema(d["Close"], 20)
-                _e10_data = [{"time": ti, "value": round(float(v), 4)}
-                             for ti, v in zip(t, _qm_e10) if pd.notna(v)]
-                _e20_data = [{"time": ti, "value": round(float(v), 4)}
-                             for ti, v in zip(t, _qm_e20) if pd.notna(v)]
-                serier.append({"type": "Line", "data": _e10_data,
-                               "options": {"color": "#26a69a", "lineWidth": 2, "lineStyle": 0,
-                                           "priceLineVisible": False, "lastValueVisible": False},
-                               "legend": {"label": "EMA10", "color": "#26a69a", "kind": "line"},
-                               "layer": "qm"})
-                serier.append({"type": "Line", "data": _e20_data,
-                               "options": {"color": "#fb8c00", "lineWidth": 2, "lineStyle": 0,
-                                           "priceLineVisible": False, "lastValueVisible": False},
-                               "legend": {"label": "EMA20", "color": "#fb8c00", "kind": "line"},
-                               "layer": "qm"})
-
-                # Konsolideringsboks + utbruddsnivaa (QM breakout)
-                _piv = _qm.get("pivot")
-                _blav = _qm.get("base_lav")
-                if _piv and _blav:
-                    _nbase = int(_qm.get("n_base") or konfig.QM_BASE_VINDU)
-                    if ukentlig:
-                        _nbase = max(_nbase // 5, 4)
-                    _base_t = t[-_nbase:] if _nbase < len(t) else t
-                    _piv = float(_piv); _blav = float(_blav)
-                    # Svak gul boks mellom base-lav og pivot over konsolideringen.
-                    serier.append({"type": "Baseline",
-                                   "data": [{"time": ti, "value": _piv} for ti in _base_t],
-                                   "options": {"baseValue": {"type": "price", "price": _blav},
-                                               "topLineColor": "rgba(0,0,0,0)",
-                                               "topFillColor1": "rgba(246,195,67,0.14)",
-                                               "topFillColor2": "rgba(246,195,67,0.14)",
-                                               "bottomLineColor": "rgba(0,0,0,0)",
-                                               "bottomFillColor1": "rgba(0,0,0,0)",
-                                               "bottomFillColor2": "rgba(0,0,0,0)",
-                                               "priceLineVisible": False, "lastValueVisible": False},
-                                   "layer": "qm"})
-                    serier.append({"type": "Line",
-                                   "data": [{"time": ti, "value": _piv} for ti in _base_t],
-                                   "options": {"color": "#f6c343", "lineWidth": 3, "lineStyle": 0,
-                                               "priceLineVisible": False, "lastValueVisible": True,
-                                               "title": "Utbrudd"},
-                                   "legend": {"label": "Utbrudd", "color": "#f6c343", "kind": "level"},
-                                   "layer": "qm"})
-                    serier.append({"type": "Line",
-                                   "data": [{"time": ti, "value": _blav} for ti in _base_t],
-                                   "options": {"color": "#f6c343", "lineWidth": 1, "lineStyle": 2,
-                                               "priceLineVisible": False, "lastValueVisible": False},
-                                   "layer": "qm"})
-
-                # Gap-nivaa + gap-dag markoer (EP)
-                _gapc = _qm.get("gap_close")
-                _gapd = _qm.get("gap_dato")
-                if _gapc:
-                    serier.append({"type": "Line",
-                                   "data": [{"time": ti, "value": float(_gapc)} for ti in t],
-                                   "options": {"color": "#f6c343", "lineWidth": 2, "lineStyle": 0,
-                                               "priceLineVisible": False, "lastValueVisible": True,
-                                               "title": "Gap-nivå"},
-                                   "legend": {"label": "Gap-nivå", "color": "#f6c343", "kind": "level"},
-                                   "layer": "qm"})
-                if _gapd:
-                    _gd = pd.Timestamp(_gapd).strftime("%Y-%m-%d")
-                    if _gd in t_sett:
-                        _eks = hoved.get("markers", [])
-                        hoved["markers"] = sorted(
-                            _eks + [{"time": _gd, "position": "belowBar",
-                                     "color": "#f6c343", "shape": "arrowUp",
-                                     "text": "GAP", "layer": "qm"}],
-                            key=lambda x: x["time"])
-
-                # Felles stop-linje (dagens/gap-dagens low)
-                _stp = _qm.get("stop")
-                if _stp:
-                    serier.append({"type": "Line",
-                                   "data": [{"time": ti, "value": float(_stp)} for ti in t],
-                                   "options": {"color": "#ef5350", "lineWidth": 1, "lineStyle": 2,
-                                               "priceLineVisible": False, "lastValueVisible": True,
-                                               "title": "Stop"},
-                                   "legend": {"label": "Stop", "color": "#ef5350", "kind": "level"},
-                                   "layer": "qm"})
-            except Exception:
-                pass
-
-        # Egne tegninger (M4/S3): vannrette nivaaer, trendlinjer, kanal og tekst
-        # lagret i Supabase. Eget lag "tegning" styrt av "Tegninger"-pillen. Alt i
-        # try/except saa en skakk tegning aldri velter chartet.
-        if vis_tegning and tegninger:
-            def _snap(dato_str):
-                """Naermeste synlige handelsdag >= dato (ellers siste). None hvis utenfor."""
-                try:
-                    ds = str(dato_str)[:10]
-                except Exception:
-                    return None
-                if ds in t_sett:
-                    return ds
-                etter = [ti for ti in t if ti >= ds]
-                if etter:
-                    return etter[0]
-                return t[-1] if t else None
-            for _tg in tegninger:
-                try:
-                    _typ = _tg.get("type")
-                    _farge = _tg.get("farge") or "#8e24aa"
-                    _label = _tg.get("label") or ""
-                    _pts = _tg.get("points") or []
-                    if _typ == "hlinje" and _pts:
-                        _pr = float(_pts[0].get("price"))
-                        serier.append({"type": "Line",
-                                       "data": [{"time": ti, "value": _pr} for ti in t],
-                                       "options": {"color": _farge, "lineWidth": 1, "lineStyle": 0,
-                                                   "priceLineVisible": False, "lastValueVisible": True,
-                                                   "title": _label or "Nivå"},
-                                       "legend": {"label": _label or f"Nivå {_pr:g}",
-                                                  "color": _farge, "kind": "level"},
-                                       "layer": "tegning"})
-                    elif _typ in ("trend", "kanal") and len(_pts) >= 2:
-                        _t1 = _snap(_pts[0].get("time")); _t2 = _snap(_pts[1].get("time"))
-                        _p1 = float(_pts[0].get("price")); _p2 = float(_pts[1].get("price"))
-                        if _t1 and _t2 and _t1 != _t2:
-                            _lo, _hi = sorted([(_t1, _p1), (_t2, _p2)], key=lambda x: x[0])
-                            serier.append({"type": "Line",
-                                           "data": [{"time": _lo[0], "value": _lo[1]},
-                                                    {"time": _hi[0], "value": _hi[1]}],
-                                           "options": {"color": _farge, "lineWidth": 2, "lineStyle": 0,
-                                                       "priceLineVisible": False,
-                                                       "lastValueVisible": False},
-                                           "legend": {"label": _label or "Trend",
-                                                      "color": _farge, "kind": "line"},
-                                           "layer": "tegning"})
-                            if _typ == "kanal":
-                                _bredde = float(_tg.get("bredde") or 0)
-                                if _bredde:
-                                    serier.append({"type": "Line",
-                                                   "data": [{"time": _lo[0], "value": _lo[1] + _bredde},
-                                                            {"time": _hi[0], "value": _hi[1] + _bredde}],
-                                                   "options": {"color": _farge, "lineWidth": 2,
-                                                               "lineStyle": 0,
-                                                               "priceLineVisible": False,
-                                                               "lastValueVisible": False},
-                                                   "layer": "tegning"})
-                    elif _typ == "tekst" and _pts:
-                        _tt = _snap(_pts[0].get("time"))
-                        if _tt:
-                            _eks = hoved.get("markers", [])
-                            hoved["markers"] = sorted(
-                                _eks + [{"time": _tt, "position": "aboveBar",
-                                         "color": _farge, "shape": "circle",
-                                         "text": _label or "notat", "layer": "tegning"}],
-                                key=lambda x: x["time"])
-                except Exception:
-                    continue
 
         # Posisjon (long): inngang (blå solid), stop (rød stiplet) og mål (grønn
         # stiplet) som tydelige nivålinjer med pris-etikett til høyre.
@@ -2266,7 +2058,7 @@ def render_chart_spec(spec: list | None, *, key: str, morkt: bool = False,
 LAG_ID = {"vis_ma": "ma", "vis_52u": "52u", "vis_vcp": "vcp", "vis_7av7": "7av7",
           "vis_hist": "hist", "vis_golden": "golden", "vis_indeks": "indeks",
           "vis_rs_rating": "rs", "vis_eps": "eps", "vis_trendscore": "ts",
-          "vis_qm": "qm", "vis_egne_sma": "egne_sma", "vis_tegning": "tegning"}
+          "vis_egne_sma": "egne_sma"}
 
 
 def chart_interaktiv(serie: pd.DataFrame, res: dict | None, ticker: str, *,
@@ -2274,9 +2066,7 @@ def chart_interaktiv(serie: pd.DataFrame, res: dict | None, ticker: str, *,
                      indeks: pd.DataFrame | None = None, morkt: bool = False,
                      valuta: str = "", hoyde: int = 620, kontekst: str = "hoved",
                      standard: dict | None = None, minervini_lag: bool = True,
-                     handel_markorer: list | None = None,
-                     qm_overlay: dict | None = None,
-                     tegninger: list | None = None) -> bool:
+                     handel_markorer: list | None = None) -> bool:
     """Tegner chartet med innebygde kontroller. Returnerer False hvis det feilet.
 
     kontekst = egen localStorage-nøkkel (så f.eks. golden cross-tabellen husker sine
@@ -2294,8 +2084,6 @@ def chart_interaktiv(serie: pd.DataFrame, res: dict | None, ticker: str, *,
                       indeks_navn=BORS.benchmark, pos=pos, morkt=morkt, tittel=ticker,
                       hoyde=hoyde,
                       handel_markorer=handel_markorer,
-                      qm_overlay=qm_overlay,
-                      tegninger=tegninger,
                       **_trendscore_chart_kwargs(ticker, True),
                       **_eps_chart_kwargs(ticker, True))
         dag = lag_chart_lwc(serie, res, 100_000, ukentlig=False, **felles)
@@ -2325,7 +2113,7 @@ def chart_interaktiv(serie: pd.DataFrame, res: dict | None, ticker: str, *,
 
 def tabell_chart(serie: pd.DataFrame, res: dict | None, ticker: str, *,
                  kontekst: str, hoyde: int = 460, standard: dict | None = None,
-                 minervini_lag: bool = True, qm_overlay: dict | None = None) -> bool:
+                 minervini_lag: bool = True) -> bool:
     """Interaktivt chart for tabellene (Hovedliste, TrendScore, Golden cross, IPO,
     Markedshelse). Henter RS-historikk og indeks selv (begge bufret)."""
     try:
@@ -2339,8 +2127,7 @@ def tabell_chart(serie: pd.DataFrame, res: dict | None, ticker: str, *,
         _idx = None
     return chart_interaktiv(serie, res, ticker, rs_serie=_rs, indeks=_idx, morkt=MORKT,
                             valuta=VALUTA, hoyde=hoyde, kontekst=kontekst,
-                            standard=standard, minervini_lag=minervini_lag,
-                            qm_overlay=qm_overlay)
+                            standard=standard, minervini_lag=minervini_lag)
 
 
 _INTERAKTIV_CHART_MAL = """
@@ -3309,25 +3096,22 @@ visning og rører **aldri** kursdataene screeningen bygger på.
 GOLDEN_VALG = "✨ Golden Cross"
 IPO_VALG = "🆕 Nye IPO-er"
 TRENDSCORE_VALG = "📈 TrendScore"
-QM_VALG = "🚀 Qullamaggie"
-EP_VALG = "⚡ Episodic Pivot"
+ALLE_VALG = "📊 Hele børsen"
 with st.sidebar:
     st.header("Filtre")
     preset_navn = st.selectbox(
-        "Oppsett", list(konfig.PRESETS.keys()) + [GOLDEN_VALG, TRENDSCORE_VALG, QM_VALG, EP_VALG, IPO_VALG],
+        "Oppsett", list(konfig.PRESETS.keys()) + [GOLDEN_VALG, TRENDSCORE_VALG, ALLE_VALG, IPO_VALG],
         help="Velg hva skanningen skal lete etter: Minervini-template (standard), "
              "golden cross (SMA50 over SMA200 + aksjer som venter på kryss), TrendScore "
-             "(0–100-rangering av trendstyrke for hele børsen), Qullamaggie (momentum-ledere "
-             "i stram konsolidering, klare for utbrudd), Episodic Pivot (ferske gap-ups på "
-             "stort volum – nyhets-/resultatdrevet), eller "
+             "(0–100-rangering av trendstyrke for hele børsen), Hele børsen (alle aksjer "
+             "med samtlige indikatorer, sorterbar tabell), eller "
              "nye IPO-er (ferske noteringer med for kort historikk til full analyse).")
     er_golden = preset_navn == GOLDEN_VALG
     er_ipo = preset_navn == IPO_VALG
     er_trendscore = preset_navn == TRENDSCORE_VALG
-    er_qm = preset_navn == QM_VALG
-    er_ep = preset_navn == EP_VALG
+    er_alle = preset_navn == ALLE_VALG
     # Trygt preset-navn for Minervini-analyser (chart/søk) også i spesialmodus.
-    aktiv_preset_navn = konfig.STANDARD.navn if (er_golden or er_ipo or er_trendscore or er_qm or er_ep) else preset_navn
+    aktiv_preset_navn = konfig.STANDARD.navn if (er_golden or er_ipo or er_trendscore or er_alle) else preset_navn
 
     # Standardverdier så variablene finnes uansett modus.
     bruker_dato = None
@@ -3346,16 +3130,11 @@ with st.sidebar:
         st.caption("📈 **TrendScore-modus** – rangerer HELE børsen 0–100 etter hvor sterk og "
                    "sunn opptrenden er (momentum, relativ styrke, trendstruktur og ADX). "
                    "Høyest score øverst. Minervini-filtrene under er skrudd av.")
-    elif er_qm:
-        st.caption("🚀 **Qullamaggie-modus** – finner momentum-ledere (topp på 1/3/6 mnd) som "
-                   "har bykset og nå konsoliderer stramt på stigende EMA10/20, klare for utbrudd. "
-                   "Setup-variant: 7 kriterier passerer/feiler (ingen score), sortert nærmest "
-                   "utbrudd. Minervini-filtrene under er skrudd av.")
-    elif er_ep:
-        st.caption("⚡ **Episodic Pivot-modus** – ferske gap-ups (≥ 10 %) på stort volum, typisk "
-                   "resultat-/nyhetsdrevet. Størst edge når aksjen IKKE allerede har gått mye "
-                   "(overraskelse). 3 kriterier passerer/feiler, sortert ferskest øverst. "
-                   "Minervini-filtrene under er skrudd av.")
+    elif er_alle:
+        st.caption("📊 **Hele børsen** – viser alle aksjer med samtlige indikatorer i én "
+                   "sorterbar tabell (score, status, RS, TrendScore, relativt volum, "
+                   "utvikling 3/6/12 mnd og % fra 52-ukers topp/bunn). Klikk på en "
+                   "kolonneoverskrift for å sortere. Minervini-filtrene under er skrudd av.")
     elif er_ipo:
         st.caption("🆕 **Nye IPO-er** – ferske noteringer som ennå har for kort historikk "
                    f"(< {konfig.MIN_HANDELSDAGER} handelsdager) til full Minervini-analyse. "
@@ -3415,19 +3194,16 @@ def _skann_skriv_cache(oppsett_navn, df) -> None:
         pass
 
 
-gc_resultat = ts_resultat = qm_resultat = ep_resultat = ipo_resultat = resultat = None
+gc_resultat = ts_resultat = alle_resultat = ipo_resultat = resultat = None
 if er_golden:
     gc_resultat = kjor_golden_cross(bors_navn, versjon) if skannet_na else None
     _skann_skriv_cache("Golden Cross", gc_resultat)
 elif er_trendscore:
     ts_resultat = kjor_trendscore(bors_navn, versjon) if skannet_na else None
     _skann_skriv_cache("TrendScore", ts_resultat)
-elif er_qm:
-    qm_resultat = kjor_qm(bors_navn, versjon) if skannet_na else None
-    _skann_skriv_cache("Qullamaggie", qm_resultat)
-elif er_ep:
-    ep_resultat = kjor_ep(bors_navn, versjon) if skannet_na else None
-    _skann_skriv_cache("Episodic Pivot", ep_resultat)
+elif er_alle:
+    alle_resultat = kjor_alle(bors_navn, versjon) if skannet_na else None
+    _skann_skriv_cache("Hele borsen", alle_resultat)
 elif er_ipo:
     ipo_resultat = kjor_nye_ipoer(bors_navn, versjon) if skannet_na else None
     _skann_skriv_cache("Nye IPO-er", ipo_resultat)
@@ -3483,108 +3259,6 @@ st.session_state["bors_navn"] = bors_navn
 # lenger nede så bildet tegnes på nytt når du bytter tema.
 MORKT = _er_morkt()
 TEMA = "d" if MORKT else "l"
-
-
-def _tegninger_ui(sok: str, serie, tegn: list, *, kontekst: str) -> None:
-    """Skjema for aa legge til / slette egne tegninger (lagres i Supabase).
-
-    Siden chart-komponenten er enveis (ingen klikk tilbake til Python), legger
-    du til tegninger via dette skjemaet: velg type, pris(er) og evt. dato(er).
-    `tegn` er lista som ble lastet (muteres ved lagring). Vises som en expander
-    under chartet slik at Minervini-bildet ellers er uforstyrret.
-    """
-    _lg = None
-    try:
-        _lg = journal_ui._lager()
-    except Exception:
-        _lg = None
-    with st.expander(f"✏️ Tegninger ({len(tegn)})", expanded=False):
-        if _lg is None:
-            st.caption("Logg inn i Journal-fanen for aa lagre egne tegninger.")
-            return
-        # Robust mot gammel/cachet journal_db uten tegne-metodene (f.eks. rett
-        # etter en utrulling der modulen enda ikke er lastet paa nytt).
-        if not (hasattr(_lg, "lagre_tegninger") and hasattr(_lg, "hent_tegninger")):
-            st.caption("Tegne-lagring er ikke klar ennaa (appen ruller ut en ny versjon "
-                       "– prov «Rerun» eller «Reboot app» om litt).")
-            return
-        # Dato-grenser fra serien (for trend/kanal/tekst).
-        try:
-            _d_min = serie.index.min().date()
-            _d_maks = serie.index.max().date()
-        except Exception:
-            import datetime as _dt
-            _d_min = _dt.date(2000, 1, 1)
-            _d_maks = _dt.date.today()
-        _pris_std = float(serie["Close"].iloc[-1]) if not serie.empty else 0.0
-
-        # Eksisterende tegninger med slett-knapp.
-        if tegn:
-            st.caption("**Dine tegninger**")
-            for _i, _t in enumerate(list(tegn)):
-                _c1, _c2 = st.columns([5, 1])
-                _navn = {"hlinje": "Nivaa", "trend": "Trendlinje",
-                         "kanal": "Kanal", "tekst": "Tekst"}.get(_t.get("type"), _t.get("type"))
-                _etik = _t.get("label") or ""
-                _pkt = _t.get("points", [])
-                if _t.get("type") == "hlinje" and _pkt:
-                    _info = f"{_pkt[0].get('price')}"
-                elif _pkt:
-                    _info = " \u2192 ".join(f"{p.get('time')}:{p.get('price')}" for p in _pkt)
-                else:
-                    _info = ""
-                _c1.write(f"{_navn} · {_info} {('· ' + _etik) if _etik else ''}")
-                if _c2.button("🗑️", key=f"{kontekst}_{sok}_slett_tegn_{_i}"):
-                    tegn.pop(_i)
-                    _lg.lagre_tegninger(sok, bors_navn, tegn)
-                    st.rerun()
-            st.divider()
-
-        # Legg til ny.
-        st.caption("**Legg til ny**")
-        _typ = st.selectbox("Type", ["Nivaalinje", "Trendlinje", "Kanal", "Tekst"],
-                            key=f"{kontekst}_{sok}_ny_tegn_type")
-        _farge = st.color_picker("Farge", "#8e24aa", key=f"{kontekst}_{sok}_ny_tegn_farge")
-        _label = st.text_input("Etikett (valgfritt)", key=f"{kontekst}_{sok}_ny_tegn_label")
-        _ny = None
-        if _typ == "Nivaalinje":
-            _p = st.number_input("Pris", value=_pris_std, step=0.1,
-                                 key=f"{kontekst}_{sok}_ny_tegn_pris")
-            _ny = {"type": "hlinje", "points": [{"price": float(_p)}]}
-        elif _typ == "Tekst":
-            _dt1 = st.date_input("Dato", value=_d_maks, min_value=_d_min, max_value=_d_maks,
-                                 key=f"{kontekst}_{sok}_ny_tegn_dato")
-            _p = st.number_input("Pris (hoyde)", value=_pris_std, step=0.1,
-                                 key=f"{kontekst}_{sok}_ny_tegn_pris")
-            _ny = {"type": "tekst",
-                   "points": [{"time": str(_dt1), "price": float(_p)}]}
-        else:  # Trendlinje / Kanal
-            _ca, _cb = st.columns(2)
-            _dt1 = _ca.date_input("Fra dato", value=_d_min, min_value=_d_min, max_value=_d_maks,
-                                  key=f"{kontekst}_{sok}_ny_tegn_dato1")
-            _pp1 = _ca.number_input("Fra pris", value=_pris_std, step=0.1,
-                                    key=f"{kontekst}_{sok}_ny_tegn_pris1")
-            _dt2 = _cb.date_input("Til dato", value=_d_maks, min_value=_d_min, max_value=_d_maks,
-                                  key=f"{kontekst}_{sok}_ny_tegn_dato2")
-            _pp2 = _cb.number_input("Til pris", value=_pris_std, step=0.1,
-                                    key=f"{kontekst}_{sok}_ny_tegn_pris2")
-            _ny = {"type": "trend" if _typ == "Trendlinje" else "kanal",
-                   "points": [{"time": str(_dt1), "price": float(_pp1)},
-                              {"time": str(_dt2), "price": float(_pp2)}]}
-            if _typ == "Kanal":
-                _br = st.number_input("Kanal-bredde (pris)", value=round(_pris_std * 0.05, 2),
-                                      step=0.1, key=f"{kontekst}_{sok}_ny_tegn_bredde")
-                _ny["bredde"] = float(_br)
-        if st.button("➕ Legg til", key=f"{kontekst}_{sok}_ny_tegn_legg"):
-            import uuid as _uuid
-            _ny["id"] = _uuid.uuid4().hex[:8]
-            _ny["farge"] = _farge
-            if _label.strip():
-                _ny["label"] = _label.strip()
-            tegn.append(_ny)
-            _lg.lagre_tegninger(sok, bors_navn, tegn)
-            st.success("Tegning lagt til.")
-            st.rerun()
 
 
 def vis_ticker_detalj(sok: str, *, kontekst: str = "sok", handel_data: dict | None = None) -> dict | None:
@@ -3656,14 +3330,6 @@ def vis_ticker_detalj(sok: str, *, kontekst: str = "sok", handel_data: dict | No
                 pos3 = handel_data["pos"]
                 pos_suffix3 = "_handel"
             _handel_mark = handel_data.get("markorer")
-        # Egne tegninger (nivaalinjer/trend/kanal/tekst) lagret i Supabase.
-        _tegn = []
-        try:
-            _lg_t = journal_ui._lager()
-            if _lg_t is not None and hasattr(_lg_t, "hent_tegninger"):
-                _tegn = _lg_t.hent_tegninger(sok, bors_navn)
-        except Exception:
-            _tegn = []
         _rs_serie3 = None
         if vis_rs_rating3:
             _rs_mat3 = rs_rating_historikk(bors_navn, versjon)
@@ -3677,16 +3343,15 @@ def vis_ticker_detalj(sok: str, *, kontekst: str = "sok", handel_data: dict | No
                 serie, res, sok, pos=pos3,
                 rs_serie=_rs_mat_s[sok].dropna() if sok in _rs_mat_s.columns else None,
                 indeks=datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark),
-                morkt=MORKT, valuta=VALUTA, handel_markorer=_handel_mark, tegninger=_tegn)
+                morkt=MORKT, valuta=VALUTA, handel_markorer=_handel_mark)
         spec3 = None if _ok3 else lag_chart_lwc(serie, res, PERIODER_VALG[periode3],
                               vis_ma=vis_ma3, vis_52u=vis_52u3, vis_vcp=vis_vcp3,
                               vis_7av7=vis_7av7_3, vis_hist=vis_hist3, vis_golden=vis_golden3,
                               vis_rs_rating=vis_rs_rating3, rs_rating=_rs_serie3,
                               vis_indeks=vis_indeks3, indeks=_indeks3, indeks_navn=BORS.benchmark,
                               ukentlig=ukentlig3, pos=pos3, morkt=MORKT, tittel=sok,
-                              handel_markorer=_handel_mark, vis_qm=_k3["vis_qm"],
+                              handel_markorer=_handel_mark,
                               vis_egne_sma=_k3["vis_egne_sma"],
-                              vis_tegning=_k3["vis_tegning"], tegninger=_tegn,
                               **_trendscore_chart_kwargs(sok, vis_trendscore3),
                               **_eps_chart_kwargs(sok, vis_eps3))
         if _ok3:
@@ -3703,7 +3368,6 @@ def vis_ticker_detalj(sok: str, *, kontekst: str = "sok", handel_data: dict | No
                 renderLightweightCharts(
                     spec3,
                     key=f"{kontekst}_{sok}_{periode3}_{tidsramme3}_{vis_ma3}{vis_52u3}{vis_vcp3}{vis_7av7_3}{vis_hist3}{vis_golden3}{vis_rs_rating3}{vis_indeks3}{vis_eps3}{vis_trendscore3}{pos_suffix3}_{TEMA}")
-        _tegninger_ui(sok, serie, _tegn, kontekst=kontekst)
     vis_vcp_boks(res)
     fundamenta_seksjon(sok, f"{kontekst}_{sok}")
     st.divider()
@@ -3775,220 +3439,72 @@ GC_TABELL_HJELP = {
 }
 
 
-def _ja_nei(v) -> str:
-    """✅/❌ for et bool-kriterium (til QM-tabellen)."""
-    return "✅" if bool(v) else "❌"
-
-
-def _formater_qm_tabell(df: pd.DataFrame) -> pd.DataFrame:
-    """Bygger visningstabellen for Qullamaggie-screeneren (setup-variant)."""
+def _formater_hele_borsen(df: pd.DataFrame) -> pd.DataFrame:
+    """Bygger den store ufiltrerte tabellen for «Hele borsen»-visningen."""
     vis = pd.DataFrame()
     vis["Ticker"] = df["ticker"]
-    vis["Status"] = df["status"] + " " + df["statustekst"]
     vis["Pris"] = df["pris"]
-    vis["Til utbrudd"] = df["avstand_pivot"].map(
-        lambda p: f"{p:+.1f}%" if pd.notna(p) else "—")
-    vis["Pivot"] = df["pivot"]
-    vis["Stop"] = df["stop"]
-    vis["3M"] = df["mom_3m"].map(lambda p: f"{p:+.0f}%" if pd.notna(p) else "—")
-    vis["Byks"] = df["byks_pct"].map(lambda p: f"{p:+.0f}%" if pd.notna(p) else "—")
-    vis["ADR%"] = df["adr_pct"]
-    vis["Stramhet"] = df["tightness"]
-    # De 7 kriteriene som ✅/❌ (transparent, etterprøvbart – som Minervini).
-    vis["Leder"] = df["qk1"].map(_ja_nei)
-    vis["Byks✓"] = df["qk2"].map(_ja_nei)
-    vis["EMA"] = df["qk3"].map(_ja_nei)
-    vis["H.bunner"] = df["qk4"].map(_ja_nei)
-    vis["Stram"] = df["qk5"].map(_ja_nei)
-    vis["ADR✓"] = df["qk6"].map(_ja_nei)
-    vis["Stop✓"] = df["qk7"].map(_ja_nei)
+    vis["Score"] = df["score"]
+    vis["Status"] = df["status"] + " " + df["statustekst"]
+    vis["RS"] = df["rs"]
+    vis["TS"] = df["trendscore"]
+    vis["RVol"] = df["rel_volum"]
+    vis["3 mnd"] = df["utv_3m"]
+    vis["6 mnd"] = df["utv_6m"]
+    vis["1 ar"] = df["utv_12m"]
+    vis["Fra 52u h"] = df["pct_fra_52h"]
+    vis["Over 52u l"] = df["pct_over_52l"]
+    vis["Oms (mill)"] = (df["dagsomsetning"] / 1e6).round(1)
     return vis
 
 
-QM_TABELL_HJELP = {
+HELE_BORSEN_HJELP = {
     "Pris": st.column_config.NumberColumn("Pris", format="%.2f", help="Siste sluttkurs."),
+    "Score": st.column_config.NumberColumn(
+        "Score", format="%d", help="Minervini-score 0–7 (antall oppfylte trendkriterier)."),
     "Status": st.column_config.TextColumn(
-        "Status", help="🟢 Klart setup (7/7) · 🟡 Nesten (5–6/7) · ⚪ Ikke i setup (<5/7)."),
-    "Til utbrudd": st.column_config.TextColumn(
-        "Til utbrudd", help="Hvor langt UNDER pivot (toppen av konsolideringen) kursen er. "
-        "Lavt tall = står på kanten av utbrudd. Negativt = allerede over pivot."),
-    "Pivot": st.column_config.NumberColumn(
-        "Pivot", format="%.2f", help="Toppen av konsolideringen – motstanden aksjen skal bryte."),
-    "Stop": st.column_config.NumberColumn(
-        "Stop", format="%.2f", help="Qullamaggie-stop = dagens laveste kurs (lows of the day)."),
-    "3M": st.column_config.TextColumn("3M", help="Avkastning siste 3 måneder (momentum-lederskap)."),
-    "Byks": st.column_config.TextColumn(
-        "Byks", help="Største byks (lav→høy) siste ~3 mnd – beviset på at aksjen kan løpe."),
-    "ADR%": st.column_config.NumberColumn(
-        "ADR%", format="%.1f", help="Average Daily Range i prosent – hvor mye aksjen typisk "
-        "beveger seg per dag. Høyt = mer rom for store gevinster."),
-    "Stramhet": st.column_config.NumberColumn(
-        "Stramhet", format="%.1f", help="Konsolideringens range delt på ADR. Lavt = stram base "
-        "(kontraksjon) = kraftigere utbrudd når det kommer."),
-    "Leder": st.column_config.TextColumn("Leder", help="qk1: momentum-leder (topp på 3M i universet)."),
-    "Byks✓": st.column_config.TextColumn("Byks✓", help="qk2: reelt byks ≥ 30 % siste ~3 mnd."),
-    "EMA": st.column_config.TextColumn("EMA", help="qk3: surfer stigende EMA (Close≥EMA20, 10>20>50)."),
-    "H.bunner": st.column_config.TextColumn("H.bunner", help="qk4: høyere bunner i konsolideringen."),
-    "Stram": st.column_config.TextColumn("Stram", help="qk5: stram base (range/ADR under grensen)."),
-    "ADR✓": st.column_config.TextColumn("ADR✓", help="qk6: nok daglig bevegelse (ADR% over gulvet)."),
-    "Stop✓": st.column_config.TextColumn("Stop✓", help="qk7: tight stop (dagens low ≤ ADR%)."),
+        "Status", help="Bruddstatus (samme som i hovedlista)."),
+    "RS": st.column_config.NumberColumn(
+        "RS", format="%d", help="RS-rating 1–99 (relativ styrke mot resten av borsen)."),
+    "TS": st.column_config.NumberColumn(
+        "TS", format="%d", help="TrendScore 0–100 (styrke og sunnhet i opptrenden)."),
+    "RVol": st.column_config.NumberColumn(
+        "RVol", format="%.2f", help="Relativt volum: siste dags volum delt pa 50-dagers snitt."),
+    "3 mnd": st.column_config.NumberColumn(
+        "3 mnd", format="%.1f%%", help="Kursutvikling siste ~3 maneder (63 handelsdager)."),
+    "6 mnd": st.column_config.NumberColumn(
+        "6 mnd", format="%.1f%%", help="Kursutvikling siste ~6 maneder (126 handelsdager)."),
+    "1 ar": st.column_config.NumberColumn(
+        "1 ar", format="%.1f%%", help="Kursutvikling siste ~12 maneder (252 handelsdager)."),
+    "Fra 52u h": st.column_config.NumberColumn(
+        "Fra 52u h", format="%.1f%%", help="Hvor langt UNDER 52-ukers hoy kursen er (0 = pa topp)."),
+    "Over 52u l": st.column_config.NumberColumn(
+        "Over 52u l", format="%.1f%%", help="Hvor langt OVER 52-ukers lav kursen er."),
+    "Oms (mill)": st.column_config.NumberColumn(
+        "Oms (mill)", format="%.1f", help="Gjennomsnittlig dagsomsetning i millioner."),
 }
 
 
-def vis_qullamaggie(qm_resultat):
-    """Rendrer Qullamaggie-tabellen + chart i Hovedliste-fanen (qm-modus)."""
-    st.markdown("### 🚀 Qullamaggie-screener")
-    st.caption("Finner momentum-ledere som har bykset og nå konsoliderer stramt på stigende "
-               "EMA10/20 – klare for neste utbrudd. **Setup-variant:** 7 kriterier passerer/feiler "
-               "(ingen score), sortert nærmest utbrudd. Uavhengig av Minervini-templaten.")
-    if qm_resultat is None:
-        st.info(f"Trykk **🔍 Skann {BORS.navn}** i menyen til venstre for å søke gjennom hele "
-                "børsen etter Qullamaggie-setup. (Ingenting skannes automatisk – du velger når.)")
+def vis_hele_borsen(alle_resultat):
+    """Rendrer «Hele borsen»-tabellen i Hovedliste-fanen (alle-modus)."""
+    st.markdown("### 📊 Hele børsen")
+    st.caption("Alle aksjer i universet med samtlige indikatorer i én sorterbar tabell – "
+               "ingen filtrering. Klikk på en kolonneoverskrift for å sortere (f.eks. etter "
+               "RS, TrendScore, relativt volum eller utvikling). Uavhengig av Minervini-templaten.")
+    if alle_resultat is None:
+        st.info(f"Trykk **🔍 Skann {BORS.navn}** i menyen til venstre for å laste hele børsen. "
+                "(Ingenting skannes automatisk – du velger når.)")
         return
-    if qm_resultat.empty:
-        st.info("Fant ingen Qullamaggie-setup akkurat nå (markedet mangler kanskje klare ledere).")
+    if alle_resultat.empty:
+        st.info("Fant ingen aksjer med nok historikk til å vises.")
         return
-    _gyldige = int(qm_resultat["gyldig_setup"].sum())
-    _nesten = int((qm_resultat["antall_ok"] == 6).sum()) + int((qm_resultat["antall_ok"] == 5).sum())
-    st.markdown(
-        f"**{len(qm_resultat)} analysert** – 🟢 {_gyldige} klare setup (7/7) · "
-        f"🟡 {_nesten} nesten (5–6/7). Sortert med klare setup øverst, så nærmest utbrudd."
+    st.markdown(f"**{len(alle_resultat)} aksjer** – sortert på TrendScore (fallende) som utgangspunkt.")
+    st.dataframe(
+        _formater_hele_borsen(alle_resultat),
+        width="stretch", hide_index=True, height=640, column_config=HELE_BORSEN_HJELP,
     )
-    _qm_tab = st.dataframe(
-        _formater_qm_tabell(qm_resultat),
-        width="stretch", hide_index=True, height=560, column_config=QM_TABELL_HJELP,
-        on_select="rerun", selection_mode="multi-row", key="qm_tabell",
-    )
-    st.caption("💡 **Huk av én eller flere rader** for å tegne chart med EMA10/20/50 under.")
+    st.caption("💡 Bruk hurtigsøk-feltet øverst for å åpne full chart-visning av en enkelt aksje.")
 
-    _qm_rader = list(getattr(_qm_tab.selection, "rows", []) or [])
-    _qm_valgte = [qm_resultat.iloc[i]["ticker"] for i in _qm_rader if i < len(qm_resultat)]
-    if not _qm_valgte:
-        st.caption("Ingen rader valgt ennå – huk av i tabellen over for å tegne chart her.")
-        return
-    st.divider()
-    _maks = 15
-    if len(_qm_valgte) > _maks:
-        st.info(f"Viser de {_maks} første av {len(_qm_valgte)} valgte (for fartens skyld).")
-        _qm_valgte = _qm_valgte[:_maks]
-    st.subheader(f"📊 Chart for {len(_qm_valgte)} valgte")
-    st.caption("Gul boks = konsolideringen · tykk gul linje = **utbruddsnivå** (pivot) · "
-               "grønn/oransje = EMA10/EMA20 aksjen surfer på · rød stiplet = stop. "
-               "Slå laget av/på med **Qullamaggie**-pillen i chartet.")
-    _qm_priser = last_priser(bors_navn, versjon)
-    for _tk in _qm_valgte:
-        _s = datamod.serie_for(_qm_priser, _tk)
-        _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[aktiv_preset_navn])
-        _rad = qm_resultat[qm_resultat["ticker"] == _tk]
-        _ov = None
-        if not _rad.empty:
-            _rd = _rad.iloc[0]
-            _ov = {"pivot": _rd.get("pivot"), "base_lav": _rd.get("base_lav"),
-                   "stop": _rd.get("stop"), "n_base": konfig.QM_BASE_VINDU}
-        st.markdown(f"**{_tk}**")
-        if not tabell_chart(_s, _r, _tk, kontekst="qm",
-                            standard={"golden": False, "vcp": False, "7av7": False, "qm": True},
-                            qm_overlay=_ov):
-            st.caption("Klarte ikke tegne chart for denne aksjen.")
-
-
-def _formater_ep_tabell(df: pd.DataFrame) -> pd.DataFrame:
-    """Bygger visningstabellen for Episodic Pivot-screeneren."""
-    vis = pd.DataFrame()
-    vis["Ticker"] = df["ticker"]
-    vis["Status"] = df["status"] + " " + df["statustekst"]
-    vis["Pris"] = df["pris"]
-    vis["Gap"] = df["gap_pct"].map(lambda p: f"{p:+.1f}%" if pd.notna(p) else "—")
-    vis["Volum"] = df["volum_x"].map(lambda v: f"{v:.1f}x" if pd.notna(v) else "—")
-    vis["Dager siden"] = df["dager_siden"].map(lambda d: "i dag" if d == 0 else f"{int(d)}d")
-    vis["Siden gap"] = df["siden_gap_pct"].map(lambda p: f"{p:+.1f}%" if pd.notna(p) else "—")
-    vis["Stop"] = df["stop"]
-    vis["Før-gap 6m"] = df["strukket_6m"].map(lambda p: f"{p:+.0f}%" if pd.notna(p) else "—")
-    # De 3 kriteriene som ✅/❌ (transparent, etterprøvbart).
-    vis["Gap≥10%"] = df["ek1"].map(_ja_nei)
-    vis["Volum✓"] = df["ek2"].map(_ja_nei)
-    vis["Ikke strukket"] = df["ek3"].map(_ja_nei)
-    return vis
-
-
-EP_TABELL_HJELP = {
-    "Pris": st.column_config.NumberColumn("Pris", format="%.2f", help="Siste sluttkurs."),
-    "Status": st.column_config.TextColumn(
-        "Status", help="🟢 Klar EP (3/3) · 🟡 Delvis (gap, men mangler volum eller er strukket)."),
-    "Gap": st.column_config.TextColumn(
-        "Gap", help="Gap opp = gap-dagens åpning mot forrige sluttkurs. Qullamaggie vil se ≥ 10 %."),
-    "Volum": st.column_config.TextColumn(
-        "Volum", help="Gap-dagens volum delt på 50-dagers snitt. Qullamaggie vil se flere x snittet."),
-    "Dager siden": st.column_config.TextColumn(
-        "Dager siden", help="Handelsdager siden gap-dagen. «i dag» = gappet nettopp."),
-    "Siden gap": st.column_config.TextColumn(
-        "Siden gap", help="Kursutvikling fra gap-dagens close til nå."),
-    "Stop": st.column_config.NumberColumn(
-        "Stop", format="%.2f", help="Qullamaggie-stop = gap-dagens laveste kurs (lows of the day)."),
-    "Før-gap 6m": st.column_config.TextColumn(
-        "Før-gap 6m", help="Hvor mye aksjen hadde gått de 6 mnd FØR gapet. Lavt/negativt = "
-        "overraskelse (størst edge). Høyt = allerede strukket (svakere EP)."),
-    "Gap≥10%": st.column_config.TextColumn("Gap≥10%", help="ek1: gap opp minst 10 %."),
-    "Volum✓": st.column_config.TextColumn("Volum✓", help="ek2: stort volum (≥ 2x 50-dagers snitt)."),
-    "Ikke strukket": st.column_config.TextColumn(
-        "Ikke strukket", help="ek3: aksjen hadde ikke allerede gått mye (≤ 50 % siste 6 mnd)."),
-}
-
-
-def vis_episodic_pivot(ep_resultat):
-    """Rendrer Episodic Pivot-tabellen + chart i Hovedliste-fanen (ep-modus)."""
-    st.markdown("### ⚡ Episodic Pivot-screener")
-    st.caption("Ferske gap-ups (≥ 10 %) på stort volum – typisk resultat-/nyhetsdrevet. "
-               "Størst edge når aksjen IKKE allerede har gått mye (overraskelse for markedet). "
-               "**3 kriterier passerer/feiler**, sortert ferskest øverst. Uavhengig av Minervini.")
-    if ep_resultat is None:
-        st.info(f"Trykk **🔍 Skann {BORS.navn}** i menyen til venstre for å søke gjennom hele "
-                "børsen etter Episodic Pivots. (Ingenting skannes automatisk – du velger når.)")
-        return
-    if ep_resultat.empty:
-        st.info("Fant ingen ferske gap-ups akkurat nå. (EP-er kommer typisk i resultatsesongen.)")
-        return
-    _gyldige = int(ep_resultat["gyldig_ep"].sum())
-    st.markdown(
-        f"**{len(ep_resultat)} gap funnet** – 🟢 {_gyldige} klare EP-er (gap + volum + ikke strukket). "
-        "Sortert med klare EP-er først, så ferskest."
-    )
-    _ep_tab = st.dataframe(
-        _formater_ep_tabell(ep_resultat),
-        width="stretch", hide_index=True, height=560, column_config=EP_TABELL_HJELP,
-        on_select="rerun", selection_mode="multi-row", key="ep_tabell",
-    )
-    st.caption("💡 **Huk av én eller flere rader** for å tegne chart under.")
-
-    _ep_rader = list(getattr(_ep_tab.selection, "rows", []) or [])
-    _ep_valgte = [ep_resultat.iloc[i]["ticker"] for i in _ep_rader if i < len(ep_resultat)]
-    if not _ep_valgte:
-        st.caption("Ingen rader valgt ennå – huk av i tabellen over for å tegne chart her.")
-        return
-    st.divider()
-    _maks = 15
-    if len(_ep_valgte) > _maks:
-        st.info(f"Viser de {_maks} første av {len(_ep_valgte)} valgte (for fartens skyld).")
-        _ep_valgte = _ep_valgte[:_maks]
-    st.subheader(f"📊 Chart for {len(_ep_valgte)} valgte")
-    st.caption("Gul pil = **gap-dagen** · gul linje = gap-dagens sluttkurs · "
-               "grønn/oransje = EMA10/EMA20 å traile på · rød stiplet = stop (gap-dagens low). "
-               "Slå laget av/på med **Qullamaggie**-pillen i chartet.")
-    _ep_priser = last_priser(bors_navn, versjon)
-    for _tk in _ep_valgte:
-        _s = datamod.serie_for(_ep_priser, _tk)
-        _r = screener.analyser_ticker(_s, _tk, konfig.PRESETS[aktiv_preset_navn])
-        _rad = ep_resultat[ep_resultat["ticker"] == _tk]
-        _ov = None
-        if not _rad.empty:
-            _rd = _rad.iloc[0]
-            _ov = {"gap_close": _rd.get("gap_close"), "gap_dato": _rd.get("gap_dato"),
-                   "stop": _rd.get("stop")}
-        st.markdown(f"**{_tk}**")
-        if not tabell_chart(_s, _r, _tk, kontekst="ep",
-                            standard={"golden": False, "vcp": False, "7av7": False, "qm": True},
-                            qm_overlay=_ov):
-            st.caption("Klarte ikke tegne chart for denne aksjen.")
 
 
 def vis_golden_cross(gc_resultat):
@@ -4314,10 +3830,8 @@ with fane1:
         vis_golden_cross(gc_resultat)
     elif er_trendscore:
         vis_trendscore(ts_resultat)
-    elif er_qm:
-        vis_qullamaggie(qm_resultat)
-    elif er_ep:
-        vis_episodic_pivot(ep_resultat)
+    elif er_alle:
+        vis_hele_borsen(alle_resultat)
     elif er_ipo:
         vis_nye_ipoer(ipo_resultat)
     elif resultat is None:
@@ -4560,13 +4074,6 @@ with fane2:
             _indeks = datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark) if vis_indeks else None
             _eps_kw = _eps_chart_kwargs(valg, vis_eps)
             _ts_kw = _trendscore_chart_kwargs(valg, vis_trendscore_c)
-            _tegn_c = []
-            try:
-                _lg_c = journal_ui._lager()
-                if _lg_c is not None and hasattr(_lg_c, "hent_tegninger"):
-                    _tegn_c = _lg_c.hent_tegninger(valg, bors_navn)
-            except Exception:
-                _tegn_c = []
             _interaktiv_ok = False
             if not vis_klassisk:
                 _rs_mat_i = rs_rating_historikk(bors_navn, versjon)
@@ -4574,7 +4081,7 @@ with fane2:
                     serie, res, valg, pos=pos,
                     rs_serie=_rs_mat_i[valg].dropna() if valg in _rs_mat_i.columns else None,
                     indeks=datamod.serie_for(last_priser(bors_navn, versjon), BORS.benchmark),
-                    morkt=MORKT, valuta=VALUTA, tegninger=_tegn_c)
+                    morkt=MORKT, valuta=VALUTA)
                 if _interaktiv_ok:
                     st.caption("Velg periode, tidsramme og lag rett i chartet – valgene huskes. "
                                "Beveg musa for verdier under pekeren, dra for å panorere, rull for å zoome.")
@@ -4584,8 +4091,7 @@ with fane2:
                                  vis_rs_rating=vis_rs_rating, rs_rating=_rs_serie,
                                  vis_indeks=vis_indeks, indeks=_indeks, indeks_navn=BORS.benchmark,
                                  ukentlig=ukentlig, pos=pos, morkt=MORKT, tittel=valg,
-                                 vis_qm=_k["vis_qm"], vis_egne_sma=_k["vis_egne_sma"],
-                                 vis_tegning=_k["vis_tegning"], tegninger=_tegn_c,
+                                 vis_egne_sma=_k["vis_egne_sma"],
                                  **_ts_kw, **_eps_kw)
             if spec is None and not _interaktiv_ok:
                 st.info("Klarte ikke bygge chartet for denne aksjen.")
@@ -4620,7 +4126,6 @@ with fane2:
                 fundamenta_seksjon(valg, f"chart_{valg}")
                 st.divider()
                 posisjon_verktoy(res, f"chart_{valg}", VALUTA)
-            _tegninger_ui(valg, serie, _tegn_c, kontekst=f"chart_{valg}")
 
 # --- Fane 3: Søk ---
 with fane3:
@@ -4842,21 +4347,6 @@ with fane5:
     except Exception:
         _journal_live = {}
 
-    # Parabolsk-flagg (QM3) paa aapne posisjoner: et "vokt deg / ta gevinst"-
-    # varsel, ALDRI et kjoepssignal. Pakket i try/except saa journalen aldri
-    # krasjer. Henter de aapne tickerne uavhengig av om borsen er aapen.
-    _journal_parabolsk = {}
-    try:
-        if journal_ui.innlogget():
-            _lg2 = journal_ui._lager()
-            if _lg2 is not None:
-                _apne_h2 = _lg2.hent_handler(status="OPEN")
-                _apne_t2 = tuple(sorted({h.get("ticker") for h in _apne_h2 if h.get("ticker")}))
-                if _apne_t2:
-                    _journal_parabolsk = kjor_parabolsk(bors_navn, _apne_t2[:80], versjon)
-    except Exception:
-        _journal_parabolsk = {}
-
     # Bakoverkompatibelt: send nye parametre kun hvis denne versjonen av
     # journal_ui stotter dem (unngaar TypeError hvis en gammel modul henger
     # igjen i minnet paa Streamlit Cloud for en reboot).
@@ -4869,8 +4359,6 @@ with fane5:
         _kw["live_kurser"] = _journal_live
     if "bors_apen" in _params:
         _kw["bors_apen"] = _journal_apen
-    if "parabolsk" in _params:
-        _kw["parabolsk"] = _journal_parabolsk
     if "metrikk_fn" in _params:
         _kw["metrikk_fn"] = lambda _b, _t: liste_metrikker(_b, tuple(_t), versjon)
     journal_ui.vis_dashboard(bors_navn, journal_screening, vis_ticker_detalj, **_kw)
